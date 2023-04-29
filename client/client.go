@@ -2,6 +2,7 @@ package client
 
 import (
 	"fmt"
+	"go-w3chain/beaconChain"
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/result"
@@ -44,6 +45,8 @@ type Client struct {
 	/* 跨片交易超时队列，客户端将向源分片发送回滚交易 */
 	cross_tx_expired []uint64
 	e_lock           sync.Mutex
+
+	tbs map[uint64]map[uint64]*beaconChain.TimeBeacon
 }
 
 func NewClient(id, rollbackSecs, shardNum int) *Client {
@@ -58,6 +61,7 @@ func NewClient(id, rollbackSecs, shardNum int) *Client {
 		shard_num:             shardNum,
 		cross1_tx_reply:       make([]*result.TXReceipt, 0),
 		cross1_reply_time_map: make(map[uint64]uint64),
+		tbs:                   make(map[uint64]map[uint64]*beaconChain.TimeBeacon),
 	}
 	return c
 }
@@ -89,7 +93,19 @@ func (c *Client) AddTXReceipts(receipts []*result.TXReceipt) {
 	defer c.c1_lock.Unlock()
 	cross1Cnt := 0
 	cross2Cnt := 0
+
+	if len(receipts) == 0 {
+		return
+	}
+	// 获取对应分片和高度的信标
+	tb := c.GetTB(uint64(receipts[0].ShardID), receipts[0].BlockHeight)
+	log.Debug("ClientGetTimeBeacon", "info", tb)
+
 	for _, r := range receipts {
+		validity := VerifyTxMKproof(r.MKproof, tb)
+		if !validity {
+			log.Error("transaction's merkle proof verification didn't pass!")
+		}
 		if r.TxStatus == result.CrossTXType1Success {
 			cross1Cnt += 1
 			c.cross1_tx_reply = append(c.cross1_tx_reply, r)
@@ -181,7 +197,7 @@ func (c *Client) InjectTXs(cid int, inject_speed int, txTable map[uint64]int, ad
 
 	/* 通知分片交易注入完成 */
 	for i := 0; i < c.shard_num; i++ {
-		c.messageHub.Send(core.MsgTypeSetInjectDone2Shard, i, struct{}{})
+		c.messageHub.Send(core.MsgTypeSetInjectDone2Shard, uint64(i), struct{}{}, nil)
 	}
 
 }
@@ -209,7 +225,7 @@ func (c *Client) sendRollbackTxs(maxTxNum2Pack int, addrTable map[common.Address
 	}
 	/* 注入到各分片 */
 	for i := 0; i < c.shard_num; i++ {
-		c.messageHub.Send(core.MsgTypeClientInjectTX2Shard, i, shardtxs[i])
+		c.messageHub.Send(core.MsgTypeClientInjectTX2Shard, uint64(i), shardtxs[i], nil)
 	}
 	// 移除已发送的reply交易
 	c.cross_tx_expired = c.cross_tx_expired[rollbackTxSentCnt:]
@@ -241,7 +257,7 @@ func (c *Client) sendCross2Txs(maxTxNum2Pack int, addrTable map[common.Address]i
 	}
 	/* 注入到各分片 */
 	for i := 0; i < c.shard_num; i++ {
-		c.messageHub.Send(core.MsgTypeClientInjectTX2Shard, i, shardtxs[i])
+		c.messageHub.Send(core.MsgTypeClientInjectTX2Shard, uint64(i), shardtxs[i], nil)
 	}
 	// 移除已发送的reply交易
 	c.cross1_tx_reply = c.cross1_tx_reply[cross2TxSentCnt:]
@@ -279,11 +295,40 @@ func (c *Client) sendPendingTxs(cnt, maxTxNum2Pack int, txTable map[uint64]int, 
 	}
 	/* 注入到各分片 */
 	for i := 0; i < c.shard_num; i++ {
-		c.messageHub.Send(core.MsgTypeClientInjectTX2Shard, i, shardtxs[i])
+		c.messageHub.Send(core.MsgTypeClientInjectTX2Shard, uint64(i), shardtxs[i], nil)
 	}
 	/* 更新循环变量 */
 	cnt = upperBound
 	return cnt
+}
+
+func (c *Client) getTBFromTBChain(shardID, height uint64) *beaconChain.TimeBeacon {
+	var tb *beaconChain.TimeBeacon
+	callback := func(res interface{}) {
+		tb = res.(*beaconChain.TimeBeacon)
+	}
+	c.messageHub.Send(core.MsgTypeGetTB, shardID, height, callback)
+	return tb
+}
+
+func (c *Client) GetTB(shardID, height uint64) *beaconChain.TimeBeacon {
+	if _, ok := c.tbs[shardID]; !ok {
+		c.tbs[shardID] = make(map[uint64]*beaconChain.TimeBeacon)
+	}
+	if tb, ok := c.tbs[shardID][height]; !ok {
+		tb1 := c.getTBFromTBChain(shardID, height)
+		c.tbs[shardID][height] = tb1
+		return tb1
+	} else {
+		return tb
+	}
+}
+
+/* 验证一笔交易的merkle proof，tb 是该交易对应分片和高度的区块信标
+* 目前未实现具体逻辑，直接假设验证通过
+ */
+func VerifyTxMKproof(proof []byte, tb *beaconChain.TimeBeacon) bool {
+	return true
 }
 
 // func (c *Client) GetTXs() []*core.Transaction {

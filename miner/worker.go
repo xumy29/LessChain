@@ -2,6 +2,7 @@ package miner
 
 import (
 	"errors"
+	"go-w3chain/beaconChain"
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/result"
@@ -154,6 +155,7 @@ func (w *worker) fillTransactions() []*core.Transaction {
 	return txs
 }
 
+/* 生成交易收据, 发送给客户端并记录到result */
 func (w *worker) recordTXReceipt(txs []*core.Transaction) {
 	table := make(map[uint64]*result.TXReceipt)
 	shardID := w.chain.GetChainID()
@@ -166,6 +168,7 @@ func (w *worker) recordTXReceipt(txs []*core.Transaction) {
 			ConfirmTimeStamp: tx.ConfirmTimestamp,
 			TxStatus:         tx.TXStatus,
 			ShardID:          shardID,
+			BlockHeight:      w.chain.CurrentBlock().NumberU64(),
 		}
 	}
 	w.send2Client(table, txs)
@@ -200,9 +203,21 @@ func (w *worker) commit(timestamp int64) error {
 		return errors.New("failed to commit transition state: " + err.Error())
 	}
 
+	/* 向信标链记录数据 */
+	final_header := block.Header()
+	tb := &beaconChain.TimeBeacon{
+		Height:     final_header.Number.Uint64(),
+		ShardID:    uint64(w.chain.GetChainID()),
+		BlockHash:  block.Hash(),
+		TxHash:     final_header.TxHash,
+		StatusHash: final_header.Root,
+	}
+	w.MessageHub.Send(core.MsgTypeAddTB, 0, tb, nil)
+
+	w.chain.WriteBlock(block)
 	/* 生成交易收据, 并记录到result */
 	w.recordTXReceipt(txs)
-	w.chain.WriteBlock(block)
+
 	// send to shard
 	w.headerCh <- struct{}{}
 	// log.Debug("create block", "block Height", header.Number, "# tx", len(txs), "TxRoot", block.Header().TxHash, "StateRoot:", header.Root)
@@ -214,6 +229,7 @@ func (w *worker) commit(timestamp int64) error {
 
 /*
 * 将更新的stateObjects写到MPT树上，得到新树根，并写到区块头中。
+* 根据交易列表得到交易树根，并写到区块头中
 * 根据区块头和交易列表构造区块
  */
 func (w *worker) Finalize(header *core.Header, txs []*core.Transaction) (*core.Block, error) {
@@ -298,6 +314,6 @@ func (w *worker) send2Client(receipts map[uint64]*result.TXReceipt, txs []*core.
 		msg2Client[cid] = append(msg2Client[cid], receipts[tx.ID])
 	}
 	for cid, _ := range msg2Client {
-		w.MessageHub.Send(core.MsgTypeShardReply2Client, cid, msg2Client[cid])
+		w.MessageHub.Send(core.MsgTypeShardReply2Client, uint64(cid), msg2Client[cid], nil)
 	}
 }

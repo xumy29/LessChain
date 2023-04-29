@@ -5,6 +5,7 @@ package controller
 import (
 	"encoding/json"
 	"fmt"
+	beaconchain "go-w3chain/beaconChain"
 	"go-w3chain/client"
 	"go-w3chain/data"
 	"go-w3chain/log"
@@ -134,8 +135,10 @@ func Main(cfgfilename string) {
 	/* 获取交易注入table*/
 	data.SetTxTable(shardNum)
 
-	/* 设置各个分片和客户端的通信渠道 */
-	messageHub.Init(clients, shards)
+	tbChain := beaconchain.NewTBChain()
+
+	/* 设置各个分片和客户端、信标链的通信渠道 */
+	messageHub.Init(clients, shards, tbChain)
 	/* 启动各个分片 */
 	startShards()
 

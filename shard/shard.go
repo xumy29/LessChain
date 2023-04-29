@@ -1,6 +1,7 @@
 package shard
 
 import (
+	"go-w3chain/beaconChain"
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/miner"
@@ -205,4 +206,22 @@ func (s *Shard) Close() {
 
 func (s *Shard) TXpool() *core.TxPool {
 	return s.txPool
+}
+
+/* 将创世区块的信标写到信标链
+* 该方法只能在分片被创建后，分片启动前被调用 ！！
+ */
+
+func (s *Shard) AddGenesisTB() {
+	/* 写入到信标链 */
+	genesisBlock := s.blockchain.CurrentBlock()
+	g_header := genesisBlock.Header()
+	tb := &beaconChain.TimeBeacon{
+		Height:     g_header.Number.Uint64(),
+		ShardID:    uint64(s.leader.chainID),
+		BlockHash:  genesisBlock.Hash(),
+		TxHash:     g_header.TxHash,
+		StatusHash: g_header.Root,
+	}
+	s.miner.GetWorker().MessageHub.Send(core.MsgTypeAddTB, 0, tb, nil)
 }

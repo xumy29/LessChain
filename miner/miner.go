@@ -82,3 +82,7 @@ func (miner *Miner) Close() {
 	miner.wg.Wait()
 	log.Debug("miner of this shard has been close!", "shardID", miner.chain.GetChainID())
 }
+
+func (miner *Miner) GetWorker() *worker {
+	return miner.worker
+}

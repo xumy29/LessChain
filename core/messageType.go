@@ -1,10 +1,9 @@
 package core
 
 const (
-	MsgTypeItxReply uint64 = iota
-	MsgTypeCtx1Reply
-	MsgTypeCtx2Reply
-	MsgTypeShardReply2Client
+	MsgTypeShardReply2Client uint64 = iota
 	MsgTypeClientInjectTX2Shard
 	MsgTypeSetInjectDone2Shard
+	MsgTypeAddTB
+	MsgTypeGetTB
 )

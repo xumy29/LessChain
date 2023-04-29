@@ -45,7 +45,9 @@ type TXReceipt struct {
 	ConfirmTimeStamp uint64
 	TxStatus         uint64
 	ShardID          int
-	MKproof          []byte
+
+	BlockHeight uint64
+	MKproof     []byte
 }
 
 var (

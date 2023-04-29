@@ -38,6 +38,7 @@ func newShards(shardNum int, config *miner.Config, addrInfo *utils.AddressInfo) 
 /* 启动所有分片 */
 func startShards() {
 	for _, shard := range shards {
+		shard.AddGenesisTB()
 		shard.StartMining()
 	}
 }
