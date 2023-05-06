@@ -19,7 +19,7 @@
     "MaxTxNum": 400000,
     "InjectSpeed": 4000,
     "RecommitInterval": 5,
-    "RecommitIntervals2Rollback": 5,
+    "RecommitTimes2Rollback": 5,
     "maxBlockTXSize": 4000,
     "datasetDir": "D:/project/blockChain/ethereum_data/14920000_14960000/ExternalTransactionItem.csv"
 }
@@ -76,27 +76,30 @@ const (
 ```
 
 ## messageHub 模块
-用于在客户端与分片之间（或两者与其他角色之间）传递消息。目前是单机仿真，没有采用网络传输，而是通过 messageHub 直接调用分片或客户端的对象方法进行消息写入。
+用于在不同角色之间传递消息。目前是单机仿真，没有采用网络传输，而是通过 messageHub 直接调用角色的对象方法进行消息写入。
 
-目前有三种类型的消息通过 messageHub 进行传递，共用一个接口。
+多种类型的消息通过 messageHub 进行传递，共用一个接口，callback是回调函数。
 ``` go
-/* 用于分片和客户端传送消息 */
-func (hub *GoodMessageHub) Send(msgType uint64, toid int, msg interface{}) {
+/* 用于分片、委员会、客户端、信标链传送消息 */
+func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, callback func(res ...interface{})) {
 	switch msgType {
 	case core.MsgTypeShardReply2Client:
-		client := clients_ref[toid]
+		client := clients_ref[id]
 		receipts := msg.([]*result.TXReceipt)
 		client.AddTXReceipts(receipts)
 
 	case core.MsgTypeClientInjectTX2Shard:
-		shard := shards_ref[toid]
+		shard := shards_ref[id]
 		txs := msg.([]*core.Transaction)
 		shard.InjectTXs(txs)
 
 	case core.MsgTypeSetInjectDone2Shard:
-		shard := shards_ref[toid]
+		shard := shards_ref[id]
 		shard.SetInjectTXDone()
-	}
+    
+    ...
+
+    }
 }
 ```
 
@@ -106,8 +109,8 @@ func (hub *GoodMessageHub) Send(msgType uint64, toid int, msg interface{}) {
 ## shard 模块
 管理区块链、交易池等数据结构。
 
-## miner 模块
-负责从交易池中获取交易，打包区块，执行交易，发送收据等。
+## committee 模块
+从shard中获取交易和状态，打包区块，执行交易，发送收据和区块等。
 
 ## client 模块
 向分片注入交易。
@@ -116,14 +119,15 @@ func (hub *GoodMessageHub) Send(msgType uint64, toid int, msg interface{}) {
 控制整个仿真流程
 + 读取配置文件
 + 从数据集读取交易数据
-+ 创建客户端和分片
-+ 创建 messageHub
-+ 启动分片和客户端线程
-+ 关闭客户端和分片
++ 初始化客户端、分片、委员会、信标链
++ 初始化 messageHub
++ 启动委员会和客户端线程
++ 启动记录线程
++ 关闭所有开启的线程
 
 # todo
-+ 已实现的部分：分片、客户端、跨分片交易
-+ 待实现的部分：信标链、委员会、已实现部分的细化
++ 已实现的部分：分片、客户端、跨分片交易、信标链、委员会
++ 待实现的部分：已实现部分的细化
 
 
 
