@@ -6,9 +6,7 @@ import (
 	"time"
 
 	"go-w3chain/params"
-	"go-w3chain/utils"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/trie"
@@ -40,8 +38,6 @@ type BlockChain struct {
 
 	blockCache *lru.Cache // Cache for the most recent entire blocks
 
-	addrInfo *utils.AddressInfo
-
 	currentBlock atomic.Value // Current head of the block chain
 }
 
@@ -72,7 +68,7 @@ var defaultCacheConfig = &CacheConfig{
 	SnapshotWait:   true,
 }
 
-func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *params.ChainConfig, addrInfo *utils.AddressInfo) (*BlockChain, error) {
+func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *params.ChainConfig) (*BlockChain, error) {
 	if cacheConfig == nil {
 		cacheConfig = defaultCacheConfig
 	}
@@ -90,7 +86,6 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		}),
 		statedb:    NewStateDB(db),
 		blockCache: blockCache,
-		addrInfo:   addrInfo,
 	}
 
 	bc.genesisBlock = bc.GetBlockByNumber(0)
@@ -113,18 +108,13 @@ func (bc *BlockChain) GetChainHeight() uint64 {
 	return bc.CurrentBlock().NumberU64()
 }
 
-func (bc *BlockChain) GetAddrTable() *map[common.Address]int {
-	// return bc.addressTable
-	return &bc.addrInfo.AddrTable
-}
-
-func (bc *BlockChain) GetBlockChainAddrInfo() *utils.AddressInfo {
-	return bc.addrInfo
-}
 func (bc *BlockChain) GetStateDB() *state.StateDB {
 	return bc.statedb
 }
 
+/**
+ * 此处应该写入到数据库的，但为了加快程序运行速度未写入，只是将最新的块存到内存里，方便打包下一个区块时取
+ */
 func (bc *BlockChain) WriteBlock(block *Block) {
 	bc.currentBlock.Store(block)
 }

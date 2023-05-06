@@ -1,0 +1,7 @@
+*.exe
+test.go
+draw.py
+newest_result.*
+results
+logs
+figs

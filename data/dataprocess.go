@@ -16,7 +16,6 @@ import (
 	"math/big"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -24,9 +23,8 @@ import (
 var (
 	alltxs []*core.Transaction
 
-	shardAddrs []map[common.Address]struct{} // 各分片拥有的地址列表，用于初始化分片状态
-	txtable    map[uint64]int                // txid 映射到 shardID
-	addrTable  map[common.Address]int        // 账户地址 映射到 shardID （monoxide 不需要）
+	txtable   map[uint64]int         // txid 映射到 shardID
+	addrTable map[common.Address]int // 账户地址 映射到 shardID
 
 	tx2ClientTable map[uint64]int // txid 映射到客户端ID
 
@@ -86,7 +84,6 @@ func LoadETHData(filepath string, maxTxNum int) {
 
 /**
 * 实现交易到客户端的划分
-* 目前只实现一个客户端，因此所有交易被划分到一个客户端
  */
 func SetTX2ClientTable(clientNum int) {
 	tx2ClientTable = make(map[uint64]int)
@@ -97,7 +94,6 @@ func SetTX2ClientTable(clientNum int) {
 
 /**
 * 注入交易到客户端，一次性全部注入
-* 目前只实现一个客户端，因此所有交易被划分到一个客户端
  */
 func InjectTX2Client(clients []*client.Client) {
 	clientNum := len(clients)
@@ -153,31 +149,14 @@ func Addr2Shard(addr string, shardNum int) int {
 	return int(num) % shardNum
 }
 
-/*
-* 获得 txtable (for InjectTX)
-* 交易ID到分片ID的映射
- */
-func SetTxTable(shardNum int) {
-	/* 初始化 */
-	txtable = make(map[uint64]int)
-	/* 记录 */
-	for _, tx := range alltxs {
-		txtable[tx.ID] = Addr2Shard(tx.Sender.Hex(), shardNum)
-	}
-	log.Info("Set TxTable successed!")
-}
-
-func GetTxTable() map[uint64]int {
-	return txtable
-}
-
 /**
- * 获得 shardAddrs ：用于为每个分片初始化账户状态 (for SetShardsInitialState)
- * 取所有交易的sender，放入shardAddrs。
+ * 取所有交易的sender，在其对应分片中提前设置状态（金额）
  */
-func SetShardAddrs(shardNum int) {
-	/* 初始化 */
-	shardAddrs = make([]map[common.Address]struct{}, shardNum)
+func SetShardsInitialState(shards []*shard.Shard) {
+	shardNum := len(shards)
+
+	/* 各分片拥有的初始sender地址列表 */
+	shardAddrs := make([]map[common.Address]struct{}, shardNum)
 	for i := 0; i < shardNum; i++ {
 		shardAddrs[i] = make(map[common.Address]struct{})
 	}
@@ -190,12 +169,8 @@ func SetShardAddrs(shardNum int) {
 			log.Warn("this addr does not exist in addrTable (addr -> shard)", *tx.Sender)
 		}
 	}
-}
 
-/**
- * 实现分片状态的初始化
- */
-func SetShardsInitialState(shards []*shard.Shard) {
+	/* 将所有sender在对应分片中的初始金额设为一个极大值，确保之后注入的交易顺利执行 */
 	maxValue := new(big.Int)
 	maxValue.SetString("10000000000", 10)
 	for i, shard := range shards { // id = 0,1,..
@@ -204,52 +179,52 @@ func SetShardsInitialState(shards []*shard.Shard) {
 	log.Info("Each shard setShardsInitialState successed")
 }
 
-/**
- * 实现交易注入
- */
-func InjectTXs(inject_speed int, shards []*shard.Shard) {
-	shardNum := len(shards)
-	cnt := 0
-	resBroadcastMap := make(map[uint64]uint64)
-	// 按秒注入
-	for {
-		time.Sleep(1000 * time.Millisecond) //fixme 应该记录下面的运行时间
-		// start := time.Now().UnixMilli()
+// /**
+//  * 实现交易注入
+//  */
+// func InjectTXs(inject_speed int, shards []*shard.Shard) {
+// 	shardNum := len(shards)
+// 	cnt := 0
+// 	resBroadcastMap := make(map[uint64]uint64)
+// 	// 按秒注入
+// 	for {
+// 		time.Sleep(1000 * time.Millisecond) //fixme 应该记录下面的运行时间
+// 		// start := time.Now().UnixMilli()
 
-		upperBound := utils.Min(cnt+inject_speed, len(alltxs))
-		/* 初始化 shardtxs */
-		shardtxs := make([][]*core.Transaction, shardNum)
-		for i := 0; i < shardNum; i++ {
-			shardtxs[i] = make([]*core.Transaction, 0, inject_speed)
-		}
-		/* 设置交易注入的时间戳, 基于table实现交易划分 */
-		for i := cnt; i < upperBound; i++ {
-			tx := alltxs[i]
-			tx.Timestamp = uint64(time.Now().Unix())
-			resBroadcastMap[tx.ID] = tx.Timestamp
-			shardidx := txtable[tx.ID]
-			shardtxs[shardidx] = append(shardtxs[shardidx], tx)
+// 		upperBound := utils.Min(cnt+inject_speed, len(alltxs))
+// 		/* 初始化 shardtxs */
+// 		shardtxs := make([][]*core.Transaction, shardNum)
+// 		for i := 0; i < shardNum; i++ {
+// 			shardtxs[i] = make([]*core.Transaction, 0, inject_speed)
+// 		}
+// 		/* 设置交易注入的时间戳, 基于table实现交易划分 */
+// 		for i := cnt; i < upperBound; i++ {
+// 			tx := alltxs[i]
+// 			tx.Timestamp = uint64(time.Now().Unix())
+// 			resBroadcastMap[tx.ID] = tx.Timestamp
+// 			shardidx := txtable[tx.ID]
+// 			shardtxs[shardidx] = append(shardtxs[shardidx], tx)
 
-		}
-		/* 注入到各分片 */
-		for i := 0; i < shardNum; i++ {
-			shards[i].InjectTXs(shardtxs[i])
-		}
-		/* 更新循环变量 */
-		cnt = upperBound
-		if cnt == len(alltxs) {
-			break
-		}
-	}
-	/* 记录广播结果 */
-	result.SetBroadcastMap(resBroadcastMap)
+// 		}
+// 		/* 注入到各分片 */
+// 		for i := 0; i < shardNum; i++ {
+// 			shards[i].InjectTXs(shardtxs[i])
+// 		}
+// 		/* 更新循环变量 */
+// 		cnt = upperBound
+// 		if cnt == len(alltxs) {
+// 			break
+// 		}
+// 	}
+// 	/* 记录广播结果 */
+// 	result.SetBroadcastMap(resBroadcastMap)
 
-	/* 通知分片交易注入完成 */
-	for i := 0; i < shardNum; i++ {
-		shards[i].SetInjectTXDone()
-	}
+// 	/* 通知分片交易注入完成 */
+// 	for i := 0; i < shardNum; i++ {
+// 		shards[i].SetInjectTXDone()
+// 	}
 
-}
+// }
 
 func PrintTXs(num int) {
 	if num == -1 {

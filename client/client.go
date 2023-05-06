@@ -83,8 +83,8 @@ func (c *Client) Addtxs(origintxs []*core.Transaction) {
  * 按一定速率发送交易到分片
  * 目前的实现未通过网络传输
  */
-func (c *Client) SendTXs(inject_speed int, shards []*shard.Shard, txTable map[uint64]int, addrTable map[common.Address]int) {
-	c.InjectTXs(c.cid, inject_speed, txTable, addrTable)
+func (c *Client) SendTXs(inject_speed int, shards []*shard.Shard, addrTable map[common.Address]int) {
+	c.InjectTXs(c.cid, inject_speed, addrTable)
 }
 
 /* 接收分片执行完交易的收据 */
@@ -130,6 +130,9 @@ func (c *Client) AddTXReceipts(receipts []*result.TXReceipt) {
 	log.Debug("clientAddTXReceipt", "cid", c.cid, "receiptCnt", len(receipts), "cross1ReceiptCnt", cross1Cnt, "cross2ReceiptCnt", cross2Cnt, "cross1_tx_reply_queue_len", len(c.cross1_tx_reply))
 }
 
+/*
+ * 客户端定期检查是否有超时的跨分片交易
+ */
 func (c *Client) CheckExpiredTXs(recommitIntervalSecs int) {
 	recommitInterval := time.Duration(recommitIntervalSecs) * time.Second
 	timer := time.NewTimer(recommitInterval)
@@ -175,7 +178,7 @@ func (c *Client) Print() {
 /**
  * 按一定速率将客户端的交易注入到分片
  */
-func (c *Client) InjectTXs(cid int, inject_speed int, txTable map[uint64]int, addrTable map[common.Address]int) {
+func (c *Client) InjectTXs(cid int, inject_speed int, addrTable map[common.Address]int) {
 	cnt := 0
 	resBroadcastMap := make(map[uint64]uint64)
 	// 按秒注入
@@ -186,7 +189,7 @@ func (c *Client) InjectTXs(cid int, inject_speed int, txTable map[uint64]int, ad
 
 		cross2TxSentCnt := c.sendCross2Txs(inject_speed-rollbackTxSentCnt, addrTable)
 
-		cnt = c.sendPendingTxs(cnt, inject_speed-rollbackTxSentCnt-cross2TxSentCnt, txTable, addrTable, resBroadcastMap)
+		cnt = c.sendPendingTxs(cnt, inject_speed-rollbackTxSentCnt-cross2TxSentCnt, addrTable, resBroadcastMap)
 		if cnt == len(c.txs) {
 			break
 		}
@@ -265,7 +268,7 @@ func (c *Client) sendCross2Txs(maxTxNum2Pack int, addrTable map[common.Address]i
 }
 
 /* 从pending队列中取交易发送 */
-func (c *Client) sendPendingTxs(cnt, maxTxNum2Pack int, txTable map[uint64]int, addrTable map[common.Address]int, resBroadcastMap map[uint64]uint64) int {
+func (c *Client) sendPendingTxs(cnt, maxTxNum2Pack int, addrTable map[common.Address]int, resBroadcastMap map[uint64]uint64) int {
 	if maxTxNum2Pack == 0 {
 		return cnt
 	}
@@ -289,7 +292,7 @@ func (c *Client) sendPendingTxs(cnt, maxTxNum2Pack int, txTable map[uint64]int, 
 		tx.Timestamp = uint64(time.Now().Unix())
 		tx.Cid = uint64(c.cid)
 		resBroadcastMap[tx.ID] = tx.Timestamp
-		shardidx := txTable[tx.ID]
+		shardidx := addrTable[*tx.Sender]
 		shardtxs[shardidx] = append(shardtxs[shardidx], tx)
 
 	}
@@ -304,8 +307,8 @@ func (c *Client) sendPendingTxs(cnt, maxTxNum2Pack int, txTable map[uint64]int, 
 
 func (c *Client) getTBFromTBChain(shardID, height uint64) *beaconChain.TimeBeacon {
 	var tb *beaconChain.TimeBeacon
-	callback := func(res interface{}) {
-		tb = res.(*beaconChain.TimeBeacon)
+	callback := func(res ...interface{}) {
+		tb = res[0].(*beaconChain.TimeBeacon)
 	}
 	c.messageHub.Send(core.MsgTypeGetTB, shardID, height, callback)
 	return tb

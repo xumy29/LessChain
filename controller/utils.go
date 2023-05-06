@@ -3,16 +3,17 @@ package controller
 import (
 	"fmt"
 	"go-w3chain/client"
+	"go-w3chain/committee"
+	"go-w3chain/core"
 	"go-w3chain/log"
-	"go-w3chain/miner"
 	"go-w3chain/result"
 	"go-w3chain/shard"
-	"go-w3chain/utils"
 	"math"
 	"time"
 )
 
 var shards []*shard.Shard
+var committees []*committee.Committee
 var clients []*client.Client
 
 func newClients(rollbackSecs, shardNum int) {
@@ -22,11 +23,11 @@ func newClients(rollbackSecs, shardNum int) {
 	}
 }
 
-func newShards(shardNum int, config *miner.Config, addrInfo *utils.AddressInfo) {
+func newShards(shardNum int) {
 	for shardID := 0; shardID < shardNum; shardID++ {
 		databaseDir := fmt.Sprint("shard", shardID)
 		stack, _ := shard.MakeConfigNode(databaseDir)
-		shard, err := shard.NewShard(stack, config, shardID, addrInfo, len(clients))
+		shard, err := shard.NewShard(stack, shardID, len(clients))
 		if err != nil {
 			log.Error("NewShard failed", "err:", err)
 		}
@@ -35,22 +36,38 @@ func newShards(shardNum int, config *miner.Config, addrInfo *utils.AddressInfo) 
 	}
 }
 
+func newCommittees(shardNum int, config *core.MinerConfig) {
+	for shardID := 0; shardID < shardNum; shardID++ {
+		com := committee.NewCommittee(uint64(shardID), config)
+		committees[shardID] = com
+	}
+}
+
 /* 启动所有分片 */
 func startShards() {
 	for _, shard := range shards {
 		shard.AddGenesisTB()
-		shard.StartMining()
 	}
 }
 
-/* 当交易停止注入时，停止所有分片 */
-func closeShardsV2(recommitIntervalSecs, progressInterval int, isLogProgress bool) {
+/* 启动所有委员会 */
+func startCommittees() {
+	for _, com := range committees {
+		com.Start()
+	}
+}
+
+/**
+ * 循环判断各分片和委员会能否停止, 若能则停止
+ * 循环打印交易总执行进度
+ */
+func closeShardsAndCommittees(recommitIntervalSecs, logProgressInterval int, isLogProgress bool) {
 	log.Info("Monitor txpools and try to stop shards")
 	sleepSecs := int(math.Ceil(float64(recommitIntervalSecs) / 2))
-	iterNum := int(math.Ceil(float64(progressInterval) / float64(sleepSecs)))
+	iterNum := int(math.Ceil(float64(logProgressInterval) / float64(sleepSecs)))
 	iter := 0
 	if isLogProgress {
-		log.Info("Set progressInterval(secs)", "iterNum*sleepSecs", iterNum*sleepSecs)
+		log.Info("Set logProgressInterval(secs)", "iterNum*sleepSecs", iterNum*sleepSecs)
 	} else {
 		log.Info("Set log progress false")
 	}
@@ -63,30 +80,12 @@ func closeShardsV2(recommitIntervalSecs, progressInterval int, isLogProgress boo
 			}
 		}
 		if isInjectDone {
-			msg := fmt.Sprintf("close shards begin .., there are %d shards to close.", len(shards))
-			log.Info(msg)
-			for _, shard := range shards {
-				shard.Close()
+			for _, com := range committees {
+				com.Close()
 			}
-			// 异步关闭分片
-			// var wg sync.WaitGroup
-			// for i, _ := range shards {
-			// 	wg.Add(1)
-			// 	tmp := i
-			// 	go func() {
-			// 		shards[tmp].Close()
-			// 		wg.Done()
-			// 	}()
-			// }
-			// wg.Wait()
-			log.Info("all shards' main routines and sub-routines(mining routines) are shut down!")
 			break
-			/* close shard 后 close 连接 */
-			// for _, shard := range shards {
-			// 	shard.StopTCPConn()
-			// }
 		}
-
+		// 每出块间隔的一半时间打印一次进度
 		time.Sleep(time.Duration(sleepSecs) * time.Second)
 		/* 打印进度 */
 		if isLogProgress {

@@ -3,6 +3,7 @@ package messageHub
 import (
 	"go-w3chain/beaconChain"
 	"go-w3chain/client"
+	"go-w3chain/committee"
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/result"
@@ -18,8 +19,15 @@ var shards_ref []*shard.Shard
 var clients_ref []*client.Client
 var tbChain_ref *beaconChain.BeaconChain
 
+func NewMessageHub() *GoodMessageHub {
+	hub := &GoodMessageHub{
+		mid: 1,
+	}
+	return hub
+}
+
 /* 用于分片、客户端、信标链传送消息 */
-func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, callback func(res interface{})) {
+func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, callback func(res ...interface{})) {
 	switch msgType {
 	case core.MsgTypeShardReply2Client:
 		client := clients_ref[id]
@@ -43,22 +51,34 @@ func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, call
 		height := msg.(uint64)
 		tb := tbChain_ref.GetTimeBeacon(id, height)
 		callback(tb)
+	case core.MsgTypeComGetTX:
+		shard := shards_ref[id]
+		blockCap := msg.(int)
+		txs := shard.TXpool().Pending(blockCap)
+		states := shard.GetBlockChain().GetStateDB()
+		parentHeight := shard.GetBlockChain().CurrentBlock().Number()
+		callback(txs, states, parentHeight)
+	case core.MsgTypeAddBlock2Shard:
+		shard := shards_ref[id]
+		block := msg.(*core.Block)
+		shard.GetBlockChain().WriteBlock(block)
 	}
 }
 
-func Init(clients []*client.Client, shards []*shard.Shard, tbChain *beaconChain.BeaconChain) {
+func (hub *GoodMessageHub) Init(clients []*client.Client, shards []*shard.Shard, committees []*committee.Committee, tbChain *beaconChain.BeaconChain) {
 	clients_ref = clients
 	shards_ref = shards
 	tbChain_ref = tbChain
 	log.Info("messageHubInit", "clientNum", len(clients_ref), "shardNum", len(shards_ref))
-	hub := &GoodMessageHub{
-		mid: 1,
-	}
+
 	for _, c := range clients_ref {
 		c.SetMessageHub(hub)
 	}
 	for _, s := range shards_ref {
 		s.SetMessageHub(hub)
+	}
+	for _, c := range committees {
+		c.SetMessageHub(hub)
 	}
 	tbChain_ref.SetMessageHub(hub)
 }

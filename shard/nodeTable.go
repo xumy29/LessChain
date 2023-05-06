@@ -9,6 +9,9 @@ var (
 	NodeTable map[int]string
 )
 
+/*
+ * 设置分片leader节点的ip和端口
+ */
 func SetNodeTable(shardNum int) {
 	NodeTable = make(map[int]string)
 	for i := 0; i < shardNum; i++ {

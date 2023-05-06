@@ -102,7 +102,7 @@ func (pool *TxPool) printGensisState(num int) {
 }
 
 /* worker.commitTransaction 从队列取出交易 */
-func (pool *TxPool) Pending(maxBlockSize int, curHeight uint64) []*Transaction {
+func (pool *TxPool) Pending(maxBlockSize int) []*Transaction {
 	/* 需要对lock和r_lock都加锁的场景，都按照先lock再r_lock的顺序，避免死锁 */
 	pool.lock.Lock()
 	defer pool.lock.Unlock()
@@ -137,7 +137,7 @@ func (pool *TxPool) Pending(maxBlockSize int, curHeight uint64) []*Transaction {
 		if tx.TXtype == CrossTXType2 {
 			// tx.ConfirmTimestamp是cross1交易confirm的时间
 			// now+1 是为了避免从交易池里选交易时时间未超过，commit即填充cross2的confirmTimeStamp时却超过了
-			if now+1 > tx.ConfirmTimestamp+tx.RollbackSecs {
+			if now > tx.ConfirmTimestamp+tx.RollbackSecs {
 				// 如果cross2交易已超时，不会选择该交易进行打包，队列指针后移时需要将maxBlockSize也+1
 				i++
 				maxBlockSize++

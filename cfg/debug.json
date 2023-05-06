@@ -5,11 +5,11 @@
     "IsLogProgress": true,
     "LogProgressInterval": 20,
     "ClientNum": 2,
-    "ShardNum": 8,
-    "MaxTxNum": 400000,
-    "InjectSpeed": 4000,
+    "ShardNum": 4,
+    "MaxTxNum": 4000,
+    "InjectSpeed": 80,
     "RecommitInterval": 5,
-    "RecommitIntervals2Rollback": 5,
-    "maxBlockTXSize": 4000,
+    "RecommitTimes2Rollback": 4,
+    "maxBlockTXSize": 200,
     "datasetDir": "D:/project/blockChain/ethereum_data/14920000_14960000/ExternalTransactionItem.csv"
 }

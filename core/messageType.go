@@ -6,4 +6,6 @@ const (
 	MsgTypeSetInjectDone2Shard
 	MsgTypeAddTB
 	MsgTypeGetTB
+	MsgTypeComGetTX
+	MsgTypeAddBlock2Shard
 )
