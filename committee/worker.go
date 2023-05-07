@@ -34,10 +34,10 @@ type worker struct {
 
 	wg sync.WaitGroup
 
-	messageHub core.MessageHub
-
 	shardID   uint64
 	curHeight *big.Int
+
+	com *Committee
 }
 
 func newWorker(config *core.MinerConfig, shardID uint64) *worker {
@@ -105,10 +105,13 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func() {
-		if err := w.commit(timestamp); err != nil {
+		block, err := w.commit(timestamp)
+		if err != nil {
 			log.Error("worker commit block failed", "err", err)
 		}
 		timer.Reset(recommit)
+		/* 通知committee 有新区块产生 */
+		w.InformNewBlock(block)
 	}
 
 	for {
@@ -145,70 +148,6 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 
 
  */
-
-//////////////////////////////////////////
-// worker 通过 messageHub 与外界通信的函数
-//////////////////////////////////////////
-
-func (w *worker) SetMessageHub(hub core.MessageHub) {
-	w.messageHub = hub
-}
-
-/**
- * 向客户端发送交易收据
- * 目前未实现通过网络传输，都是基于messageHub转发
- */
-func (w *worker) send2Client(receipts map[uint64]*result.TXReceipt, txs []*core.Transaction) {
-	// 分客户端
-	msg2Client := make(map[int][]*result.TXReceipt)
-	for _, tx := range txs {
-		cid := int(tx.Cid)
-		if _, ok := msg2Client[cid]; !ok {
-			msg2Client[cid] = make([]*result.TXReceipt, 0, len(receipts))
-		}
-		msg2Client[cid] = append(msg2Client[cid], receipts[tx.ID])
-	}
-	for cid := range msg2Client {
-		w.messageHub.Send(core.MsgTypeShardReply2Client, uint64(cid), msg2Client[cid], nil)
-	}
-}
-
-/**
-* 从对应的分片获取交易和状态
-* 按照论文中的设计，此处的状态应该是指交易相关账户的状态以及 merkle proof，
-但目前只是把整个状态树的指针传过来，实际上委员会和分片访问和修改的是同一个状态树
-*/
-func (w *worker) getPoolTxFromShard() ([]*core.Transaction, *state.StateDB, *big.Int) {
-	var txs []*core.Transaction
-	var states *state.StateDB
-	var parentHeight *big.Int
-	callback := func(ret ...interface{}) {
-		txs = ret[0].([]*core.Transaction)
-		states = ret[1].(*state.StateDB)
-		parentHeight = ret[2].(*big.Int)
-	}
-	w.messageHub.Send(core.MsgTypeComGetTX, w.shardID, w.config.MaxBlockSize, callback)
-	return txs, states, parentHeight
-}
-
-/**
- * 将新区块发送给对应分片
- */
-func (w *worker) AddBlock2Shard(block *core.Block) {
-	w.messageHub.Send(core.MsgTypeAddBlock2Shard, w.shardID, block, nil)
-}
-
-func (w *worker) AddTB(tb *beaconChain.TimeBeacon) {
-	w.messageHub.Send(core.MsgTypeAddTB, 0, tb, nil)
-}
-
-/*
-
-
-
-
-
- */
 ////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////
 // worker内部处理交易的函数
@@ -229,13 +168,21 @@ func (w *worker) recordTXReceipt(txs []*core.Transaction) {
 			BlockHeight:      w.curHeight.Uint64(),
 		}
 	}
-	w.send2Client(table, txs)
+	w.com.send2Client(table, txs)
 	result.SetTXReceiptV2(table)
 }
 
+/**
+ * 通知committee 有新区块产生
+ * 当committee触发重组时，该方法会被阻塞，进而导致worker被阻塞，直到重组完成
+ */
+func (w *worker) InformNewBlock(block *core.Block) {
+	w.com.NewBlockGenerated(block)
+}
+
 /* miner/worker.go:commitWork */
-func (w *worker) commit(timestamp int64) error {
-	txs, stateDB, parentHeight := w.getPoolTxFromShard()
+func (w *worker) commit(timestamp int64) (*core.Block, error) {
+	txs, stateDB, parentHeight := w.com.getPoolTxFromShard()
 	w.curHeight = parentHeight.Add(parentHeight, common.Big1)
 	header := &core.Header{
 		Difficulty: math.BigPow(11, 11),
@@ -248,7 +195,7 @@ func (w *worker) commit(timestamp int64) error {
 	/* commit and insert to blockchain */
 	block, err := w.Finalize(header, txs, stateDB)
 	if err != nil {
-		return errors.New("failed to commit transition state: " + err.Error())
+		return nil, errors.New("failed to commit transition state: " + err.Error())
 	}
 
 	/* 向信标链记录数据 */
@@ -261,16 +208,16 @@ func (w *worker) commit(timestamp int64) error {
 		StatusHash: final_header.Root,
 	}
 
-	w.AddTB(tb)
+	w.com.AddTB(tb)
 
-	w.AddBlock2Shard(block)
+	w.com.AddBlock2Shard(block)
 	/* 生成交易收据, 并记录到result */
 	w.recordTXReceipt(txs)
 
 	// log.Debug("create block", "block Height", header.Number, "# tx", len(txs), "TxRoot", block.Header().TxHash, "StateRoot:", header.Root)
 	// log.Trace("create block", "shardID", w.shardID, "block Height", header.Number, "#TX", len(txs))
 
-	return nil
+	return block, nil
 
 }
 
@@ -330,4 +277,9 @@ func (w *worker) commitTransaction(tx *core.Transaction, stateDB *state.StateDB)
 		log.Error("Oops, something wrong! Cannot handle tx type", "cur shardid", w.shardID, "type", tx.TXtype, "tx", tx)
 	}
 	tx.ConfirmTimestamp = uint64(now)
+}
+
+func (w *worker) Reconfig() {
+	log.Info("start reconfiguration...", "before that this committee belongs to shard", w.shardID)
+
 }

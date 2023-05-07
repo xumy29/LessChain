@@ -103,11 +103,3 @@ func stopClients() {
 		c.Stop()
 	}
 }
-
-func GetClients() []*client.Client {
-	return clients
-}
-
-func GetShards() []*shard.Shard {
-	return shards
-}

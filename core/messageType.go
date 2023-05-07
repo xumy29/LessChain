@@ -8,4 +8,5 @@ const (
 	MsgTypeGetTB
 	MsgTypeComGetTX
 	MsgTypeAddBlock2Shard
+	MsgTypeReady4Reconfig
 )

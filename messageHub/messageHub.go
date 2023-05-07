@@ -8,6 +8,7 @@ import (
 	"go-w3chain/log"
 	"go-w3chain/result"
 	"go-w3chain/shard"
+	"math/rand"
 )
 
 type GoodMessageHub struct {
@@ -16,8 +17,15 @@ type GoodMessageHub struct {
 
 /* 是controller中的shards和clients的引用 */
 var shards_ref []*shard.Shard
+var committees_ref []*committee.Committee
 var clients_ref []*client.Client
 var tbChain_ref *beaconChain.BeaconChain
+
+/* 初始等于委员会数量，一个委员会调用ToReconfig时该变量减一，减到0时触发重组 */
+var isNotToReconfig int
+
+/* 委员会ID到分片ID的映射 */
+var comMap []int
 
 func NewMessageHub() *GoodMessageHub {
 	hub := &GoodMessageHub{
@@ -26,7 +34,7 @@ func NewMessageHub() *GoodMessageHub {
 	return hub
 }
 
-/* 用于分片、客户端、信标链传送消息 */
+/* 用于分片、委员会、客户端、信标链传送消息 */
 func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, callback func(res ...interface{})) {
 	switch msgType {
 	case core.MsgTypeShardReply2Client:
@@ -62,12 +70,16 @@ func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, call
 		shard := shards_ref[id]
 		block := msg.(*core.Block)
 		shard.GetBlockChain().WriteBlock(block)
+	case core.MsgTypeReady4Reconfig:
+		toReconfig()
 	}
 }
 
 func (hub *GoodMessageHub) Init(clients []*client.Client, shards []*shard.Shard, committees []*committee.Committee, tbChain *beaconChain.BeaconChain) {
 	clients_ref = clients
 	shards_ref = shards
+	committees_ref = committees
+	isNotToReconfig = len(committees_ref)
 	tbChain_ref = tbChain
 	log.Info("messageHubInit", "clientNum", len(clients_ref), "shardNum", len(shards_ref))
 
@@ -77,8 +89,35 @@ func (hub *GoodMessageHub) Init(clients []*client.Client, shards []*shard.Shard,
 	for _, s := range shards_ref {
 		s.SetMessageHub(hub)
 	}
-	for _, c := range committees {
+
+	for _, c := range committees_ref {
 		c.SetMessageHub(hub)
 	}
+	// 根据committee的初始映射情况初始化comMap，之后重组时打乱此数组
+	comMap = make([]int, len(committees_ref))
+	for i := range comMap {
+		comMap[i] = int(committees_ref[i].GetShardID())
+	}
+
 	tbChain_ref.SetMessageHub(hub)
+}
+
+func toReconfig() {
+	isNotToReconfig -= 1
+	if isNotToReconfig == 0 {
+		// 这里需要开一个新线程，不要与最后一个调用此函数的委员会共用一个线程
+		go reconfig()
+		isNotToReconfig = len(committees_ref)
+	}
+}
+
+func reconfig() {
+	// 打乱conMap
+	rand.Shuffle(len(comMap), func(i, j int) {
+		comMap[i], comMap[j] = comMap[j], comMap[i]
+	})
+	for i, com := range committees_ref {
+		log.Debug("11111", "shardID", i)
+		com.SetReconfigRes(comMap[i])
+	}
 }

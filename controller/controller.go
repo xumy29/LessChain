@@ -33,8 +33,9 @@ type Cfg struct {
 	InjectSpeed            int    `json:"InjectSpeed"`
 	RecommitIntervalSecs   int    `json:"RecommitInterval"`
 	RecommitTimes2Rollback int    `json:"RecommitTimes2Rollback"`
+	Height2Reconfig        int    `json:"Height2Reconfig"`
 	MaxBlockTXSize         int    `json:"MaxBlockTXSize"`
-	DatasetDir             string `json:"datasetDir"`
+	DatasetDir             string `json:"DatasetDir"`
 }
 
 func ReadCfg(filename string) *Cfg {
@@ -74,6 +75,7 @@ func Main(cfgfilename string) {
 	recommitIntervalSecs := cfg.RecommitIntervalSecs
 	recommitInterval := time.Duration(recommitIntervalSecs) * time.Second
 	rollbackSecs := cfg.RecommitTimes2Rollback * cfg.RecommitIntervalSecs
+	height2Reconfig := cfg.Height2Reconfig
 	maxBlockTXSize := cfg.MaxBlockTXSize
 	datasetDir := cfg.DatasetDir
 
@@ -125,9 +127,10 @@ func Main(cfgfilename string) {
 
 	/* 初始化委员会 */
 	minerConfig := &core.MinerConfig{
-		Recommit:     recommitInterval,
-		MaxBlockSize: maxBlockTXSize,
-		InjectSpeed:  injectSpeed,
+		Recommit:        recommitInterval,
+		MaxBlockSize:    maxBlockTXSize,
+		InjectSpeed:     injectSpeed,
+		Height2Reconfig: height2Reconfig,
 	}
 
 	committees = make([]*committee.Committee, shardNum)

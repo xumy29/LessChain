@@ -1,7 +1,7 @@
 *.exe
 test.go
 draw.py
-newest_result.*
+newest_result*
 results
 logs
 figs
