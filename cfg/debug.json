@@ -6,6 +6,7 @@
     "LogProgressInterval": 20,
     "ClientNum": 1,
     "ShardNum": 2,
+    "ShardSize": 4,
     "MaxTxNum": 4000,
     "InjectSpeed": 100,
     "RecommitInterval": 5,

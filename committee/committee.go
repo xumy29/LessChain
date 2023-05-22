@@ -49,11 +49,9 @@ func (com *Committee) NewBlockGenerated(block *core.Block) {
 	height := block.NumberU64()
 	if height > 0 && height%uint64(com.config.Height2Reconfig) == 0 {
 		previousID := com.shardID
-		log.Debug("00000", "shardID", com.shardID)
 		com.messageHub.Send(core.MsgTypeReady4Reconfig, com.shardID, nil, nil)
 		// 阻塞，直到重组完成，messageHub向管道内发送此委员会所属的新分片ID
 		reconfigRes := <-com.reconfigCh
-		log.Debug("44444", "shardID", com.shardID)
 		com.shardID = uint64(reconfigRes)
 		com.worker.shardID = uint64(reconfigRes)
 		log.Debug("committee reconfiguration done!", "previous shardID", previousID, "now ShardID", com.shardID)
@@ -61,9 +59,7 @@ func (com *Committee) NewBlockGenerated(block *core.Block) {
 }
 
 func (com *Committee) SetReconfigRes(res int) {
-	log.Debug("22222", "shardID", com.shardID)
 	com.reconfigCh <- res
-	log.Debug("33333", "shardID", com.shardID)
 }
 
 /*

@@ -111,13 +111,22 @@ func toReconfig() {
 	}
 }
 
+/* 打乱conMap，重新设定委员会到分片的映射 */
 func reconfig() {
-	// 打乱conMap
+	// 设置随机种子
+	rand.Seed(int64(getSeed()))
+
 	rand.Shuffle(len(comMap), func(i, j int) {
 		comMap[i], comMap[j] = comMap[j], comMap[i]
 	})
 	for i, com := range committees_ref {
-		log.Debug("11111", "shardID", i)
 		com.SetReconfigRes(comMap[i])
 	}
+}
+
+/* 从信标链获取最新高度的已确认区块（比如有足够数量的区块跟在后面）的信息，返回一个整数作为重组的种子 */
+func getSeed() int {
+	seed := rand.Int()
+	// TODO: implement me
+	return seed
 }

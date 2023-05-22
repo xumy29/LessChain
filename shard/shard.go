@@ -15,8 +15,10 @@ import (
 )
 
 type Shard struct {
-	chainDb    ethdb.Database // Block chain database
-	leader     *Node
+	shardID    int
+	chainDB    ethdb.Database // Block chain database
+	leader     *core.Node
+	nodes      []*core.Node
 	txPool     *core.TxPool
 	blockchain *core.BlockChain
 
@@ -28,24 +30,25 @@ type Shard struct {
 	messageHub core.MessageHub
 }
 
-func NewShard(stack *Node, chainID int, clientCnt int) (*Shard, error) {
-	// Node is used to maintain a blockchain with a database
-	chainDb, err := stack.OpenDatabase("chaindata", 0, 0, "", false)
-	if err != nil {
-		return nil, err
+func NewShard(nodes []*core.Node, shardID int, clientCnt int) (*Shard, error) {
+	if len(nodes) == 0 {
+		log.Error("number of nodes should be larger than 0.")
 	}
+	// 将分片中第一个节点作为leader节点，取其数据库作为分片的数据库
+	// 其他节点的数据库默认不会被更新
+	chainDB := nodes[0].GetDB()
 
 	genesis := core.DefaultGenesisBlock()
-	genesisBlock := genesis.MustCommit(chainDb)
+	genesisBlock := genesis.MustCommit(chainDB)
 	if genesisBlock == nil {
 		log.Error("NewShard genesisBlock MustCommit err")
 	}
 
 	chainConfig := &params.ChainConfig{
-		ChainID: big.NewInt(int64(chainID)),
+		ChainID: big.NewInt(int64(shardID)),
 	}
 
-	bc, err := core.NewBlockChain(chainDb, nil, chainConfig)
+	bc, err := core.NewBlockChain(chainDB, nil, chainConfig)
 	if err != nil {
 		log.Error("NewShard NewBlockChain err")
 		return nil, err
@@ -53,16 +56,15 @@ func NewShard(stack *Node, chainID int, clientCnt int) (*Shard, error) {
 
 	pool := core.NewTxPool(bc)
 
-	stack.chainID = chainID
-	stack.addr = NodeTable[chainID]
-
-	log.Info("NewShard", "chainID=", chainID, "addr=", stack.addr)
+	log.Info("NewShard", "shardID", shardID, "nodes", nodes, "leader", nodes[0])
 
 	shard := &Shard{
-		chainDb:       chainDb,
+		nodes:         nodes,
+		shardID:       shardID,
+		chainDB:       chainDB,
 		blockchain:    bc,
 		txPool:        pool,
-		leader:        stack,
+		leader:        nodes[0],
 		injectNotDone: int32(clientCnt),
 		connMap:       make(map[string]net.Conn),
 	}
@@ -71,7 +73,7 @@ func NewShard(stack *Node, chainID int, clientCnt int) (*Shard, error) {
 }
 
 func (shard *Shard) GetChainID() int {
-	return shard.leader.chainID
+	return shard.shardID
 }
 
 func (shard *Shard) GetBlockChain() *core.BlockChain {
@@ -124,7 +126,7 @@ func (s *Shard) AddGenesisTB() {
 	g_header := genesisBlock.Header()
 	tb := &beaconChain.TimeBeacon{
 		Height:     g_header.Number.Uint64(),
-		ShardID:    uint64(s.leader.chainID),
+		ShardID:    uint64(s.shardID),
 		BlockHash:  genesisBlock.Hash(),
 		TxHash:     g_header.TxHash,
 		StatusHash: g_header.Root,

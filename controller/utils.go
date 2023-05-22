@@ -9,12 +9,14 @@ import (
 	"go-w3chain/result"
 	"go-w3chain/shard"
 	"math"
+	"path/filepath"
 	"time"
 )
 
 var shards []*shard.Shard
 var committees []*committee.Committee
 var clients []*client.Client
+var nodes [][]*core.Node
 
 func newClients(rollbackSecs, shardNum int) {
 	for cid := 0; cid < len(clients); cid++ {
@@ -25,14 +27,27 @@ func newClients(rollbackSecs, shardNum int) {
 
 func newShards(shardNum int) {
 	for shardID := 0; shardID < shardNum; shardID++ {
-		databaseDir := fmt.Sprint("shard", shardID)
-		stack, _ := shard.MakeConfigNode(databaseDir)
-		shard, err := shard.NewShard(stack, shardID, len(clients))
+		shard, err := shard.NewShard(nodes[shardID], shardID, len(clients))
 		if err != nil {
 			log.Error("NewShard failed", "err:", err)
 		}
 		// shards = append(shards, shard)
 		shards[shardID] = shard
+	}
+}
+
+func newNodes(shardNum, shardSize int) {
+	nodes = make([][]*core.Node, shardNum)
+	for shardID := 0; shardID < shardNum; shardID++ {
+		nodes[shardID] = make([]*core.Node, shardSize)
+		shardDataDir := fmt.Sprint("shard", shardID)
+		shardDataDir = filepath.Join(core.DefaultDataDir(), shardDataDir)
+		for j := 0; j < shardSize; j++ {
+			nodeID := shardID*shardSize + j
+			config := core.NewNodeConfig(nodeID)
+			databaseDir := filepath.Join(shardDataDir, config.Name)
+			nodes[shardID][j] = core.NewNode(config, databaseDir, shardID, nodeID)
+		}
 	}
 }
 
@@ -94,6 +109,14 @@ func closeShardsAndCommittees(recommitIntervalSecs, logProgressInterval int, isL
 				result.GetPercentage()
 				iter = 0
 			}
+		}
+	}
+}
+
+func closeNodes() {
+	for _, sn := range nodes {
+		for _, n := range sn {
+			n.Close()
 		}
 	}
 }

@@ -11,11 +11,11 @@ import (
 
 //节点使用的tcp监听
 func (shard *Shard) TcpListen() {
-	listen, err := net.Listen("tcp", shard.leader.addr)
+	listen, err := net.Listen("tcp", shard.leader.GetAddr())
 	if err != nil {
 		log.Error("Node tcp listien err:" + err.Error())
 	}
-	log.Debug("Node begin TCP listen", " addr=", shard.leader.addr)
+	log.Debug("Node begin TCP listen", " addr=", shard.leader.GetAddr())
 	defer listen.Close()
 
 	for {
@@ -80,7 +80,7 @@ func (shard *Shard) TcpDial(context []byte, addr string) {
 		conn, err := net.Dial("tcp", addr)
 		if err != nil {
 			log.Error("connect error:"+err.Error(), "addr", addr,
-				"context", context, "cur shardid", shard.leader.chainID)
+				"context", context, "cur shardid", shard.shardID)
 			return
 		}
 		shard.connMap[addr] = conn
@@ -95,7 +95,7 @@ func (shard *Shard) TcpDial(context []byte, addr string) {
 	_, err := conn.Write(msgb)
 	if err != nil {
 		log.Error("write error:"+err.Error(), "addr", addr,
-			"context", context, "cur shardid", shard.leader.chainID)
+			"context", context, "cur shardid", shard.shardID)
 	}
 }
 
@@ -103,7 +103,7 @@ func (shard *Shard) StopTCPConn() {
 	shard.connMaplock.Lock()
 	for addr, conn := range shard.connMap {
 		conn.Close()
-		log.Trace("close TCP connection..", "closed addr", addr, "cur shardid", shard.leader.chainID)
+		log.Trace("close TCP connection..", "closed addr", addr, "cur shardid", shard.shardID)
 	}
 	shard.connMaplock.Unlock()
 }

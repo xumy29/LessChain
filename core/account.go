@@ -1,6 +1,8 @@
-package shard
+package core
 
 import (
+	"path/filepath"
+
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 
@@ -9,7 +11,7 @@ import (
 	"os"
 )
 
-var Defaultkeydir = KeyDirConfig()
+var Defaultkeydir string = filepath.Join(DefaultDataDir(), datadirDefaultKeyStore)
 
 // deault password is the name
 // cmd/geth/accountcmd.go

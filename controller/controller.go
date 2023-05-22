@@ -36,6 +36,7 @@ type Cfg struct {
 	Height2Reconfig        int    `json:"Height2Reconfig"`
 	MaxBlockTXSize         int    `json:"MaxBlockTXSize"`
 	DatasetDir             string `json:"DatasetDir"`
+	ShardSize              int    `json:"ShardSize"`
 }
 
 func ReadCfg(filename string) *Cfg {
@@ -78,6 +79,8 @@ func Main(cfgfilename string) {
 	height2Reconfig := cfg.Height2Reconfig
 	maxBlockTXSize := cfg.MaxBlockTXSize
 	datasetDir := cfg.DatasetDir
+	/* 一个分片有多少个节点 */
+	shardSize := cfg.ShardSize
 
 	/* 设置 是否使用 progressbar */
 	result.SetIsProgressBar(IsProgressBar)
@@ -117,13 +120,15 @@ func Main(cfgfilename string) {
 		c.Print()
 	}
 
+	/* 初始化节点 */
+	newNodes(shardNum, shardSize)
+
 	/* 初始化分片，划分账户到分片，初始化分片的sender账户状态 */
 	shards = make([]*shard.Shard, shardNum) // 'shards' is delcared in utils
 	newShards(shardNum)
 
 	data.SetAddrTable(shardNum)
 	data.SetShardsInitialState(shards)
-	shard.SetNodeTable(shardNum)
 
 	/* 初始化委员会 */
 	minerConfig := &core.MinerConfig{
@@ -154,6 +159,7 @@ func Main(cfgfilename string) {
 
 	/* 循环判断各分片和委员会能否停止, 若能则停止；循环打印进度 */
 	closeShardsAndCommittees(recommitIntervalSecs, ProgressInterval, IsLogProgress)
+	closeNodes()
 
 	/* 停止客户端的checkExpiredTXs线程 */
 	stopClients()
