@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"go-w3chain/log"
+	"go-w3chain/utils"
 	"os"
 	"sort"
 	"sync"
@@ -18,6 +19,7 @@ const (
 	CrossTXType2Success
 	CrossTXType2Fail
 	RollbackSuccess
+	Dropped
 )
 
 func GetStatusString(status uint64) string {
@@ -35,6 +37,8 @@ func getStatusStr(status uint64) string {
 		return "CrossTXType2Success"
 	} else if status == RollbackSuccess {
 		return "RollbackSuccess"
+	} else if status == Dropped {
+		return "Dropped"
 	} else {
 		return "Unknown"
 	}
@@ -137,8 +141,7 @@ func GetBroadcastMap() []uint64 {
 /* SetTXReceipt functions */
 func checkTXStatus(status uint64) bool {
 	return status == IntraSuccess ||
-		status == CrossTXType2Success ||
-		status == RollbackSuccess
+		status == CrossTXType2Success
 }
 
 func SetTXReceiptV2(table map[uint64]*TXReceipt) {
@@ -148,10 +151,15 @@ func SetTXReceiptV2(table map[uint64]*TXReceipt) {
 	complished := 0
 
 	for k, v := range table {
-		res.AllTXStatus[k] = append(res.AllTXStatus[k], v.TxStatus)
-		if len(res.AllTXStatus[k]) > 2 {
-			log.Warn("TX has too much status!", "txid", k, "count", len(res.AllTXStatus[k]), "txStatusList", getStatusListStr(res.AllTXStatus[k]))
+		// 如果该交易已执行完成，则不再添加新状态
+		if len(res.AllTXStatus[k]) > 0 && checkTXStatus(utils.LastElem(res.AllTXStatus[k]).(uint64)) {
+			continue
 		}
+
+		res.AllTXStatus[k] = append(res.AllTXStatus[k], v.TxStatus)
+		// if len(res.AllTXStatus[k]) > 2 {
+		// 	log.Warn("TX has too much status!", "txid", k, "count", len(res.AllTXStatus[k]), "txStatusList", getStatusListStr(res.AllTXStatus[k]))
+		// }
 		// 每执行一笔交易或一笔子交易都使负载加一
 		res.workload4shard[v.ShardID] += 1
 		/* 判断交易是否完成 */
@@ -223,8 +231,8 @@ func GetThroughtPutAndLatencyV2() (float64, float64, float64, []int) {
 	end := uint64(0)
 	// executed_cnt := 0
 	for i := 0; i < res.Totalnum; i++ {
-		status := res.AllTXStatus[i]
-		if len(status) == 0 || len(status) == 1 && status[0] != IntraSuccess {
+		// 过滤掉未执行完成的交易
+		if res.ConfirmMap[i] == 0 {
 			continue
 		}
 
@@ -251,7 +259,7 @@ func GetThroughtPutAndLatencyV2() (float64, float64, float64, []int) {
 	log.Info("input TX num: " + fmt.Sprint(res.Totalnum))
 	log.Info("output TX num (num of TXs executed): " + fmt.Sprint(res.allComplished))
 	log.Info("rollback TX num: " + fmt.Sprint(res.allRollBack))
-	rollbackRate := float64(res.allRollBack) / float64(res.allComplished)
+	rollbackRate := float64(res.allRollBack) / float64(res.allComplished+res.allRollBack)
 	log.Info("rollback rate: " + fmt.Sprint(rollbackRate))
 
 	log.Info("used time: " + fmt.Sprint(usedTime) + " (s)")

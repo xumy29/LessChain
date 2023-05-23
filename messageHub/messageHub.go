@@ -46,10 +46,10 @@ func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, call
 		receipts := msg.([]*result.TXReceipt)
 		client.AddTXReceipts(receipts)
 
-	case core.MsgTypeClientInjectTX2Shard:
-		shard := shards_ref[id]
+	case core.MsgTypeClientInjectTX2Committee:
+		com := committees_ref[id]
 		txs := msg.([]*core.Transaction)
-		shard.InjectTXs(txs)
+		com.InjectTXs(txs)
 
 	case core.MsgTypeSetInjectDone2Shard:
 		shard := shards_ref[id]
@@ -63,13 +63,11 @@ func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, call
 		height := msg.(uint64)
 		tb := tbChain_ref.GetTimeBeacon(id, height)
 		callback(tb)
-	case core.MsgTypeComGetTX:
+	case core.MsgTypeComGetState:
 		shard := shards_ref[id]
-		blockCap := msg.(int)
-		txs := shard.TXpool().Pending(blockCap)
 		states := shard.GetBlockChain().GetStateDB()
 		parentHeight := shard.GetBlockChain().CurrentBlock().Number()
-		callback(txs, states, parentHeight)
+		callback(states, parentHeight)
 	case core.MsgTypeAddBlock2Shard:
 		shard := shards_ref[id]
 		block := msg.(*core.Block)

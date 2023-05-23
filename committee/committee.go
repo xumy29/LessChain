@@ -19,6 +19,7 @@ type Committee struct {
 	/* 接收重组结果的管道 */
 	reconfigCh chan []*core.Node
 	Nodes      []*core.Node
+	txPool     *core.TxPool
 }
 
 func NewCommittee(shardID uint64, nodes []*core.Node, config *core.MinerConfig) *Committee {
@@ -29,6 +30,7 @@ func NewCommittee(shardID uint64, nodes []*core.Node, config *core.MinerConfig) 
 		worker:     worker,
 		reconfigCh: make(chan []*core.Node, 1),
 		Nodes:      nodes,
+		txPool:     core.NewTxPool(int(shardID)),
 	}
 	log.Info("NewCommittee", "shardID", shardID, "nodeIDs", utils.GetFieldValueforList(nodes, "NodeID"))
 	worker.com = com
@@ -57,7 +59,7 @@ func (com *Committee) NewBlockGenerated(block *core.Block) {
 
 		// 阻塞，直到重组完成，messageHub向管道内发送此委员会的新节点
 		reconfigRes := <-com.reconfigCh
-		com.SetNodes(reconfigRes)
+		com.Reconfig(reconfigRes)
 
 		log.Debug("committee reconfiguration done!",
 			"shardID", com.shardID,
@@ -67,8 +69,18 @@ func (com *Committee) NewBlockGenerated(block *core.Block) {
 	}
 }
 
-func (com *Committee) SetNodes(nodes []*core.Node) {
+func (com *Committee) Reconfig(nodes []*core.Node) {
 	com.Nodes = nodes
+	// 委员会重组后，清空交易池，并标记被丢弃的交易
+	com.txPool = com.txPool.Reset()
+}
+
+func (com *Committee) InjectTXs(txs []*core.Transaction) {
+	com.txPool.AddTxs(txs)
+}
+
+func (com *Committee) TXpool() *core.TxPool {
+	return com.txPool
 }
 
 /*
@@ -111,17 +123,15 @@ func (com *Committee) send2Client(receipts map[uint64]*result.TXReceipt, txs []*
 * 按照论文中的设计，此处的状态应该是指交易相关账户的状态以及 merkle proof，
 但目前只是把整个状态树的指针传过来，实际上委员会和分片访问和修改的是同一个状态树
 */
-func (com *Committee) getPoolTxFromShard() ([]*core.Transaction, *state.StateDB, *big.Int) {
-	var txs []*core.Transaction
+func (com *Committee) getStatusFromShard() (*state.StateDB, *big.Int) {
 	var states *state.StateDB
 	var parentHeight *big.Int
 	callback := func(ret ...interface{}) {
-		txs = ret[0].([]*core.Transaction)
-		states = ret[1].(*state.StateDB)
-		parentHeight = ret[2].(*big.Int)
+		states = ret[0].(*state.StateDB)
+		parentHeight = ret[1].(*big.Int)
 	}
-	com.messageHub.Send(core.MsgTypeComGetTX, com.shardID, com.config.MaxBlockSize, callback)
-	return txs, states, parentHeight
+	com.messageHub.Send(core.MsgTypeComGetState, com.shardID, nil, callback)
+	return states, parentHeight
 }
 
 /**

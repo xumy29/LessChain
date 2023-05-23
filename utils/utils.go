@@ -101,3 +101,10 @@ func GetFieldValueforList(list interface{}, fieldName string) []interface{} {
 
 	return res
 }
+
+func LastElem(arr interface{}) interface{} {
+	val := reflect.ValueOf(arr)
+	len := val.Len()
+
+	return val.Index(len - 1).Interface()
+}

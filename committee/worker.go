@@ -182,7 +182,7 @@ func (w *worker) InformNewBlock(block *core.Block) {
 
 /* miner/worker.go:commitWork */
 func (w *worker) commit(timestamp int64) (*core.Block, error) {
-	txs, stateDB, parentHeight := w.com.getPoolTxFromShard()
+	stateDB, parentHeight := w.com.getStatusFromShard()
 	w.curHeight = parentHeight.Add(parentHeight, common.Big1)
 	header := &core.Header{
 		Difficulty: math.BigPow(11, 11),
@@ -190,6 +190,8 @@ func (w *worker) commit(timestamp int64) (*core.Block, error) {
 		Time:       uint64(timestamp),
 		ShardID:    uint64(w.shardID),
 	}
+
+	txs := w.com.txPool.Pending(w.config.MaxBlockSize)
 
 	w.commitTransactions(txs, stateDB)
 	/* commit and insert to blockchain */

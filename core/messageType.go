@@ -2,11 +2,11 @@ package core
 
 const (
 	MsgTypeShardReply2Client uint64 = iota
-	MsgTypeClientInjectTX2Shard
+	MsgTypeClientInjectTX2Committee
 	MsgTypeSetInjectDone2Shard
 	MsgTypeAddTB
 	MsgTypeGetTB
-	MsgTypeComGetTX
+	MsgTypeComGetState
 	MsgTypeAddBlock2Shard
 	MsgTypeReady4Reconfig
 )

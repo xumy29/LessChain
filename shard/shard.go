@@ -16,11 +16,11 @@ import (
 )
 
 type Shard struct {
-	shardID    int
-	chainDB    ethdb.Database // Block chain database
-	leader     *core.Node
-	nodes      []*core.Node
-	txPool     *core.TxPool
+	shardID int
+	chainDB ethdb.Database // Block chain database
+	leader  *core.Node
+	nodes   []*core.Node
+	// txPool     *core.TxPool
 	blockchain *core.BlockChain
 
 	/* 计数器，初始等于客户端个数，每一个客户端发送注入完成信号时计数器减一 */
@@ -55,8 +55,6 @@ func NewShard(nodes []*core.Node, shardID int, clientCnt int) (*Shard, error) {
 		return nil, err
 	}
 
-	pool := core.NewTxPool(bc)
-
 	log.Info("NewShard", "shardID", shardID,
 		"nodeIDs", utils.GetFieldValueforList(nodes, "NodeID"),
 		"leaderID", nodes[0].NodeID)
@@ -66,7 +64,6 @@ func NewShard(nodes []*core.Node, shardID int, clientCnt int) (*Shard, error) {
 		shardID:       shardID,
 		chainDB:       chainDB,
 		blockchain:    bc,
-		txPool:        pool,
 		leader:        nodes[0],
 		injectNotDone: int32(clientCnt),
 		connMap:       make(map[string]net.Conn),
@@ -98,10 +95,6 @@ func (shard *Shard) SetInitialState(Addrs map[common.Address]struct{}, maxValue 
 	}
 }
 
-func (shard *Shard) InjectTXs(txs []*core.Transaction) {
-	shard.txPool.AddTxs(txs)
-}
-
 func (shard *Shard) SetInjectTXDone() {
 	atomic.AddInt32(&shard.injectNotDone, -1)
 }
@@ -109,10 +102,6 @@ func (shard *Shard) SetInjectTXDone() {
 /* 交易注入完成即可停止 */
 func (shard *Shard) CanStopV2() bool {
 	return shard.injectNotDone == 0
-}
-
-func (s *Shard) TXpool() *core.TxPool {
-	return s.txPool
 }
 
 func (s *Shard) SetMessageHub(hub core.MessageHub) {

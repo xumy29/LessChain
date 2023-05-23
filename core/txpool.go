@@ -5,57 +5,49 @@ package core
 */
 
 import (
-	"fmt"
 	"go-w3chain/log"
-	"go-w3chain/utils"
+	"go-w3chain/result"
 	"sync"
 	"time"
-
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/state"
 )
-
-type txList []*Transaction
-
-var (
-	alltxs txList
-)
-
-// ----------------------------------------------------------------------------------------------------------------
-// blockChain provides the state of blockchain and current gas limit to do
-// some pre checks in tx pool and event subscribers.
-type blockChain interface {
-	CurrentBlock() *Block
-	GetBlock(hash common.Hash, number uint64) *Block
-	StateAt(root common.Hash) (*state.StateDB, error)
-	GetStateDB() *state.StateDB
-	GetChainID() int
-}
 
 type TxPool struct {
-	chain blockChain
+	// chain blockChain
+	shardID int
 
-	pending txList // All currently processable transactions
+	pending []*Transaction
 	lock    sync.Mutex
 
 	pendingRollback []*Transaction
 	r_lock          sync.Mutex
 }
 
-func NewTxPool(chain blockChain) *TxPool {
+func NewTxPool(shardID int) *TxPool {
 	pool := &TxPool{
-		chain: chain,
+		shardID: shardID,
 	}
 	return pool
 }
 
-// /* tx functions */
-// func (pool *TxPool) AddTx(origintx *Transaction) {
-// 	pool.lock.Lock()
-// 	defer pool.lock.Unlock()
-// 	// TODO: 检查本地是否已存有该交易
-// 	pool.pending = append(pool.pending, origintx)
-// }
+/* 重置交易池，返回新的交易池 */
+func (pool *TxPool) Reset() *TxPool {
+	// 标记交易池中剩下的交易为 dropped
+	txs := append(pool.pending, pool.pendingRollback...)
+	table := make(map[uint64]*result.TXReceipt)
+	for _, tx := range txs {
+		tx.TXStatus = result.Dropped
+		table[tx.ID] = &result.TXReceipt{
+			TxID:     tx.ID,
+			TxStatus: tx.TXStatus,
+			ShardID:  int(pool.shardID),
+		}
+	}
+	result.SetTXReceiptV2(table)
+
+	// 生成新的交易池
+	return NewTxPool(pool.shardID)
+
+}
 
 /* 向交易池中添加交易，调用此方法的方法必须加锁 */
 func (pool *TxPool) AddTxWithoutLock(origintx *Transaction) {
@@ -78,27 +70,7 @@ func (pool *TxPool) AddTxs(txs []*Transaction) {
 		pool.AddTxWithoutLock(tx)
 	}
 
-	log.Debug("TxPoolAddTXs", "shardID", pool.chain.GetChainID(), "txPoolPendingLen", pool.PendingLen())
-}
-
-func (pool *TxPool) setGensisState() {
-	state := pool.chain.GetStateDB()
-	cnt := len(alltxs)
-	for i := 0; i < cnt; i++ {
-		tx := alltxs[i]
-		state.AddBalance(*tx.Sender, tx.Value)
-	}
-}
-
-func (pool *TxPool) printGensisState(num int) {
-	state := pool.chain.GetStateDB()
-	num = utils.Min(len(alltxs), num)
-	for i := 0; i < num; i++ {
-		tx := alltxs[i]
-		value := state.GetBalance(*tx.Sender)
-		// 这里GetBalance = 所有相关交易累加
-		fmt.Println(*tx.Sender, value)
-	}
+	log.Debug("TxPoolAddTXs", "shardID", pool.shardID, "txPoolPendingLen", pool.PendingLen())
 }
 
 /* worker.commitTransaction 从队列取出交易 */
