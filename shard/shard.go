@@ -5,6 +5,7 @@ import (
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/params"
+	"go-w3chain/utils"
 	"math/big"
 	"net"
 	"sync"
@@ -56,7 +57,9 @@ func NewShard(nodes []*core.Node, shardID int, clientCnt int) (*Shard, error) {
 
 	pool := core.NewTxPool(bc)
 
-	log.Info("NewShard", "shardID", shardID, "nodes", nodes, "leader", nodes[0])
+	log.Info("NewShard", "shardID", shardID,
+		"nodeIDs", utils.GetFieldValueforList(nodes, "NodeID"),
+		"leaderID", nodes[0].NodeID)
 
 	shard := &Shard{
 		nodes:         nodes,

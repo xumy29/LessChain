@@ -121,11 +121,11 @@ func Main(cfgfilename string) {
 	}
 
 	/* 初始化节点 */
-	newNodes(shardNum, shardSize)
+	nodes = newNodes(shardNum, shardSize)
 
 	/* 初始化分片，划分账户到分片，初始化分片的sender账户状态 */
 	shards = make([]*shard.Shard, shardNum) // 'shards' is delcared in utils
-	newShards(shardNum)
+	newShards(shardNum, shardSize)
 
 	data.SetAddrTable(shardNum)
 	data.SetShardsInitialState(shards)
@@ -139,13 +139,13 @@ func Main(cfgfilename string) {
 	}
 
 	committees = make([]*committee.Committee, shardNum)
-	newCommittees(shardNum, minerConfig)
+	newCommittees(shardNum, shardSize, minerConfig)
 
 	/* 初始化信标链 */
 	tbChain := beaconchain.NewTBChain()
 
 	/* 设置各个分片、委员会和客户端、信标链的通信渠道 */
-	messageHub.Init(clients, shards, committees, tbChain)
+	messageHub.Init(clients, shards, committees, nodes, tbChain)
 
 	/* 启动分片和委员会 */
 	startShards()

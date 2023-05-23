@@ -16,7 +16,7 @@ import (
 var shards []*shard.Shard
 var committees []*committee.Committee
 var clients []*client.Client
-var nodes [][]*core.Node
+var nodes []*core.Node
 
 func newClients(rollbackSecs, shardNum int) {
 	for cid := 0; cid < len(clients); cid++ {
@@ -25,9 +25,9 @@ func newClients(rollbackSecs, shardNum int) {
 	}
 }
 
-func newShards(shardNum int) {
+func newShards(shardNum int, shardSize int) {
 	for shardID := 0; shardID < shardNum; shardID++ {
-		shard, err := shard.NewShard(nodes[shardID], shardID, len(clients))
+		shard, err := shard.NewShard(nodes[shardID*shardSize:(shardID+1)*shardSize], shardID, len(clients))
 		if err != nil {
 			log.Error("NewShard failed", "err:", err)
 		}
@@ -36,24 +36,26 @@ func newShards(shardNum int) {
 	}
 }
 
-func newNodes(shardNum, shardSize int) {
-	nodes = make([][]*core.Node, shardNum)
+/* 创建所有节点，并划分到不同分片中 */
+func newNodes(shardNum, shardSize int) []*core.Node {
+	nodes = make([]*core.Node, shardNum*shardSize)
 	for shardID := 0; shardID < shardNum; shardID++ {
-		nodes[shardID] = make([]*core.Node, shardSize)
 		shardDataDir := fmt.Sprint("shard", shardID)
 		shardDataDir = filepath.Join(core.DefaultDataDir(), shardDataDir)
 		for j := 0; j < shardSize; j++ {
 			nodeID := shardID*shardSize + j
 			config := core.NewNodeConfig(nodeID)
 			databaseDir := filepath.Join(shardDataDir, config.Name)
-			nodes[shardID][j] = core.NewNode(config, databaseDir, shardID, nodeID)
+			nodes[nodeID] = core.NewNode(config, databaseDir, shardID, nodeID)
 		}
 	}
+
+	return nodes
 }
 
-func newCommittees(shardNum int, config *core.MinerConfig) {
+func newCommittees(shardNum, shardSize int, config *core.MinerConfig) {
 	for shardID := 0; shardID < shardNum; shardID++ {
-		com := committee.NewCommittee(uint64(shardID), config)
+		com := committee.NewCommittee(uint64(shardID), nodes[shardID*shardSize:(shardID+1)*shardSize], config)
 		committees[shardID] = com
 	}
 }
@@ -114,10 +116,8 @@ func closeShardsAndCommittees(recommitIntervalSecs, logProgressInterval int, isL
 }
 
 func closeNodes() {
-	for _, sn := range nodes {
-		for _, n := range sn {
-			n.Close()
-		}
+	for _, n := range nodes {
+		n.Close()
 	}
 }
 

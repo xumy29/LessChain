@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"reflect"
 
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -64,4 +65,39 @@ func Max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+/**
+ * 从给定的结构体指针中获得指定的字段，返回字段值组成的数组
+ * structPointer 的类型必须是 *structType
+ */
+func GetFieldValue(structPointer interface{}, fieldName string) interface{} {
+	getType := reflect.TypeOf(structPointer).Elem()
+	getVal := reflect.ValueOf(structPointer).Elem()
+	// fmt.Println(getType, getVal)
+
+	for i := 0; i < getType.NumField(); i++ {
+		field := getType.Field(i)
+		value := getVal.Field(i)
+		if field.Name == fieldName {
+			return value.Interface()
+		}
+	}
+	return nil
+}
+
+/**
+ * 从给定的结构体数组中获得指定的字段，返回字段值组成的数组
+ * list 的类型必须是 []*structType
+ */
+func GetFieldValueforList(list interface{}, fieldName string) []interface{} {
+	val := reflect.ValueOf(list)
+	res := make([]interface{}, val.Len())
+
+	for i := 0; i < val.Len(); i++ {
+		structPointer := val.Index(i).Interface()
+		res[i] = GetFieldValue(structPointer, fieldName)
+	}
+
+	return res
 }

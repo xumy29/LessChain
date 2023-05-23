@@ -8,6 +8,7 @@ import (
 	"go-w3chain/log"
 	"go-w3chain/result"
 	"go-w3chain/shard"
+	"go-w3chain/utils"
 	"math/rand"
 )
 
@@ -15,17 +16,20 @@ type GoodMessageHub struct {
 	mid int
 }
 
-/* 是controller中的shards和clients的引用 */
-var shards_ref []*shard.Shard
-var committees_ref []*committee.Committee
-var clients_ref []*client.Client
-var tbChain_ref *beaconChain.BeaconChain
+var (
+	/* 是controller中的shards和clients的引用 */
+	shards_ref     []*shard.Shard
+	committees_ref []*committee.Committee
+	clients_ref    []*client.Client
+	nodes_ref      []*core.Node
+	tbChain_ref    *beaconChain.BeaconChain
 
-/* 初始等于委员会数量，一个委员会调用ToReconfig时该变量减一，减到0时触发重组 */
-var isNotToReconfig int
+	/* 初始等于委员会数量，一个委员会调用ToReconfig时该变量减一，减到0时触发重组 */
+	isNotToReconfig int
 
-/* 委员会ID到分片ID的映射 */
-var comMap []int
+	/* 所有节点的ID，按委员会的顺序排序 */
+	allnodes_id []int
+)
 
 func NewMessageHub() *GoodMessageHub {
 	hub := &GoodMessageHub{
@@ -75,10 +79,11 @@ func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, call
 	}
 }
 
-func (hub *GoodMessageHub) Init(clients []*client.Client, shards []*shard.Shard, committees []*committee.Committee, tbChain *beaconChain.BeaconChain) {
+func (hub *GoodMessageHub) Init(clients []*client.Client, shards []*shard.Shard, committees []*committee.Committee, nodes []*core.Node, tbChain *beaconChain.BeaconChain) {
 	clients_ref = clients
 	shards_ref = shards
 	committees_ref = committees
+	nodes_ref = nodes
 	isNotToReconfig = len(committees_ref)
 	tbChain_ref = tbChain
 	log.Info("messageHubInit", "clientNum", len(clients_ref), "shardNum", len(shards_ref))
@@ -93,10 +98,14 @@ func (hub *GoodMessageHub) Init(clients []*client.Client, shards []*shard.Shard,
 	for _, c := range committees_ref {
 		c.SetMessageHub(hub)
 	}
-	// 根据committee的初始映射情况初始化comMap，之后重组时打乱此数组
-	comMap = make([]int, len(committees_ref))
-	for i := range comMap {
-		comMap[i] = int(committees_ref[i].GetShardID())
+
+	// 根据committee的初始节点初始化 allnodes_id，之后重组时打乱 allnodes_id，并根据结果得到委员会的新节点
+	allnodes_id = make([]int, 0)
+	for i := 0; i < len(committees_ref); i++ {
+		nodes := utils.GetFieldValueforList(committees_ref[i].Nodes, "NodeID")
+		for _, id := range nodes {
+			allnodes_id = append(allnodes_id, id.(int))
+		}
 	}
 
 	tbChain_ref.SetMessageHub(hub)
@@ -111,16 +120,27 @@ func toReconfig() {
 	}
 }
 
-/* 打乱conMap，重新设定委员会到分片的映射 */
+/* 打乱allnodes_id，重新设定委员会中的节点 */
 func reconfig() {
 	// 设置随机种子
 	rand.Seed(int64(getSeed()))
 
-	rand.Shuffle(len(comMap), func(i, j int) {
-		comMap[i], comMap[j] = comMap[j], comMap[i]
+	rand.Shuffle(len(allnodes_id), func(i, j int) {
+		allnodes_id[i], allnodes_id[j] = allnodes_id[j], allnodes_id[i]
 	})
-	for i, com := range committees_ref {
-		com.SetReconfigRes(comMap[i])
+
+	begin := 0
+	for _, com := range committees_ref {
+		node_num := len(com.Nodes)
+		nodes_index := allnodes_id[begin : begin+node_num]
+		begin += node_num
+
+		nodes_4_com := make([]*core.Node, node_num)
+		for j, index := range nodes_index {
+			nodes_4_com[j] = nodes_ref[index]
+		}
+
+		com.SetReconfigRes(nodes_4_com)
 	}
 }
 

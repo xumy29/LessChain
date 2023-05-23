@@ -23,6 +23,11 @@ func DefaultDataDir() string {
 
 }
 
+func DefaultKeyStoreDir(prefix string) string {
+	keydir := filepath.Join(prefix, datadirDefaultKeyStore)
+	return keydir
+}
+
 type NodeConfig struct {
 	Name string
 
@@ -31,7 +36,7 @@ type NodeConfig struct {
 }
 
 type Node struct {
-	nodeID  int
+	NodeID  int
 	config  *NodeConfig
 	keyDir  string // key store directory
 	DataDir string
@@ -40,6 +45,8 @@ type Node struct {
 	db   ethdb.Database
 
 	shardID int
+	/* 节点所在委员会的ID */
+	commID int
 }
 
 func NewNode(conf *NodeConfig, dataDir string, shardID int, nodeID int) *Node {
@@ -47,10 +54,10 @@ func NewNode(conf *NodeConfig, dataDir string, shardID int, nodeID int) *Node {
 		config:  conf,
 		DataDir: dataDir,
 		shardID: shardID,
-		nodeID:  nodeID,
+		NodeID:  nodeID,
 	}
 
-	node.keyDir = getKeyStoreDir(dataDir)
+	node.keyDir = DefaultKeyStoreDir(dataDir)
 	db, err := node.OpenDatabase("chaindata", 0, 0, "", false)
 	if err != nil {
 		log.Error("open database fail", "nodeID", nodeID)
@@ -68,11 +75,6 @@ func (node *Node) Close() {
 // ResolvePath returns the absolute path of a resource in the instance directory.
 func (n *Node) ResolvePath(x string) string {
 	return filepath.Join(n.DataDir, x)
-}
-
-func getKeyStoreDir(prefix string) string {
-	keydir := filepath.Join(prefix, datadirDefaultKeyStore)
-	return keydir
 }
 
 func (n *Node) GetDB() ethdb.Database {
@@ -112,5 +114,5 @@ func (n *Node) CloseDatabase() {
 	if err != nil {
 		log.Error("closeDatabase fail.", "nodeConfig", n.config)
 	}
-	log.Debug("closeDatabase", "nodeID", n.nodeID)
+	log.Debug("closeDatabase", "nodeID", n.NodeID)
 }

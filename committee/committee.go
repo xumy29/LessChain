@@ -5,6 +5,7 @@ import (
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/result"
+	"go-w3chain/utils"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/core/state"
@@ -16,18 +17,20 @@ type Committee struct {
 	worker     *worker
 	messageHub core.MessageHub
 	/* 接收重组结果的管道 */
-	reconfigCh chan int
+	reconfigCh chan []*core.Node
+	Nodes      []*core.Node
 }
 
-func NewCommittee(shardID uint64, config *core.MinerConfig) *Committee {
+func NewCommittee(shardID uint64, nodes []*core.Node, config *core.MinerConfig) *Committee {
 	worker := newWorker(config, shardID)
 	com := &Committee{
 		shardID:    shardID,
 		config:     config,
 		worker:     worker,
-		reconfigCh: make(chan int, 1),
+		reconfigCh: make(chan []*core.Node, 1),
+		Nodes:      nodes,
 	}
-	log.Info("NewCommittee", "shardID", shardID)
+	log.Info("NewCommittee", "shardID", shardID, "nodeIDs", utils.GetFieldValueforList(nodes, "NodeID"))
 	worker.com = com
 
 	return com
@@ -48,18 +51,24 @@ func (com *Committee) Close() {
 func (com *Committee) NewBlockGenerated(block *core.Block) {
 	height := block.NumberU64()
 	if height > 0 && height%uint64(com.config.Height2Reconfig) == 0 {
-		previousID := com.shardID
-		com.messageHub.Send(core.MsgTypeReady4Reconfig, com.shardID, nil, nil)
-		// 阻塞，直到重组完成，messageHub向管道内发送此委员会所属的新分片ID
+		previousNodes := utils.GetFieldValueforList(com.Nodes, "NodeID")
+
+		com.SendReconfigMsg()
+
+		// 阻塞，直到重组完成，messageHub向管道内发送此委员会的新节点
 		reconfigRes := <-com.reconfigCh
-		com.shardID = uint64(reconfigRes)
-		com.worker.shardID = uint64(reconfigRes)
-		log.Debug("committee reconfiguration done!", "previous shardID", previousID, "now ShardID", com.shardID)
+		com.SetNodes(reconfigRes)
+
+		log.Debug("committee reconfiguration done!",
+			"shardID", com.shardID,
+			"previous nodeIDs", previousNodes,
+			"now nodeIDs", utils.GetFieldValueforList(com.Nodes, "NodeID"),
+		)
 	}
 }
 
-func (com *Committee) SetReconfigRes(res int) {
-	com.reconfigCh <- res
+func (com *Committee) SetNodes(nodes []*core.Node) {
+	com.Nodes = nodes
 }
 
 /*
@@ -71,7 +80,7 @@ func (com *Committee) SetReconfigRes(res int) {
  */
 
 //////////////////////////////////////////
-// committee 通过 messageHub 与外界通信的函数
+// committee 通过 messageHub 与外界通信的函数，以及被 messageHub 调用的函数
 //////////////////////////////////////////
 
 func (com *Committee) SetMessageHub(hub core.MessageHub) {
@@ -129,12 +138,21 @@ func (com *Committee) AddTB(tb *beaconChain.TimeBeacon) {
 	com.messageHub.Send(core.MsgTypeAddTB, 0, tb, nil)
 }
 
+func (com *Committee) SendReconfigMsg() {
+	com.messageHub.Send(core.MsgTypeReady4Reconfig, com.shardID, nil, nil)
+}
+
+func (com *Committee) SetReconfigRes(res []*core.Node) {
+	com.reconfigCh <- res
+}
+
 /*
+	////////////////////////////////////////////////
 
+	///////////////////////////////////////////////
 
- */
+*/
 
-//////////////////////////////////////////////////
 func (com *Committee) GetShardID() uint64 {
 	return com.shardID
 }
