@@ -13,5 +13,6 @@
     "RecommitTimes2Rollback": 4,
     "MaxBlockTXSize": 50,
     "Height2Reconfig": 2,
+    "TbchainBlockIntervalSecs": 10,
     "DatasetDir": "D:/project/blockChain/ethereum_data/14920000_14960000/ExternalTransactionItem.csv"
 }

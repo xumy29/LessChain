@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"go-w3chain/beaconChain"
 	"go-w3chain/client"
 	"go-w3chain/committee"
 	"go-w3chain/core"
@@ -11,12 +12,15 @@ import (
 	"math"
 	"path/filepath"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 var shards []*shard.Shard
 var committees []*committee.Committee
 var clients []*client.Client
 var nodes []*core.Node
+var tbChain *beaconChain.BeaconChain
 
 func newClients(rollbackSecs, shardNum int) {
 	for cid := 0; cid < len(clients); cid++ {
@@ -27,7 +31,7 @@ func newClients(rollbackSecs, shardNum int) {
 
 func newShards(shardNum int, shardSize int) {
 	for shardID := 0; shardID < shardNum; shardID++ {
-		shard, err := shard.NewShard(nodes[shardID*shardSize:(shardID+1)*shardSize], shardID, len(clients))
+		shard, err := shard.NewShard(nodes[shardID*shardSize:(shardID+1)*shardSize], shardID)
 		if err != nil {
 			log.Error("NewShard failed", "err:", err)
 		}
@@ -55,7 +59,7 @@ func newNodes(shardNum, shardSize int) []*core.Node {
 
 func newCommittees(shardNum, shardSize int, config *core.MinerConfig) {
 	for shardID := 0; shardID < shardNum; shardID++ {
-		com := committee.NewCommittee(uint64(shardID), nodes[shardID*shardSize:(shardID+1)*shardSize], config)
+		com := committee.NewCommittee(uint64(shardID), len(clients), nodes[shardID*shardSize:(shardID+1)*shardSize], config)
 		committees[shardID] = com
 	}
 }
@@ -74,11 +78,17 @@ func startCommittees() {
 	}
 }
 
+func startClients(injectSpeed int, recommitIntervalSecs int, addrTable map[common.Address]int) {
+	for _, c := range clients {
+		c.Start(injectSpeed, recommitIntervalSecs, addrTable)
+	}
+}
+
 /**
  * 循环判断各分片和委员会能否停止, 若能则停止
  * 循环打印交易总执行进度
  */
-func closeShardsAndCommittees(recommitIntervalSecs, logProgressInterval int, isLogProgress bool) {
+func closeCommittees(recommitIntervalSecs, logProgressInterval int, isLogProgress bool) {
 	log.Info("Monitor txpools and try to stop shards")
 	sleepSecs := int(math.Ceil(float64(recommitIntervalSecs) / 2))
 	iterNum := int(math.Ceil(float64(logProgressInterval) / float64(sleepSecs)))
@@ -90,8 +100,8 @@ func closeShardsAndCommittees(recommitIntervalSecs, logProgressInterval int, isL
 	}
 	for {
 		isInjectDone := false
-		for _, shard := range shards {
-			if shard.CanStopV2() {
+		for _, com := range committees {
+			if com.CanStopV2() {
 				isInjectDone = true
 				break
 			}
@@ -125,4 +135,8 @@ func stopClients() {
 	for _, c := range clients {
 		c.Stop()
 	}
+}
+
+func stopTBChain() {
+	tbChain.Close()
 }

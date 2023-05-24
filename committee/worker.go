@@ -204,7 +204,7 @@ func (w *worker) commit(timestamp int64) (*core.Block, error) {
 	final_header := block.Header()
 	tb := &beaconChain.TimeBeacon{
 		Height:     final_header.Number.Uint64(),
-		ShardID:    w.shardID,
+		ShardID:    int(w.shardID),
 		BlockHash:  block.Hash(),
 		TxHash:     final_header.TxHash,
 		StatusHash: final_header.Root,

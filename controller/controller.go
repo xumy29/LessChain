@@ -22,21 +22,22 @@ import (
 )
 
 type Cfg struct {
-	LogLevel               int    `json:"LogLevel"`
-	LogFile                string `json:"LogFile"`
-	ProgressInterval       int    `json:"ProgressInterval"`
-	IsProgressBar          bool   `json:"IsProgressBar"`
-	IsLogProgress          bool   `json:"IsLogProgress"`
-	ClientNum              int    `json:"ClientNum"`
-	ShardNum               int    `json:"ShardNum"`
-	MaxTxNum               int    `json:"MaxTxNum"`
-	InjectSpeed            int    `json:"InjectSpeed"`
-	RecommitIntervalSecs   int    `json:"RecommitInterval"`
-	RecommitTimes2Rollback int    `json:"RecommitTimes2Rollback"`
-	Height2Reconfig        int    `json:"Height2Reconfig"`
-	MaxBlockTXSize         int    `json:"MaxBlockTXSize"`
-	DatasetDir             string `json:"DatasetDir"`
-	ShardSize              int    `json:"ShardSize"`
+	LogLevel                 int    `json:"LogLevel"`
+	LogFile                  string `json:"LogFile"`
+	ProgressInterval         int    `json:"ProgressInterval"`
+	IsProgressBar            bool   `json:"IsProgressBar"`
+	IsLogProgress            bool   `json:"IsLogProgress"`
+	ClientNum                int    `json:"ClientNum"`
+	ShardNum                 int    `json:"ShardNum"`
+	MaxTxNum                 int    `json:"MaxTxNum"`
+	InjectSpeed              int    `json:"InjectSpeed"`
+	RecommitIntervalSecs     int    `json:"RecommitInterval"`
+	RecommitTimes2Rollback   int    `json:"RecommitTimes2Rollback"`
+	Height2Reconfig          int    `json:"Height2Reconfig"`
+	MaxBlockTXSize           int    `json:"MaxBlockTXSize"`
+	DatasetDir               string `json:"DatasetDir"`
+	ShardSize                int    `json:"ShardSize"`
+	TbchainBlockIntervalSecs int    `json:"TbchainBlockIntervalSecs"`
 }
 
 func ReadCfg(filename string) *Cfg {
@@ -81,6 +82,7 @@ func Main(cfgfilename string) {
 	datasetDir := cfg.DatasetDir
 	/* 一个分片有多少个节点 */
 	shardSize := cfg.ShardSize
+	TbchainBlockIntervalSecs := cfg.TbchainBlockIntervalSecs
 
 	/* 设置 是否使用 progressbar */
 	result.SetIsProgressBar(IsProgressBar)
@@ -142,7 +144,7 @@ func Main(cfgfilename string) {
 	newCommittees(shardNum, shardSize, minerConfig)
 
 	/* 初始化信标链 */
-	tbChain := beaconchain.NewTBChain()
+	tbChain = beaconchain.NewTBChain(TbchainBlockIntervalSecs)
 
 	/* 设置各个分片、委员会和客户端、信标链的通信渠道 */
 	messageHub.Init(clients, shards, committees, nodes, tbChain)
@@ -151,18 +153,17 @@ func Main(cfgfilename string) {
 	startShards()
 	startCommittees()
 
-	/* 客户端按一定速率将交易注入到分片中 */
-	for _, c := range clients {
-		go c.SendTXs(injectSpeed, shards, data.GetAddrTable())
-		go c.CheckExpiredTXs(recommitIntervalSecs)
-	}
+	/* 客户端按一定速率将交易注入到分片中，以及开启自身的线程 */
+	startClients(injectSpeed, recommitIntervalSecs, data.GetAddrTable())
 
 	/* 循环判断各分片和委员会能否停止, 若能则停止；循环打印进度 */
-	closeShardsAndCommittees(recommitIntervalSecs, ProgressInterval, IsLogProgress)
+	closeCommittees(recommitIntervalSecs, ProgressInterval, IsLogProgress)
 	closeNodes()
 
 	/* 停止客户端的checkExpiredTXs线程 */
 	stopClients()
+
+	stopTBChain()
 
 	/* 打印交易执行结果 */
 	result.PrintTXReceipt()

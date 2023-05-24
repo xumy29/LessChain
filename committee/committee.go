@@ -7,6 +7,7 @@ import (
 	"go-w3chain/result"
 	"go-w3chain/utils"
 	"math/big"
+	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/core/state"
 )
@@ -20,17 +21,20 @@ type Committee struct {
 	reconfigCh chan []*core.Node
 	Nodes      []*core.Node
 	txPool     *core.TxPool
+	/* 计数器，初始等于客户端个数，每一个客户端发送注入完成信号时计数器减一 */
+	injectNotDone int32
 }
 
-func NewCommittee(shardID uint64, nodes []*core.Node, config *core.MinerConfig) *Committee {
+func NewCommittee(shardID uint64, clientCnt int, nodes []*core.Node, config *core.MinerConfig) *Committee {
 	worker := newWorker(config, shardID)
 	com := &Committee{
-		shardID:    shardID,
-		config:     config,
-		worker:     worker,
-		reconfigCh: make(chan []*core.Node, 1),
-		Nodes:      nodes,
-		txPool:     core.NewTxPool(int(shardID)),
+		shardID:       shardID,
+		config:        config,
+		worker:        worker,
+		reconfigCh:    make(chan []*core.Node, 1),
+		Nodes:         nodes,
+		txPool:        core.NewTxPool(int(shardID)),
+		injectNotDone: int32(clientCnt),
 	}
 	log.Info("NewCommittee", "shardID", shardID, "nodeIDs", utils.GetFieldValueforList(nodes, "NodeID"))
 	worker.com = com
@@ -99,6 +103,15 @@ func (com *Committee) SetMessageHub(hub core.MessageHub) {
 	com.messageHub = hub
 }
 
+func (com *Committee) SetInjectTXDone() {
+	atomic.AddInt32(&com.injectNotDone, -1)
+}
+
+/* 交易注入完成即可停止 */
+func (com *Committee) CanStopV2() bool {
+	return com.injectNotDone == 0
+}
+
 /**
  * 向客户端发送交易收据
  * 目前未实现通过网络传输，都是基于messageHub转发
@@ -114,7 +127,7 @@ func (com *Committee) send2Client(receipts map[uint64]*result.TXReceipt, txs []*
 		msg2Client[cid] = append(msg2Client[cid], receipts[tx.ID])
 	}
 	for cid := range msg2Client {
-		com.messageHub.Send(core.MsgTypeShardReply2Client, uint64(cid), msg2Client[cid], nil)
+		com.messageHub.Send(core.MsgTypeCommitteeReply2Client, uint64(cid), msg2Client[cid], nil)
 	}
 }
 
@@ -130,7 +143,7 @@ func (com *Committee) getStatusFromShard() (*state.StateDB, *big.Int) {
 		states = ret[0].(*state.StateDB)
 		parentHeight = ret[1].(*big.Int)
 	}
-	com.messageHub.Send(core.MsgTypeComGetState, com.shardID, nil, callback)
+	com.messageHub.Send(core.MsgTypeComGetStateFromShard, com.shardID, nil, callback)
 	return states, parentHeight
 }
 
@@ -145,7 +158,7 @@ func (com *Committee) AddBlock2Shard(block *core.Block) {
  * 将新区块的信标发送到信标链
  */
 func (com *Committee) AddTB(tb *beaconChain.TimeBeacon) {
-	com.messageHub.Send(core.MsgTypeAddTB, 0, tb, nil)
+	com.messageHub.Send(core.MsgTypeCommitteeAddTB, 0, tb, nil)
 }
 
 func (com *Committee) SendReconfigMsg() {

@@ -9,7 +9,6 @@ import (
 	"math/big"
 	"net"
 	"sync"
-	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -23,15 +22,13 @@ type Shard struct {
 	// txPool     *core.TxPool
 	blockchain *core.BlockChain
 
-	/* 计数器，初始等于客户端个数，每一个客户端发送注入完成信号时计数器减一 */
-	injectNotDone int32
-	connMap       map[string]net.Conn
-	connMaplock   sync.RWMutex
+	connMap     map[string]net.Conn
+	connMaplock sync.RWMutex
 
 	messageHub core.MessageHub
 }
 
-func NewShard(nodes []*core.Node, shardID int, clientCnt int) (*Shard, error) {
+func NewShard(nodes []*core.Node, shardID int) (*Shard, error) {
 	if len(nodes) == 0 {
 		log.Error("number of nodes should be larger than 0.")
 	}
@@ -60,13 +57,12 @@ func NewShard(nodes []*core.Node, shardID int, clientCnt int) (*Shard, error) {
 		"leaderID", nodes[0].NodeID)
 
 	shard := &Shard{
-		nodes:         nodes,
-		shardID:       shardID,
-		chainDB:       chainDB,
-		blockchain:    bc,
-		leader:        nodes[0],
-		injectNotDone: int32(clientCnt),
-		connMap:       make(map[string]net.Conn),
+		nodes:      nodes,
+		shardID:    shardID,
+		chainDB:    chainDB,
+		blockchain: bc,
+		leader:     nodes[0],
+		connMap:    make(map[string]net.Conn),
 	}
 
 	return shard, nil
@@ -95,15 +91,6 @@ func (shard *Shard) SetInitialState(Addrs map[common.Address]struct{}, maxValue 
 	}
 }
 
-func (shard *Shard) SetInjectTXDone() {
-	atomic.AddInt32(&shard.injectNotDone, -1)
-}
-
-/* 交易注入完成即可停止 */
-func (shard *Shard) CanStopV2() bool {
-	return shard.injectNotDone == 0
-}
-
 func (s *Shard) SetMessageHub(hub core.MessageHub) {
 	s.messageHub = hub
 }
@@ -118,10 +105,10 @@ func (s *Shard) AddGenesisTB() {
 	g_header := genesisBlock.Header()
 	tb := &beaconChain.TimeBeacon{
 		Height:     g_header.Number.Uint64(),
-		ShardID:    uint64(s.shardID),
+		ShardID:    s.shardID,
 		BlockHash:  genesisBlock.Hash(),
 		TxHash:     g_header.TxHash,
 		StatusHash: g_header.Root,
 	}
-	s.messageHub.Send(core.MsgTypeAddTB, 0, tb, nil)
+	s.messageHub.Send(core.MsgTypeCommitteeAddTB, 0, tb, nil)
 }

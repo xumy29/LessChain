@@ -1,12 +1,13 @@
 package core
 
 const (
-	MsgTypeShardReply2Client uint64 = iota
-	MsgTypeClientInjectTX2Committee
-	MsgTypeSetInjectDone2Shard
-	MsgTypeAddTB
+	MsgTypeClientInjectTX2Committee uint64 = iota
+	MsgTypeCommitteeReply2Client
+	MsgTypeSetInjectDone2Committee
+	MsgTypeCommitteeAddTB
 	MsgTypeGetTB
-	MsgTypeComGetState
+	MsgTypeComGetStateFromShard
 	MsgTypeAddBlock2Shard
 	MsgTypeReady4Reconfig
+	MsgTypeTBChainPushTB2Clients
 )
