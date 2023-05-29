@@ -22,9 +22,9 @@ var clients []*client.Client
 var nodes []*core.Node
 var tbChain *beaconChain.BeaconChain
 
-func newClients(rollbackSecs, shardNum int) {
+func newClients(rollbackHeight, shardNum int) {
 	for cid := 0; cid < len(clients); cid++ {
-		clients[cid] = client.NewClient(cid, rollbackSecs, shardNum)
+		clients[cid] = client.NewClient(cid, rollbackHeight, shardNum)
 		log.Info("NewClient", "Info", clients[cid])
 	}
 }
@@ -85,7 +85,7 @@ func startClients(injectSpeed int, recommitIntervalSecs int, addrTable map[commo
 }
 
 /**
- * 循环判断各分片和委员会能否停止, 若能则停止
+ * 循环判断各客户端和委员会能否停止, 若能则停止
  * 循环打印交易总执行进度
  */
 func closeCommittees(recommitIntervalSecs, logProgressInterval int, isLogProgress bool) {
@@ -99,17 +99,18 @@ func closeCommittees(recommitIntervalSecs, logProgressInterval int, isLogProgres
 		log.Info("Set log progress false")
 	}
 	for {
-		isInjectDone := false
+		isInjectDone := true
+		for _, c := range clients {
+			isInjectDone = isInjectDone && c.CanStopV1()
+		}
 		for _, com := range committees {
-			if com.CanStopV2() {
-				isInjectDone = true
-				break
-			}
+			isInjectDone = isInjectDone && com.CanStopV1()
 		}
 		if isInjectDone {
 			for _, com := range committees {
 				com.Close()
 			}
+			stopClients()
 			break
 		}
 		// 每出块间隔的一半时间打印一次进度

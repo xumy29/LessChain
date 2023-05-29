@@ -10,4 +10,6 @@ const (
 	MsgTypeAddBlock2Shard
 	MsgTypeReady4Reconfig
 	MsgTypeTBChainPushTB2Clients
+	MsgTypeTBChainPushTB2Coms
+	MsgTypeComGetRollbackProofFromShard
 )

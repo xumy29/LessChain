@@ -7,52 +7,31 @@ import (
 	"go-w3chain/result"
 )
 
-/* 接收分片执行完交易的收据 */
+/**
+ * 该函数在loadData后被调用一次，将分配到此客户端的交易加入队列中，并多设一个map用于快速根据交易ID找到交易
+ */
+func (c *Client) Addtxs(txs []*core.Transaction) {
+	for _, tx := range txs {
+		tx.RollbackHeight = uint64(c.rollbackHeight)
+	}
+	c.txs = append(c.txs, txs...)
+	// log.Debug("clientAddtxs", "clientID", c.cid, "txs_len", len(c.txs))
+	for _, tx := range c.txs {
+		c.txs_map[tx.ID] = tx
+	}
+}
+
+/** 客户端收到委员会发送的交易收据，存入本地
+* 客户端不会立即对交易进行处理，比如发送跨片交易后半部分，
+需要等到收到信标链的信标确认消息才会对交易进行处理
+*/
 func (c *Client) AddTXReceipts(receipts []*result.TXReceipt) {
-	c.c1_lock.Lock()
-	defer c.c1_lock.Unlock()
-	c.c1_c_lock.Lock()
-	defer c.c1_c_lock.Unlock()
-	cross1Cnt := 0
-	cross2Cnt := 0
-
-	if len(receipts) == 0 {
-		return
-	}
-	// // 获取对应分片和高度的信标
-	// tb := c.GetTB(receipts[0].ShardID, receipts[0].BlockHeight)
-	// log.Debug("ClientGetTimeBeacon", "info", tb)
-
+	c.r_lock.Lock()
+	defer c.r_lock.Unlock()
 	for _, r := range receipts {
-		// validity := VerifyTxMKproof(r.MKproof, tb)
-		// if !validity {
-		// 	log.Error("transaction's merkle proof verification didn't pass!")
-		// }
-		if r.TxStatus == result.CrossTXType1Success {
-			cross1Cnt += 1
-			c.cross1_tx_reply.PushBack(r)
-			if r.ConfirmTimeStamp == 0 {
-				log.Warn("ConfirmTimeStamp == 0! confirmTimeStamp is expected greater than zero", "txid", r.TxID, "txstatus", r.TxStatus)
-			}
-			c.cross1_confirm_time_map[r.TxID] = r.ConfirmTimeStamp
-
-		} else if r.TxStatus == result.CrossTXType2Success {
-			cross2Cnt += 1
-			if cross1TxConfirmTime, ok := c.cross1_confirm_time_map[r.TxID]; !ok {
-				log.Warn("got cross2TXReply, but txid not in cross1_confirm_time_map")
-			} else {
-				if r.ConfirmTimeStamp > cross1TxConfirmTime+uint64(c.rollbackSec) {
-					log.Warn("got cross2Reply, but confirmTime exceeds rollback duration, recipient's shard may be wrong")
-				} else {
-					delete(c.cross1_confirm_time_map, r.TxID)
-				}
-			}
-		}
+		c.tx_reply.PushBack(r)
 	}
 
-	log.Debug("clientAddTXReceipt", "cid", c.cid, "receiptCnt", len(receipts),
-		"cross1ReceiptCnt", cross1Cnt, "cross2ReceiptCnt", cross2Cnt,
-		"cross1_tx_reply_queue_len", c.cross1_tx_reply.Len())
 }
 
 /** 获取信标
@@ -69,36 +48,84 @@ func (c *Client) GetTB(shardID int, height uint64) *beaconChain.TimeBeacon {
 }
 
 /** 信标链主动向客户端推送新确认的信标时调用此函数
-* 一般情况下信标链应该只向客户端推送其关注的分片和高度的信标，这里进行了简化，默认全部推送
-* 客户端收到新确认信标后，遍历 cross1_tx_reply，如果某个交易的区块信标已确认，
-将该交易加到 cross2_txs 中，可以作为跨片交易后半部分发送给委员会
-*/
-func (c *Client) AddTBs(tbs_new map[int][]*beaconChain.TimeBeacon) {
+ * 一般情况下信标链应该只向客户端推送其关注的分片和高度的信标，这里进行了简化，默认全部推送
+ * 客户端收到新确认信标后，遍历 tx_reply，如果某个交易的区块信标已确认，则对该交易进行后续处理
+ * 客户端收到新确认信标后，检查是否有超时的跨片交易
+ */
+func (c *Client) AddTBs(tbs_new map[int][]*beaconChain.TimeBeacon, height uint64) {
 	for shardID, tbs := range tbs_new {
 		for _, tb := range tbs {
 			c.tbs[shardID][tb.Height] = tb
 		}
 	}
-	c.c1_lock.Lock()
-	defer c.c1_lock.Unlock()
+	c.tbchain_height = height
+	c.processTXReceipts()
+	c.checkExpiredTXs()
+
+}
+
+/**
+* 遍历 tx_reply，如果某个交易的区块信标已确认，则对该交易进行后续处理：
+如果交易已完成，则记录确认时间；如果交易未完成，则加入到新队列中等待被发送
+*/
+func (c *Client) processTXReceipts() {
+	c.r_lock.Lock()
+	defer c.r_lock.Unlock()
 	c.c2_lock.Lock()
 	defer c.c2_lock.Unlock()
-	l := c.cross1_tx_reply
+	c.c1_c_lock.Lock()
+	defer c.c1_c_lock.Unlock()
+
+	to_record := make(map[uint64]*result.TXReceipt)
+	l := c.tx_reply
 	for e := l.Front(); e != nil; {
 		n := e.Next()
 
 		r := e.Value.(*result.TXReceipt)
-		if _, ok := c.tbs[r.ShardID][r.BlockHeight]; ok { // 该交易的信标已被确认
+		// 信标未确认，跳过
+		if _, ok := c.tbs[r.ShardID][r.BlockHeight]; !ok {
+			e = n
+			continue
+		}
+		// 信标已确认，分情况处理
+		tb := c.tbs[r.ShardID][r.BlockHeight]
+		r.ConfirmTimeStamp = tb.ConfirmTime
+		to_record[r.TxID] = r
+		if r.TxStatus == result.IntraSuccess {
+			// do nothing
+		} else if r.TxStatus == result.CrossTXType1Success {
+			// 1. 记录到 cross1_confirm_height_map 中
+			c.cross1_confirm_height_map[r.TxID] = tb.ConfirmHeight
+			// 2. 加入cross2队列
 			txid := r.TxID
 			tx := *c.txs_map[txid]
 			tx.TXtype = core.CrossTXType2
 			tx.TXStatus = result.DefaultStatus
-			tx.RollbackSecs = uint64(c.rollbackSec)
+			tx.ConfirmHeight = c.tbchain_height
 			c.cross2_txs = append(c.cross2_txs, &tx)
-			l.Remove(e)
+			log.Trace("tracing transaction", "txid", r.TxID, "status", result.GetStatusString(r.TxStatus), "time", r.ConfirmTimeStamp)
+			log.Trace("tracing transaction", "txid", r.TxID, "status", "client add tx to cross2_txs (list)", "time", r.ConfirmTimeStamp)
+		} else if r.TxStatus == result.CrossTXType2Success {
+			// 删除cross1_confirm_height_map中的项
+			if _, ok := c.cross1_confirm_height_map[r.TxID]; !ok {
+				// 出现以下这种情况，一般是因为委员会打包时未超时，客户端收到后却超时了，所以客户端将cross1_confirm_height_map中的项删除并可能发出回滚交易了
+				// 按照理论设计，这种情况应该仍然认为交易未超时。回滚交易在委员会1也不会被执行。
+				// log.Debug("got cross2TXReply, but txid not in cross1_confirm_height_map, rollback TX may have been sent.", "txid", r.TxID, "tbchain_height", c.tbchain_height)
+			} else {
+				delete(c.cross1_confirm_height_map, r.TxID)
+			}
+			log.Trace("tracing transaction", "txid", r.TxID, "status", result.GetStatusString(r.TxStatus), "time", r.ConfirmTimeStamp)
+		} else if r.TxStatus == result.RollbackSuccess {
+			res_status := result.GetResult().AllTXStatus[r.TxID]
+			if len(res_status) > 0 && res_status[len(res_status)-1] == result.CrossTXType2Success {
+				// 如果交易后半部分已经执行成功，回滚交易不能被执行
+				log.Error("this tx should not be rolled back!", "txid", r.TxID)
+			}
+			log.Trace("tracing transaction", "txid", r.TxID, "status", result.GetStatusString(r.TxStatus), "time", r.ConfirmTimeStamp)
 		}
-
+		l.Remove(e)
 		e = n
 	}
+	c.recordTXReceipts(to_record)
 
 }

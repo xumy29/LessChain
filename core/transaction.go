@@ -35,15 +35,22 @@ type Transaction struct {
 	/** 记录timestamp(求tps, latency)， 账户的分片id(求跨分片比例，负载)
 	 * 注：int类型不能rlp
 	 */
-	Timestamp        uint64 // broadcast Timestamp
+	/* broadcast Timestamp */
+	Timestamp uint64
+	/** 信标链上的确认时间
+	 * 对于片内交易和cross1交易，交易执行后该值赋为确认时间
+	 * 对于cross2交易，交易执行前该值是cross1的确认时间，用于判断是否超时；交易执行后是cross2的确认时间
+	 */
 	ConfirmTimestamp uint64
-	Sender_sid       uint64
-	Recipient_sid    uint64
-	TXStatus         uint64
+	/* 信标链上确认该交易的高度 */
+	ConfirmHeight uint64
+	Sender_sid    uint64
+	Recipient_sid uint64
+	TXStatus      uint64
 
 	/* 客户端信息 */
-	Cid          uint64
-	RollbackSecs uint64
+	Cid            uint64
+	RollbackHeight uint64
 
 	// // Signature values of sender
 	// V1 *big.Int `json:"v1"`

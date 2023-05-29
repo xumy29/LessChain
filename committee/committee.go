@@ -20,24 +20,27 @@ type Committee struct {
 	/* 接收重组结果的管道 */
 	reconfigCh chan []*core.Node
 	Nodes      []*core.Node
-	txPool     *core.TxPool
+	txPool     *TxPool
 	/* 计数器，初始等于客户端个数，每一个客户端发送注入完成信号时计数器减一 */
-	injectNotDone int32
+	injectNotDone  int32
+	tbchain_height uint64
 }
 
 func NewCommittee(shardID uint64, clientCnt int, nodes []*core.Node, config *core.MinerConfig) *Committee {
 	worker := newWorker(config, shardID)
+	pool := NewTxPool(int(shardID))
 	com := &Committee{
 		shardID:       shardID,
 		config:        config,
 		worker:        worker,
 		reconfigCh:    make(chan []*core.Node, 1),
 		Nodes:         nodes,
-		txPool:        core.NewTxPool(int(shardID)),
+		txPool:        pool,
 		injectNotDone: int32(clientCnt),
 	}
 	log.Info("NewCommittee", "shardID", shardID, "nodeIDs", utils.GetFieldValueforList(nodes, "NodeID"))
 	worker.com = com
+	pool.com = com
 
 	return com
 }
@@ -83,7 +86,7 @@ func (com *Committee) InjectTXs(txs []*core.Transaction) {
 	com.txPool.AddTxs(txs)
 }
 
-func (com *Committee) TXpool() *core.TxPool {
+func (com *Committee) TXpool() *TxPool {
 	return com.txPool
 }
 
@@ -103,8 +106,27 @@ func (com *Committee) SetMessageHub(hub core.MessageHub) {
 	com.messageHub = hub
 }
 
+/** 信标链主动向委员会推送新确认的信标时调用此函数
+ * 一般情况下信标链应该只向委员会推送其关注的分片和高度的信标，这里进行了简化，默认全部推送
+ * 委员会收到新确认信标后，
+ */
+func (com *Committee) AddTBs(tbs_new map[int][]*beaconChain.TimeBeacon, height uint64) {
+	// for shardID, tbs := range tbs_new {
+	// 	for _, tb := range tbs {
+	// 		c.tbs[shardID][tb.Height] = tb
+	// 	}
+	// }
+	com.tbchain_height = height
+
+}
+
 func (com *Committee) SetInjectTXDone() {
 	atomic.AddInt32(&com.injectNotDone, -1)
+}
+
+/* 交易注入完成且交易池空即可停止 */
+func (com *Committee) CanStopV1() bool {
+	return com.CanStopV2() && com.txPool.Empty()
 }
 
 /* 交易注入完成即可停止 */
@@ -124,7 +146,9 @@ func (com *Committee) send2Client(receipts map[uint64]*result.TXReceipt, txs []*
 		if _, ok := msg2Client[cid]; !ok {
 			msg2Client[cid] = make([]*result.TXReceipt, 0, len(receipts))
 		}
-		msg2Client[cid] = append(msg2Client[cid], receipts[tx.ID])
+		if r, ok := receipts[tx.ID]; ok {
+			msg2Client[cid] = append(msg2Client[cid], r)
+		}
 	}
 	for cid := range msg2Client {
 		com.messageHub.Send(core.MsgTypeCommitteeReply2Client, uint64(cid), msg2Client[cid], nil)

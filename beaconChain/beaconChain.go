@@ -9,11 +9,14 @@ import (
 )
 
 type TimeBeacon struct {
-	Height     uint64
-	ShardID    int
-	BlockHash  common.Hash
-	TxHash     common.Hash
-	StatusHash common.Hash
+	Height      uint64
+	ShardID     int
+	BlockHash   common.Hash
+	TxHash      common.Hash
+	StatusHash  common.Hash
+	ConfirmTime uint64
+	/* 信标链上包含该信标的区块的高度，注意不是分片自身的区块高度 */
+	ConfirmHeight uint64
 }
 
 type BeaconChain struct {
@@ -26,6 +29,7 @@ type BeaconChain struct {
 	tbs_new           map[int][]*TimeBeacon
 	lock_new          sync.Mutex
 	blockIntervalSecs int
+	height            uint64
 	stopCh            chan struct{}
 	wg                sync.WaitGroup
 }
@@ -35,6 +39,7 @@ func NewTBChain(blockIntervalSecs int) *BeaconChain {
 		tbs:               make(map[int][]*TimeBeacon),
 		tbs_new:           make(map[int][]*TimeBeacon),
 		blockIntervalSecs: blockIntervalSecs,
+		height:            0,
 		stopCh:            make(chan struct{}),
 	}
 	log.Info("NewTBChain")

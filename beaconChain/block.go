@@ -9,7 +9,10 @@ import (
 type TBBlock struct {
 	/** key是分片ID，value是该分片未在信标链上链的区块的信标
 	 * 一个分片可能对应多个信标，取决于分片出块速度 */
-	tbs map[int][]*TimeBeacon
+	Tbs map[int][]*TimeBeacon
+	/* 时间戳 */
+	Time   uint64
+	Height uint64
 }
 
 func (tbChain *BeaconChain) loop() {
@@ -37,13 +40,23 @@ func (tbChain *BeaconChain) GenerateBlock() *TBBlock {
 	tbChain.lock.Lock()
 	defer tbChain.lock.Unlock()
 
+	now := time.Now().Unix()
+	tbChain.height += 1
+
 	for shardID, tbs := range tbChain.tbs_new {
+		for _, tb := range tbs {
+			tb.ConfirmTime = uint64(now)
+			tb.ConfirmHeight = tbChain.height
+		}
 		tbChain.tbs[shardID] = append(tbChain.tbs[shardID], tbs...)
 	}
 
 	block := &TBBlock{
-		tbs: tbChain.tbs_new,
+		Tbs:    tbChain.tbs_new,
+		Time:   uint64(now),
+		Height: tbChain.height,
 	}
+
 	tbChain.tbs_new = make(map[int][]*TimeBeacon)
 
 	log.Debug("tbchain generate block", "info", block)
@@ -57,10 +70,17 @@ func (tbChain *BeaconChain) GenerateBlock() *TBBlock {
 */
 func (tbChain *BeaconChain) PushBlock(block *TBBlock) {
 	tbChain.PushBlock2Clients(block)
+	tbChain.PushBlock2Coms(block)
 }
 
 /** 信标链生成新区块后，将区块（包含新的信标）发送给客户端
  */
 func (tbChain *BeaconChain) PushBlock2Clients(block *TBBlock) {
-	tbChain.messageHub.Send(core.MsgTypeTBChainPushTB2Clients, 0, block.tbs, nil)
+	tbChain.messageHub.Send(core.MsgTypeTBChainPushTB2Clients, 0, block, nil)
+}
+
+/** 信标链生成新区块后，将区块（包含新的信标）发送给委员会
+ */
+func (tbChain *BeaconChain) PushBlock2Coms(block *TBBlock) {
+	tbChain.messageHub.Send(core.MsgTypeTBChainPushTB2Coms, 0, block, nil)
 }

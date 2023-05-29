@@ -2,6 +2,7 @@ package client
 
 import (
 	"go-w3chain/core"
+	"go-w3chain/log"
 	"go-w3chain/result"
 	"go-w3chain/utils"
 	"time"
@@ -33,7 +34,7 @@ func (c *Client) InjectTXs(cid int, inject_speed int, addrTable map[common.Addre
 		cross2TxSentCnt := c.sendCross2Txs(inject_speed-rollbackTxSentCnt, addrTable)
 
 		cnt = c.sendPendingTxs(cnt, inject_speed-rollbackTxSentCnt-cross2TxSentCnt, addrTable, resBroadcastMap)
-		if cnt == len(c.txs) {
+		if cnt == len(c.txs) && c.CanStopV1() {
 			break
 		}
 
@@ -56,6 +57,8 @@ func (c *Client) sendRollbackTxs(maxTxNum2Pack int, addrTable map[common.Address
 		return 0
 	}
 
+	now := time.Now().Unix()
+
 	/* 初始化 shardtxs */
 	shardtxs := make([][]*core.Transaction, c.shard_num)
 	for i := 0; i < c.shard_num; i++ {
@@ -66,6 +69,7 @@ func (c *Client) sendRollbackTxs(maxTxNum2Pack int, addrTable map[common.Address
 		tx := *c.txs_map[txid]
 		tx.TXtype = core.RollbackTXType
 		tx.TXStatus = result.DefaultStatus
+		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "client send rollback tx to committee", "time", now)
 		shardidx := addrTable[*tx.Sender]
 		shardtxs[shardidx] = append(shardtxs[shardidx], &tx)
 	}
@@ -87,6 +91,8 @@ func (c *Client) sendCross2Txs(maxTxNum2Pack int, addrTable map[common.Address]i
 		return 0
 	}
 
+	now := time.Now().Unix()
+
 	/* 初始化 shardtxs */
 	shardtxs := make([][]*core.Transaction, c.shard_num)
 	for i := 0; i < c.shard_num; i++ {
@@ -94,6 +100,7 @@ func (c *Client) sendCross2Txs(maxTxNum2Pack int, addrTable map[common.Address]i
 	}
 	for i := 0; i < cross2TxSentCnt; i++ {
 		tx := c.cross2_txs[i]
+		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "client send cross2 to committee", "time", now)
 		shardidx := addrTable[*tx.Recipient]
 		shardtxs[shardidx] = append(shardtxs[shardidx], tx)
 	}
@@ -119,6 +126,8 @@ func (c *Client) sendPendingTxs(cnt, maxTxNum2Pack int, addrTable map[common.Add
 		shardtxs[i] = make([]*core.Transaction, 0, maxTxNum2Pack*2/c.shard_num+1)
 	}
 
+	now := time.Now().Unix()
+
 	for i := cnt; i < upperBound; i++ {
 		tx := c.txs[i]
 		// 根据发送地址和接收地址确认交易类型
@@ -128,8 +137,11 @@ func (c *Client) sendPendingTxs(cnt, maxTxNum2Pack int, addrTable map[common.Add
 			tx.TXtype = core.CrossTXType1
 		}
 
-		tx.Timestamp = uint64(time.Now().Unix())
+		tx.Timestamp = uint64(now)
 		tx.Cid = uint64(c.cid)
+
+		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "client broadcast to committee", "time", now)
+
 		resBroadcastMap[tx.ID] = tx.Timestamp
 		shardidx := addrTable[*tx.Sender]
 		shardtxs[shardidx] = append(shardtxs[shardidx], tx)
@@ -142,4 +154,9 @@ func (c *Client) sendPendingTxs(cnt, maxTxNum2Pack int, addrTable map[common.Add
 	/* 更新循环变量 */
 	cnt = upperBound
 	return cnt
+}
+
+/* 生成交易收据, 记录到result */
+func (c *Client) recordTXReceipts(receipts map[uint64]*result.TXReceipt) {
+	result.SetTXReceiptV2(receipts)
 }

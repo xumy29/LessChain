@@ -9,19 +9,28 @@
 + **参数文件设置**: 以 "./cfg/run.json" 为例
 ```json
 {
-    "LogLevel": 3,
-    "LogFile": "",
+    "LogLevel": 4,
+    "LogFile": "newest_result.log",
     "IsProgressBar": true,
     "IsLogProgress": true,
     "LogProgressInterval": 20,
-    "ClientNum": 2,
-    "ShardNum": 8,
-    "MaxTxNum": 400000,
-    "InjectSpeed": 4000,
+
+    "ClientNum": 1,
+
+    "ShardNum": 2,
+    "ShardSize": 4,
+
+    "MaxTxNum": 5000,
+    "InjectSpeed": 100,
     "RecommitInterval": 5,
-    "RecommitTimes2Rollback": 5,
-    "maxBlockTXSize": 4000,
-    "datasetDir": "D:/project/blockChain/ethereum_data/14920000_14960000/ExternalTransactionItem.csv"
+    "MaxBlockTXSize": 100,
+
+    "Height2Reconfig": 2000,
+
+    "TbchainBlockIntervalSecs": 10,
+    "TBChainHeight2Rollback": 2,
+
+    "DatasetDir": "D:/project/blockChain/ethereum_data/14920000_14960000/ExternalTransactionItem.csv"
 }
 ```
 
@@ -83,7 +92,7 @@ const (
 /* 用于分片、委员会、客户端、信标链传送消息 */
 func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, callback func(res ...interface{})) {
 	switch msgType {
-	case core.MsgTypeShardReply2Client:
+	case core.MsgTypeCommitteeReply2Client:
 		client := clients_ref[id]
 		receipts := msg.([]*result.TXReceipt)
 		client.AddTXReceipts(receipts)
@@ -105,29 +114,30 @@ func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, call
 
 ## result 模块
 记录每笔交易的执行状态，输出时延、交易量、吞吐量等指标。
+一笔跨分片交易可能有多个状态，比如 [Cross1TXTypeSuccess, RollbackSuccess] 代表该交易先在委员会1上链，而后在委员会2上超时，进而被回滚。
 
 ## shard 模块
-管理区块链、交易池等数据结构。
+维护区块链，存储区块、状态，提供某笔交易在本分片区块链上链（proof of inclusion）或没有上链（proof of exclusion）的证据。
 
 ## committee 模块
-从shard中获取交易和状态，打包区块，执行交易，发送收据和区块等。
+维护交易池，从shard中获取状态，打包区块，执行交易，发送收据到客户端，发送区块到shard，发送信标到信标链，等等。
+委员会会定期重组，其间组成各节点被随机打乱和重新分配。重组时丢弃交易池中的交易（轻量化是第一位）。
 
 ## client 模块
-向分片注入交易。
+向委员会注入交易，接收交易收据，当信标链对交易所在区块确认后，将交易状态记录到result模块，并对跨分片交易做下一步处理（发送后半部分或者回滚交易）。
 
 ## controller 模块
 控制整个仿真流程
 + 读取配置文件
 + 从数据集读取交易数据
-+ 初始化客户端、分片、委员会、信标链
++ 初始化客户端、节点、分片、委员会、信标链
 + 初始化 messageHub
 + 启动委员会和客户端线程
-+ 启动记录线程
++ 启动进度打印线程
 + 关闭所有开启的线程
 
 # todo
-+ 已实现的部分：分片、客户端、跨分片交易、信标链、委员会
-+ 待实现的部分：已实现部分的细化
+merkle proof
 
 
 

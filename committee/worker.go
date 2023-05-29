@@ -4,6 +4,7 @@ import (
 	"errors"
 	"go-w3chain/beaconChain"
 	"go-w3chain/core"
+	"go-w3chain/data"
 	"go-w3chain/log"
 	"go-w3chain/result"
 	"math/big"
@@ -153,23 +154,24 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 // worker内部处理交易的函数
 //////////////////////////////////////////
 
-/* 生成交易收据, 发送给客户端并记录到result */
-func (w *worker) recordTXReceipt(txs []*core.Transaction) {
+/* 生成交易收据, 发送给客户端 */
+func (w *worker) sendTXReceipt2Client(txs []*core.Transaction) {
 	table := make(map[uint64]*result.TXReceipt)
 	for _, tx := range txs {
 		if tx.TXStatus == result.DefaultStatus {
-			log.Warn("record tx status miss!", "tx", tx)
-		}
-		table[tx.ID] = &result.TXReceipt{
-			TxID:             tx.ID,
-			ConfirmTimeStamp: tx.ConfirmTimestamp,
-			TxStatus:         tx.TXStatus,
-			ShardID:          int(w.shardID),
-			BlockHeight:      w.curHeight.Uint64(),
+			log.Error("record tx status miss!", "tx", tx)
+		} else {
+			table[tx.ID] = &result.TXReceipt{
+				TxID:             tx.ID,
+				ConfirmTimeStamp: tx.ConfirmTimestamp,
+				TxStatus:         tx.TXStatus,
+				ShardID:          int(w.shardID),
+				BlockHeight:      w.curHeight.Uint64(),
+			}
 		}
 	}
 	w.com.send2Client(table, txs)
-	result.SetTXReceiptV2(table)
+	// result.SetTXReceiptV2(table)
 }
 
 /**
@@ -214,9 +216,9 @@ func (w *worker) commit(timestamp int64) (*core.Block, error) {
 
 	w.com.AddBlock2Shard(block)
 	/* 生成交易收据, 并记录到result */
-	w.recordTXReceipt(txs)
+	w.sendTXReceipt2Client(txs)
 
-	// log.Debug("create block", "block Height", header.Number, "# tx", len(txs), "TxRoot", block.Header().TxHash, "StateRoot:", header.Root)
+	log.Debug("create block", "shardID", w.shardID, "block Height", header.Number, "# tx", len(txs), "txpoolLen", w.com.txPool.PendingLen()+w.com.TXpool().PendingRollbackLen())
 	// log.Trace("create block", "shardID", w.shardID, "block Height", header.Number, "#TX", len(txs))
 
 	return block, nil
@@ -244,44 +246,62 @@ func (w *worker) Finalize(header *core.Header, txs []*core.Transaction, stateDB 
 * 执行打包的交易，更新stateObjects
  */
 func (w *worker) commitTransactions(txs []*core.Transaction, stateDB *state.StateDB) {
+	now := time.Now().Unix()
 	for _, tx := range txs {
-		w.commitTransaction(tx, stateDB)
+		w.commitTransaction(tx, stateDB, now)
 	}
 }
 
-func (w *worker) commitTransaction(tx *core.Transaction, stateDB *state.StateDB) {
+func (w *worker) commitTransaction(tx *core.Transaction, stateDB *state.StateDB, now int64) {
 	state := stateDB
-	now := time.Now().Unix()
 	tx.TXStatus = result.DefaultStatus
 	if tx.TXtype == core.IntraTXType {
 		state.SetNonce(*tx.Sender, tx.SenderNonce+1)
 		state.SubBalance(*tx.Sender, tx.Value)
 		state.AddBalance(*tx.Recipient, tx.Value)
 		tx.TXStatus = result.IntraSuccess
+		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "committee commit intra tx", "time", now)
 	} else if tx.TXtype == core.CrossTXType1 {
 		state.SetNonce(*tx.Sender, tx.SenderNonce+1)
 		state.SubBalance(*tx.Sender, tx.Value)
 		tx.TXStatus = result.CrossTXType1Success
+		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "committee commit cross1 tx", "time", now, "tbchain_height", w.com.tbchain_height)
 	} else if tx.TXtype == core.CrossTXType2 {
-		// tx.ConfirmTimestamp == confirm time of cross1
-		// +5 是防止取交易时未超时，执行交易时却超时。增加了一点弹性
-		if now > int64(tx.ConfirmTimestamp)+int64(tx.RollbackSecs)+5 {
-			log.Warn("This cross2tx is expired, should not be processed by worker", "txid", tx.ID)
+		if w.com.tbchain_height >= tx.ConfirmHeight+tx.RollbackHeight {
+			log.Error("This cross2tx is expired, should not be processed by worker",
+				"txid", tx.ID,
+				"tbchain_cur_height", w.com.tbchain_height,
+				"cross1txConfirmHeight", tx.ConfirmHeight,
+				"txRollbackHeight", tx.RollbackHeight)
 		} else {
 			state.AddBalance(*tx.Recipient, tx.Value)
 			tx.TXStatus = result.CrossTXType2Success
+			log.Trace("tracing transaction, ", "txid", tx.ID, "status", "committee commit cross2 tx", "time", now,
+				"tbchain_height", w.com.tbchain_height, "cross1ConfirmHeight", tx.ConfirmHeight, "txRollbackHeight", tx.RollbackHeight)
 		}
 	} else if tx.TXtype == core.RollbackTXType {
 		state.AddBalance(*tx.Sender, tx.Value)
 		state.SetNonce(*tx.Sender, tx.SenderNonce-1)
 		tx.TXStatus = result.RollbackSuccess
+		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "committee commit rollback tx", "time", now)
 	} else {
 		log.Error("Oops, something wrong! Cannot handle tx type", "cur shardid", w.shardID, "type", tx.TXtype, "tx", tx)
 	}
-	tx.ConfirmTimestamp = uint64(now)
+	// tx.ConfirmTimestamp = uint64(now)
 }
 
 func (w *worker) Reconfig() {
 	log.Info("start reconfiguration...", "before that this committee belongs to shard", w.shardID)
 
+}
+
+/* 委员会1收到回滚交易后，向分片2求证该交易对应的后半部分是否已被打包，若已被打包则不执行回滚交易 */
+func (w *worker) checkRollbackTxPacked(tx *core.Transaction) bool {
+	shard2ID := data.GetAddrTable()[*tx.Recipient]
+	var cross2_packed bool
+	callback := func(res ...interface{}) {
+		cross2_packed = res[0].(bool)
+	}
+	w.com.messageHub.Send(core.MsgTypeComGetRollbackProofFromShard, uint64(shard2ID), tx, callback)
+	return cross2_packed
 }

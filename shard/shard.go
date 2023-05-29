@@ -5,6 +5,7 @@ import (
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/params"
+	"go-w3chain/result"
 	"go-w3chain/utils"
 	"math/big"
 	"net"
@@ -24,6 +25,8 @@ type Shard struct {
 
 	connMap     map[string]net.Conn
 	connMaplock sync.RWMutex
+
+	txStatus map[uint64]uint64
 
 	messageHub core.MessageHub
 }
@@ -63,6 +66,7 @@ func NewShard(nodes []*core.Node, shardID int) (*Shard, error) {
 		blockchain: bc,
 		leader:     nodes[0],
 		connMap:    make(map[string]net.Conn),
+		txStatus:   make(map[uint64]uint64),
 	}
 
 	return shard, nil
@@ -70,6 +74,13 @@ func NewShard(nodes []*core.Node, shardID int) (*Shard, error) {
 
 func (shard *Shard) GetChainID() int {
 	return shard.shardID
+}
+
+func (shard *Shard) Addblock(block *core.Block) {
+	shard.blockchain.WriteBlock(block)
+	for _, tx := range block.Body().Transactions {
+		shard.txStatus[tx.ID] = tx.TXStatus
+	}
 }
 
 func (shard *Shard) GetBlockChain() *core.BlockChain {
@@ -111,4 +122,8 @@ func (s *Shard) AddGenesisTB() {
 		StatusHash: g_header.Root,
 	}
 	s.messageHub.Send(core.MsgTypeCommitteeAddTB, 0, tb, nil)
+}
+
+func (s *Shard) CheckCross2Packed(tx *core.Transaction) bool {
+	return s.txStatus[tx.ID] == result.CrossTXType2Success
 }

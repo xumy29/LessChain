@@ -73,15 +73,25 @@ func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, call
 	case core.MsgTypeAddBlock2Shard:
 		shard := shards_ref[id]
 		block := msg.(*core.Block)
-		shard.GetBlockChain().WriteBlock(block)
+		shard.Addblock(block)
 		// committee -> hub
 	case core.MsgTypeReady4Reconfig:
 		toReconfig()
 	case core.MsgTypeTBChainPushTB2Clients:
-		tbs := msg.(map[int][]*beaconChain.TimeBeacon)
+		block := msg.(*beaconChain.TBBlock)
 		for _, c := range clients_ref {
-			c.AddTBs(tbs)
+			c.AddTBs(block.Tbs, block.Height)
 		}
+	case core.MsgTypeTBChainPushTB2Coms:
+		block := msg.(*beaconChain.TBBlock)
+		for _, c := range committees_ref {
+			c.AddTBs(block.Tbs, block.Height)
+		}
+	case core.MsgTypeComGetRollbackProofFromShard:
+		shard := shards_ref[id]
+		tx := msg.(*core.Transaction)
+		packed := shard.CheckCross2Packed(tx)
+		callback(packed)
 	}
 }
 

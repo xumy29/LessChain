@@ -4,45 +4,12 @@ import (
 	"encoding/csv"
 	"fmt"
 	"go-w3chain/log"
-	"go-w3chain/utils"
 	"os"
 	"sort"
 	"sync"
 
 	"github.com/schollz/progressbar/v3"
 )
-
-const (
-	DefaultStatus uint64 = iota
-	IntraSuccess         // 1
-	CrossTXType1Success
-	CrossTXType2Success
-	CrossTXType2Fail
-	RollbackSuccess
-	Dropped
-)
-
-func GetStatusString(status uint64) string {
-	return getStatusStr(status)
-}
-
-func getStatusStr(status uint64) string {
-	if status == DefaultStatus {
-		return "DefaultStatus"
-	} else if status == IntraSuccess { // 1
-		return "IntraSuccess"
-	} else if status == CrossTXType1Success {
-		return "CrossTXType1Success"
-	} else if status == CrossTXType2Success {
-		return "CrossTXType2Success"
-	} else if status == RollbackSuccess {
-		return "RollbackSuccess"
-	} else if status == Dropped {
-		return "Dropped"
-	} else {
-		return "Unknown"
-	}
-}
 
 type TXReceipt struct {
 	TxID             uint64
@@ -138,12 +105,6 @@ func GetBroadcastMap() []uint64 {
 	return res.BroadcastMap
 }
 
-/* SetTXReceipt functions */
-func checkTXStatus(status uint64) bool {
-	return status == IntraSuccess ||
-		status == CrossTXType2Success
-}
-
 func SetTXReceiptV2(table map[uint64]*TXReceipt) {
 	res.lock.Lock()
 	defer res.lock.Unlock()
@@ -151,11 +112,9 @@ func SetTXReceiptV2(table map[uint64]*TXReceipt) {
 	complished := 0
 
 	for k, v := range table {
-		// 如果该交易已执行完成，则不再添加新状态
-		if len(res.AllTXStatus[k]) > 0 && checkTXStatus(utils.LastElem(res.AllTXStatus[k]).(uint64)) {
-			continue
+		if v.TxStatus == DefaultStatus {
+			log.Error("tx's status lost.", "txid", v.TxID)
 		}
-
 		res.AllTXStatus[k] = append(res.AllTXStatus[k], v.TxStatus)
 		// if len(res.AllTXStatus[k]) > 2 {
 		// 	log.Warn("TX has too much status!", "txid", k, "count", len(res.AllTXStatus[k]), "txStatusList", getStatusListStr(res.AllTXStatus[k]))
@@ -163,7 +122,7 @@ func SetTXReceiptV2(table map[uint64]*TXReceipt) {
 		// 每执行一笔交易或一笔子交易都使负载加一
 		res.workload4shard[v.ShardID] += 1
 		/* 判断交易是否完成 */
-		if checkTXStatus(v.TxStatus) {
+		if checkTXFinished(v.TxStatus) {
 			complished++
 			res.ConfirmMap[k] = v.ConfirmTimeStamp
 		}
@@ -182,24 +141,11 @@ func SetTXReceiptV2(table map[uint64]*TXReceipt) {
 	res.WorkLoad += len(table)
 }
 
-/* 打印 statusList */
-func getStatusListStr(statusList []uint64) string {
-	str := ""
-	for _, status := range statusList {
-		tmp := getStatusStr(status) + ","
-		str = str + tmp
-	}
-	if len(str) == 0 {
-		return "[]"
-	}
-	str = "[" + str[:len(str)-1] + "]"
-	return str
-}
-
 /* 打印 所有交易 statusList */
 func PrintTXReceipt() {
 	for txid, txStatusList := range res.AllTXStatus {
 		if len(res.AllTXStatus[txid]) == 0 {
+			log.Debug("no status", "txid", txid)
 			continue
 		}
 		log.Debug("txid=" + fmt.Sprint(txid) + " txStatusList=" + getStatusListStr(txStatusList))

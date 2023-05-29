@@ -32,7 +32,7 @@ type Cfg struct {
 	MaxTxNum                 int    `json:"MaxTxNum"`
 	InjectSpeed              int    `json:"InjectSpeed"`
 	RecommitIntervalSecs     int    `json:"RecommitInterval"`
-	RecommitTimes2Rollback   int    `json:"RecommitTimes2Rollback"`
+	TBChainHeight2Rollback   int    `json:"TBChainHeight2Rollback"`
 	Height2Reconfig          int    `json:"Height2Reconfig"`
 	MaxBlockTXSize           int    `json:"MaxBlockTXSize"`
 	DatasetDir               string `json:"DatasetDir"`
@@ -76,7 +76,7 @@ func Main(cfgfilename string) {
 	injectSpeed := cfg.InjectSpeed
 	recommitIntervalSecs := cfg.RecommitIntervalSecs
 	recommitInterval := time.Duration(recommitIntervalSecs) * time.Second
-	rollbackSecs := cfg.RecommitTimes2Rollback * cfg.RecommitIntervalSecs
+	rollbackHeight := cfg.TBChainHeight2Rollback
 	height2Reconfig := cfg.Height2Reconfig
 	maxBlockTXSize := cfg.MaxBlockTXSize
 	datasetDir := cfg.DatasetDir
@@ -114,7 +114,7 @@ func Main(cfgfilename string) {
 
 	/* 初始化客户端，分配交易到客户端 */
 	clients = make([]*client.Client, clientNum)
-	newClients(rollbackSecs, shardNum)
+	newClients(rollbackHeight, shardNum)
 
 	data.SetTX2ClientTable(clientNum)
 	data.InjectTX2Client(clients)
@@ -156,12 +156,9 @@ func Main(cfgfilename string) {
 	/* 客户端按一定速率将交易注入到分片中，以及开启自身的线程 */
 	startClients(injectSpeed, recommitIntervalSecs, data.GetAddrTable())
 
-	/* 循环判断各分片和委员会能否停止, 若能则停止；循环打印进度 */
+	/* 循环判断各客户端和委员会能否停止, 若能则停止；循环打印进度 */
 	closeCommittees(recommitIntervalSecs, ProgressInterval, IsLogProgress)
 	closeNodes()
-
-	/* 停止客户端的checkExpiredTXs线程 */
-	stopClients()
 
 	stopTBChain()
 
