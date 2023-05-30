@@ -4,7 +4,6 @@ import (
 	"errors"
 	"go-w3chain/beaconChain"
 	"go-w3chain/core"
-	"go-w3chain/data"
 	"go-w3chain/log"
 	"go-w3chain/result"
 	"math/big"
@@ -293,15 +292,4 @@ func (w *worker) commitTransaction(tx *core.Transaction, stateDB *state.StateDB,
 func (w *worker) Reconfig() {
 	log.Info("start reconfiguration...", "before that this committee belongs to shard", w.shardID)
 
-}
-
-/* 委员会1收到回滚交易后，向分片2求证该交易对应的后半部分是否已被打包，若已被打包则不执行回滚交易 */
-func (w *worker) checkRollbackTxPacked(tx *core.Transaction) bool {
-	shard2ID := data.GetAddrTable()[*tx.Recipient]
-	var cross2_packed bool
-	callback := func(res ...interface{}) {
-		cross2_packed = res[0].(bool)
-	}
-	w.com.messageHub.Send(core.MsgTypeComGetRollbackProofFromShard, uint64(shard2ID), tx, callback)
-	return cross2_packed
 }

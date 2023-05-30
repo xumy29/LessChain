@@ -129,3 +129,14 @@ func (c *Client) processTXReceipts() {
 	c.recordTXReceipts(to_record)
 
 }
+
+/* 客户端发出回滚交易前，向分片2求证该交易对应的后半部分是否已被打包，若已被打包则不发送回滚交易 */
+func (c *Client) checkCross2TxPacked(tx *core.Transaction) bool {
+	shard2ID := c.addrTable[*tx.Recipient]
+	var cross2_packed bool
+	callback := func(res ...interface{}) {
+		cross2_packed = res[0].(bool)
+	}
+	c.messageHub.Send(core.MsgTypeClientGetCross2ProofFromShard, uint64(shard2ID), tx, callback)
+	return cross2_packed
+}

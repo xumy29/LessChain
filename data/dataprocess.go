@@ -11,7 +11,6 @@ import (
 	"go-w3chain/log"
 	"go-w3chain/result"
 	"go-w3chain/shard"
-	"go-w3chain/utils"
 	"io"
 	"math/big"
 	"os"
@@ -128,13 +127,6 @@ func GetAddrTable() map[common.Address]int {
 	return addrTable
 }
 
-func GetAddrInfo() *utils.AddressInfo {
-	addrInfo := &utils.AddressInfo{
-		AddrTable: addrTable,
-	}
-	return addrInfo
-}
-
 /**
  * 根据 尾数 id 划分
  */
@@ -178,53 +170,6 @@ func SetShardsInitialState(shards []*shard.Shard) {
 	}
 	log.Info("Each shard setShardsInitialState successed")
 }
-
-// /**
-//  * 实现交易注入
-//  */
-// func InjectTXs(inject_speed int, shards []*shard.Shard) {
-// 	shardNum := len(shards)
-// 	cnt := 0
-// 	resBroadcastMap := make(map[uint64]uint64)
-// 	// 按秒注入
-// 	for {
-// 		time.Sleep(1000 * time.Millisecond) //fixme 应该记录下面的运行时间
-// 		// start := time.Now().UnixMilli()
-
-// 		upperBound := utils.Min(cnt+inject_speed, len(alltxs))
-// 		/* 初始化 shardtxs */
-// 		shardtxs := make([][]*core.Transaction, shardNum)
-// 		for i := 0; i < shardNum; i++ {
-// 			shardtxs[i] = make([]*core.Transaction, 0, inject_speed)
-// 		}
-// 		/* 设置交易注入的时间戳, 基于table实现交易划分 */
-// 		for i := cnt; i < upperBound; i++ {
-// 			tx := alltxs[i]
-// 			tx.Timestamp = uint64(time.Now().Unix())
-// 			resBroadcastMap[tx.ID] = tx.Timestamp
-// 			shardidx := txtable[tx.ID]
-// 			shardtxs[shardidx] = append(shardtxs[shardidx], tx)
-
-// 		}
-// 		/* 注入到各分片 */
-// 		for i := 0; i < shardNum; i++ {
-// 			shards[i].InjectTXs(shardtxs[i])
-// 		}
-// 		/* 更新循环变量 */
-// 		cnt = upperBound
-// 		if cnt == len(alltxs) {
-// 			break
-// 		}
-// 	}
-// 	/* 记录广播结果 */
-// 	result.SetBroadcastMap(resBroadcastMap)
-
-// 	/* 通知分片交易注入完成 */
-// 	for i := 0; i < shardNum; i++ {
-// 		shards[i].SetInjectTXDone()
-// 	}
-
-// }
 
 func PrintTXs(num int) {
 	if num == -1 {

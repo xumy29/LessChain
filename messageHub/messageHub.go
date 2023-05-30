@@ -87,7 +87,7 @@ func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, call
 		for _, c := range committees_ref {
 			c.AddTBs(block.Tbs, block.Height)
 		}
-	case core.MsgTypeComGetRollbackProofFromShard:
+	case core.MsgTypeClientGetCross2ProofFromShard:
 		shard := shards_ref[id]
 		tx := msg.(*core.Transaction)
 		packed := shard.CheckCross2Packed(tx)

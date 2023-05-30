@@ -101,15 +101,7 @@ func (pool *TxPool) Pending(maxBlockSize int) []*core.Transaction {
 			break
 		}
 		tx := pool.pendingRollback[i]
-		// 打包回滚交易前应判断交易后半部分是否已被打包，若已被打包则丢弃该交易
-		cross2_packed := pool.com.worker.checkRollbackTxPacked(tx)
-		if cross2_packed {
-			// log.Debug("this tx's cross2 part has been packed, thus committee will not pack it.")
-			log.Trace("tracing transaction", "txid", tx.ID, "status", result.GetStatusString(result.RollbackFail), "time", now)
-			maxBlockSize++
-		} else {
-			txs = append(txs, tx)
-		}
+		txs = append(txs, tx)
 		i++
 	}
 	pool.pendingRollback = pool.pendingRollback[i:]

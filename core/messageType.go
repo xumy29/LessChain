@@ -11,5 +11,5 @@ const (
 	MsgTypeReady4Reconfig
 	MsgTypeTBChainPushTB2Clients
 	MsgTypeTBChainPushTB2Coms
-	MsgTypeComGetRollbackProofFromShard
+	MsgTypeClientGetCross2ProofFromShard
 )
