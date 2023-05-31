@@ -49,8 +49,7 @@ func newNodes(shardNum, shardSize int) []*core.Node {
 		for j := 0; j < shardSize; j++ {
 			nodeID := shardID*shardSize + j
 			config := core.NewNodeConfig(nodeID)
-			databaseDir := filepath.Join(shardDataDir, config.Name)
-			nodes[nodeID] = core.NewNode(config, databaseDir, shardID, nodeID)
+			nodes[nodeID] = core.NewNode(config, shardDataDir, shardID, nodeID)
 		}
 	}
 

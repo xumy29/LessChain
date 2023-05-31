@@ -12,20 +12,17 @@ import (
 )
 
 const (
-	datadir                = ".w3chain"
-	datadirDefaultKeyStore = "keystore" // Path within the datadir to the keystore
+	datadir = ".w3chain"
 )
 
+/** 返回所有节点存储数据的默认父路径
+ * $Home/.w3chain/
+ */
 func DefaultDataDir() string {
 	// Try to place the data folder in the user's home dir
 	home := os.Getenv("HOME")
 	return filepath.Join(home, datadir)
 
-}
-
-func DefaultKeyStoreDir(prefix string) string {
-	keydir := filepath.Join(prefix, datadirDefaultKeyStore)
-	return keydir
 }
 
 type NodeConfig struct {
@@ -36,9 +33,20 @@ type NodeConfig struct {
 }
 
 type Node struct {
-	NodeID  int
-	config  *NodeConfig
-	keyDir  string // key store directory
+	NodeID int
+	config *NodeConfig
+
+	// /** 存储该节点钱包数据的目录
+	//  * $Home/.w3Chain/shardi/nodej/keystore
+	//  */
+	// keyDir string
+
+	/** 该节点对应的账户 */
+	w3Account *W3Account
+
+	/** 存储该节点所有数据的目录，包括chaindata和keystore
+	 * $Home/.w3Chain/shardi/nodej/
+	 */
 	DataDir string
 
 	lock sync.Mutex
@@ -49,15 +57,16 @@ type Node struct {
 	commID int
 }
 
-func NewNode(conf *NodeConfig, dataDir string, shardID int, nodeID int) *Node {
+func NewNode(conf *NodeConfig, parentdataDir string, shardID int, nodeID int) *Node {
 	node := &Node{
 		config:  conf,
-		DataDir: dataDir,
+		DataDir: filepath.Join(parentdataDir, conf.Name),
 		shardID: shardID,
 		NodeID:  nodeID,
 	}
 
-	node.keyDir = DefaultKeyStoreDir(dataDir)
+	node.w3Account = NewW3Account(node.DataDir)
+
 	db, err := node.OpenDatabase("chaindata", 0, 0, "", false)
 	if err != nil {
 		log.Error("open database fail", "nodeID", nodeID)
