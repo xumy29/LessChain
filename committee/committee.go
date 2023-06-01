@@ -14,7 +14,7 @@ import (
 
 type Committee struct {
 	shardID    uint64
-	config     *core.MinerConfig
+	config     *core.CommitteeConfig
 	worker     *worker
 	messageHub core.MessageHub
 	/* 接收重组结果的管道 */
@@ -26,7 +26,7 @@ type Committee struct {
 	tbchain_height uint64
 }
 
-func NewCommittee(shardID uint64, clientCnt int, nodes []*core.Node, config *core.MinerConfig) *Committee {
+func NewCommittee(shardID uint64, clientCnt int, nodes []*core.Node, config *core.CommitteeConfig) *Committee {
 	worker := newWorker(config, shardID)
 	pool := NewTxPool(int(shardID))
 	com := &Committee{
@@ -110,7 +110,7 @@ func (com *Committee) SetMessageHub(hub core.MessageHub) {
  * 一般情况下信标链应该只向委员会推送其关注的分片和高度的信标，这里进行了简化，默认全部推送
  * 委员会收到新确认信标后，
  */
-func (com *Committee) AddTBs(tbs_new map[int][]*beaconChain.TimeBeacon, height uint64) {
+func (com *Committee) AddTBs(tbs_new map[int][]*beaconChain.ConfirmedTB, height uint64) {
 	// for shardID, tbs := range tbs_new {
 	// 	for _, tb := range tbs {
 	// 		c.tbs[shardID][tb.Height] = tb
@@ -181,7 +181,7 @@ func (com *Committee) AddBlock2Shard(block *core.Block) {
 /**
  * 将新区块的信标发送到信标链
  */
-func (com *Committee) AddTB(tb *beaconChain.TimeBeacon) {
+func (com *Committee) AddTB(tb *beaconChain.SignedTB) {
 	com.messageHub.Send(core.MsgTypeCommitteeAddTB, 0, tb, nil)
 }
 

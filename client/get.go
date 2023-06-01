@@ -37,7 +37,7 @@ func (c *Client) AddTXReceipts(receipts []*result.TXReceipt) {
 /** 获取信标
  * 先从本地缓存拿，如果本地没有再从信标链拿
  */
-func (c *Client) GetTB(shardID int, height uint64) *beaconChain.TimeBeacon {
+func (c *Client) GetTB(shardID int, height uint64) *beaconChain.ConfirmedTB {
 	if tb, ok := c.tbs[shardID][height]; !ok {
 		tb1 := c.getTBFromTBChain(shardID, height)
 		c.tbs[shardID][height] = tb1
@@ -52,7 +52,7 @@ func (c *Client) GetTB(shardID int, height uint64) *beaconChain.TimeBeacon {
  * 客户端收到新确认信标后，遍历 tx_reply，如果某个交易的区块信标已确认，则对该交易进行后续处理
  * 客户端收到新确认信标后，检查是否有超时的跨片交易
  */
-func (c *Client) AddTBs(tbs_new map[int][]*beaconChain.TimeBeacon, height uint64) {
+func (c *Client) AddTBs(tbs_new map[int][]*beaconChain.ConfirmedTB, height uint64) {
 	for shardID, tbs := range tbs_new {
 		for _, tb := range tbs {
 			c.tbs[shardID][tb.Height] = tb

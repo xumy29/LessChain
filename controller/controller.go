@@ -38,6 +38,7 @@ type Cfg struct {
 	DatasetDir               string `json:"DatasetDir"`
 	ShardSize                int    `json:"ShardSize"`
 	TbchainBlockIntervalSecs int    `json:"TbchainBlockIntervalSecs"`
+	MultiSignRequiredNum     int    `json:"MultiSignRequiredNum"`
 }
 
 func ReadCfg(filename string) *Cfg {
@@ -77,12 +78,14 @@ func Main(cfgfilename string) {
 	recommitIntervalSecs := cfg.RecommitIntervalSecs
 	recommitInterval := time.Duration(recommitIntervalSecs) * time.Second
 	rollbackHeight := cfg.TBChainHeight2Rollback
+	/* 注意这里的height指的是信标链上区块的height，不是矿工所在分片的区块的height */
 	height2Reconfig := cfg.Height2Reconfig
 	maxBlockTXSize := cfg.MaxBlockTXSize
 	datasetDir := cfg.DatasetDir
 	/* 一个分片有多少个节点 */
 	shardSize := cfg.ShardSize
 	TbchainBlockIntervalSecs := cfg.TbchainBlockIntervalSecs
+	MultiSignRequiredNum := cfg.MultiSignRequiredNum
 
 	/* 设置 是否使用 progressbar */
 	result.SetIsProgressBar(IsProgressBar)
@@ -133,18 +136,19 @@ func Main(cfgfilename string) {
 	data.SetShardsInitialState(shards)
 
 	/* 初始化委员会 */
-	minerConfig := &core.MinerConfig{
-		Recommit:        recommitInterval,
-		MaxBlockSize:    maxBlockTXSize,
-		InjectSpeed:     injectSpeed,
-		Height2Reconfig: height2Reconfig,
+	committeeConfig := &core.CommitteeConfig{
+		Recommit:             recommitInterval,
+		MaxBlockSize:         maxBlockTXSize,
+		InjectSpeed:          injectSpeed,
+		Height2Reconfig:      height2Reconfig,
+		MultiSignRequiredNum: MultiSignRequiredNum,
 	}
 
 	committees = make([]*committee.Committee, shardNum)
-	newCommittees(shardNum, shardSize, minerConfig)
+	newCommittees(shardNum, shardSize, committeeConfig)
 
 	/* 初始化信标链 */
-	tbChain = beaconchain.NewTBChain(TbchainBlockIntervalSecs)
+	tbChain = beaconchain.NewTBChain(TbchainBlockIntervalSecs, shardNum, MultiSignRequiredNum)
 
 	/* 设置各个分片、委员会和客户端、信标链的通信渠道 */
 	messageHub.Init(clients, shards, committees, nodes, tbChain)

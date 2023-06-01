@@ -7,6 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
+
 	// "github.com/ethereum/go-ethereum/core/types"
 	"golang.org/x/crypto/sha3"
 )
@@ -21,14 +22,26 @@ var encodeBufferPool = sync.Pool{
 	New: func() interface{} { return new(bytes.Buffer) },
 }
 
-// rlpHash encodes x and hashes the encoded bytes.
-func rlpHash(x interface{}) (h common.Hash) {
+/** 先将结构体进行rlp编码，再哈希
+ * 注意: !!!结构体中不能存在int类型的变量！！！
+ */
+func rlpHash(x interface{}) (h common.Hash, err error) {
 	sha := hasherPool.Get().(crypto.KeccakState)
 	defer hasherPool.Put(sha)
 	sha.Reset()
-	rlp.Encode(sha, x)
-	sha.Read(h[:])
-	return h
+	err = rlp.Encode(sha, x)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	_, err = sha.Read(h[:])
+	return h, err
+}
+
+/** 先将结构体进行rlp编码，再哈希
+ * 注意: !!!结构体中不能存在int类型的变量！！！
+ */
+func RlpHash(x interface{}) (h common.Hash, err error) {
+	return rlpHash(x)
 }
 
 func encodeForDerive(list DerivableList, i int, buf *bytes.Buffer) []byte {

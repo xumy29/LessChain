@@ -64,7 +64,7 @@ type Client struct {
 	e_lock           sync.Mutex
 
 	/* 本地存储的信标 */
-	tbs            map[int]map[uint64]*beaconChain.TimeBeacon
+	tbs            map[int]map[uint64]*beaconChain.ConfirmedTB
 	tbchain_height uint64
 
 	wg sync.WaitGroup
@@ -82,11 +82,11 @@ func NewClient(id, rollbackHeight, shardNum int) *Client {
 		tx_reply:                  list.New(),
 		shard_num:                 shardNum,
 		cross1_confirm_height_map: make(map[uint64]uint64),
-		tbs:                       make(map[int]map[uint64]*beaconChain.TimeBeacon),
+		tbs:                       make(map[int]map[uint64]*beaconChain.ConfirmedTB),
 	}
 
 	for shardID := 0; shardID < shardNum; shardID++ {
-		c.tbs[shardID] = make(map[uint64]*beaconChain.TimeBeacon)
+		c.tbs[shardID] = make(map[uint64]*beaconChain.ConfirmedTB)
 	}
 	return c
 }
@@ -144,10 +144,10 @@ func (c *Client) Print() {
 	log.Debug(msg)
 }
 
-func (c *Client) getTBFromTBChain(shardID int, height uint64) *beaconChain.TimeBeacon {
-	var tb *beaconChain.TimeBeacon
+func (c *Client) getTBFromTBChain(shardID int, height uint64) *beaconChain.ConfirmedTB {
+	var tb *beaconChain.ConfirmedTB
 	callback := func(res ...interface{}) {
-		tb = res[0].(*beaconChain.TimeBeacon)
+		tb = res[0].(*beaconChain.ConfirmedTB)
 	}
 	c.messageHub.Send(core.MsgTypeGetTB, uint64(shardID), height, callback)
 	return tb

@@ -95,6 +95,10 @@ func (n *Node) GetAddr() string {
 	return fmt.Sprintf("%s:%d", n.config.WSHost, n.config.WSPort)
 }
 
+func (n *Node) GetAccount() *W3Account {
+	return n.w3Account
+}
+
 /*
 	//////////////////////////////////////////////////////////////
 	节点的数据库相关的操作，包括打开、关闭等

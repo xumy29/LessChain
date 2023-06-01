@@ -116,12 +116,16 @@ func (s *Shard) AddGenesisTB() {
 	g_header := genesisBlock.Header()
 	tb := &beaconChain.TimeBeacon{
 		Height:     g_header.Number.Uint64(),
-		ShardID:    s.shardID,
+		ShardID:    uint32(s.shardID),
 		BlockHash:  genesisBlock.Hash(),
 		TxHash:     g_header.TxHash,
 		StatusHash: g_header.Root,
 	}
-	s.messageHub.Send(core.MsgTypeCommitteeAddTB, 0, tb, nil)
+	signedTb := &beaconChain.SignedTB{
+		TimeBeacon: tb,
+		// 创世区块暂时不需要签名
+	}
+	s.messageHub.Send(core.MsgTypeCommitteeAddTB, 0, signedTb, nil)
 }
 
 func (s *Shard) CheckCross2Packed(tx *core.Transaction) bool {

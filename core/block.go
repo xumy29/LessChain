@@ -3,6 +3,7 @@ package core
 import (
 	// "fmt"
 	"encoding/binary"
+	"go-w3chain/log"
 	"math/big"
 	"sync/atomic"
 
@@ -60,7 +61,11 @@ type Block struct {
 // Hash returns the block hash of the header, which is simply the keccak256 hash of its
 // RLP encoding.
 func (h *Header) Hash() common.Hash {
-	return rlpHash(h)
+	hash, err := rlpHash(h)
+	if err != nil {
+		log.Error("block header hash fail.", "err", err)
+	}
+	return hash
 }
 
 // core/types/block.go

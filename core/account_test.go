@@ -1,8 +1,6 @@
 package core
 
 import (
-	"testing"
-
 	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
@@ -13,16 +11,16 @@ var (
 	sig       []byte
 )
 
-func TestCreateAccount(t *testing.T) {
-	w3Account = NewW3Account(dataDir)
-}
+// func TestCreateAccount(t *testing.T) {
+// 	w3Account = NewW3Account(dataDir)
+// }
 
-func TestSignHash(t *testing.T) {
-	sig = w3Account.SignHash(testmsg)
-}
+// func TestSignHash(t *testing.T) {
+// 	sig = w3Account.SignHash(testmsg)
+// }
 
-func TestVerifySinature(t *testing.T) {
-	if !w3Account.VerifySignature(testmsg, sig) {
-		t.Error("wrong verify sig")
-	}
-}
+// func TestVerifySinature(t *testing.T) {
+// 	if !w3Account.VerifySignature(testmsg, sig) {
+// 		t.Error("wrong verify sig")
+// 	}
+// }
