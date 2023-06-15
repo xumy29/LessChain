@@ -21,5 +21,7 @@
     "TBChainHeight2Rollback": 2,
     "MultiSignRequiredNum": 2,
 
+    "BeaconChainMode": 1,
+
     "DatasetDir": "D:/project/blockChain/ethereum_data/14920000_14960000/ExternalTransactionItem.csv"
 }

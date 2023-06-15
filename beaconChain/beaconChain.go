@@ -10,8 +10,8 @@ import (
 )
 
 type TimeBeacon struct {
-	Height     uint64      `json:"height" gencodec:"required"`
 	ShardID    uint32      `json:"shardID" gencodec:"required"`
+	Height     uint64      `json:"height" gencodec:"required"`
 	BlockHash  common.Hash `json:"blockHash" gencodec:"required"`
 	TxHash     common.Hash `json:"txHash" gencodec:"required"`
 	StatusHash common.Hash `json:"statusHash" gencodec:"required"`
@@ -39,6 +39,10 @@ type ConfirmedTB struct {
 }
 
 type BeaconChain struct {
+	/* mode=0表示运行模拟信标链，mode=1表示运行以太坊私链 */
+	mode int
+
+	shardNum   int
 	messageHub core.MessageHub
 
 	/* key是分片ID，value是该分片每个高度区块的信标 */
@@ -58,8 +62,10 @@ type BeaconChain struct {
 /** 新建一条信标链
  * required 表示一个信标需要收到的多签名最小数量
  */
-func NewTBChain(blockIntervalSecs, shardNum int, required int) *BeaconChain {
+func NewTBChain(mode, blockIntervalSecs, shardNum, required int) *BeaconChain {
 	tbChain := &BeaconChain{
+		mode:              mode,
+		shardNum:          shardNum,
 		tbs:               make(map[int][]*ConfirmedTB),
 		tbs_new:           make(map[int][]*SignedTB),
 		blockIntervalSecs: blockIntervalSecs,
@@ -101,11 +107,21 @@ func (tbChain *BeaconChain) AddGenesisTB(signedTb *SignedTB) {
 
 }
 
+func (tbChain *BeaconChain) AddTimeBeacon(tb *SignedTB) {
+	if tbChain.mode == 0 {
+		tbChain.AddTimeBeacon2SimulationChain(tb)
+	} else if tbChain.mode == 1 {
+		tbChain.AddTimeBeacon2GanacheChain(tb)
+	} else {
+		log.Error("unknown beaconChain mode!", "mode", tbChain.mode)
+	}
+}
+
 /** 调用这个函数，相当于在信标链上发起一笔交易
  * tb会被暂时存下，等待信标链打包时处理
  * 信标链打包时，会调用合约验证tb的多签名合法性，验证通过才会打包该交易，即确认该信标
  */
-func (tbChain *BeaconChain) AddTimeBeacon(tb *SignedTB) {
+func (tbChain *BeaconChain) AddTimeBeacon2SimulationChain(tb *SignedTB) {
 	if tb.Height == 0 {
 		tbChain.AddGenesisTB(tb)
 		return

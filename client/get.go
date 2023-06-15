@@ -37,7 +37,7 @@ func (c *Client) AddTXReceipts(receipts []*result.TXReceipt) {
 /** 获取信标
  * 先从本地缓存拿，如果本地没有再从信标链拿
  */
-func (c *Client) GetTB(shardID int, height uint64) *beaconChain.ConfirmedTB {
+func (c *Client) GetTB(shardID uint32, height uint64) *beaconChain.ConfirmedTB {
 	if tb, ok := c.tbs[shardID][height]; !ok {
 		tb1 := c.getTBFromTBChain(shardID, height)
 		c.tbs[shardID][height] = tb1
@@ -52,7 +52,7 @@ func (c *Client) GetTB(shardID int, height uint64) *beaconChain.ConfirmedTB {
  * 客户端收到新确认信标后，遍历 tx_reply，如果某个交易的区块信标已确认，则对该交易进行后续处理
  * 客户端收到新确认信标后，检查是否有超时的跨片交易
  */
-func (c *Client) AddTBs(tbs_new map[int][]*beaconChain.ConfirmedTB, height uint64) {
+func (c *Client) AddTBs(tbs_new map[uint32][]*beaconChain.ConfirmedTB, height uint64) {
 	for shardID, tbs := range tbs_new {
 		for _, tb := range tbs {
 			c.tbs[shardID][tb.Height] = tb
@@ -83,12 +83,12 @@ func (c *Client) processTXReceipts() {
 
 		r := e.Value.(*result.TXReceipt)
 		// 信标未确认，跳过
-		if _, ok := c.tbs[r.ShardID][r.BlockHeight]; !ok {
+		if _, ok := c.tbs[uint32(r.ShardID)][r.BlockHeight]; !ok {
 			e = n
 			continue
 		}
 		// 信标已确认，分情况处理
-		tb := c.tbs[r.ShardID][r.BlockHeight]
+		tb := c.tbs[uint32(r.ShardID)][r.BlockHeight]
 		r.ConfirmTimeStamp = tb.ConfirmTime
 		to_record[r.TxID] = r
 		if r.TxStatus == result.IntraSuccess {

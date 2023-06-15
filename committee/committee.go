@@ -110,7 +110,7 @@ func (com *Committee) SetMessageHub(hub core.MessageHub) {
  * 一般情况下信标链应该只向委员会推送其关注的分片和高度的信标，这里进行了简化，默认全部推送
  * 委员会收到新确认信标后，
  */
-func (com *Committee) AddTBs(tbs_new map[int][]*beaconChain.ConfirmedTB, height uint64) {
+func (com *Committee) AddTBs(tbs_new map[uint32][]*beaconChain.ConfirmedTB, height uint64) {
 	// for shardID, tbs := range tbs_new {
 	// 	for _, tb := range tbs {
 	// 		c.tbs[shardID][tb.Height] = tb
