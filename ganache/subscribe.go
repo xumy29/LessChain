@@ -71,7 +71,7 @@ func SubscribeEvents(port int, contractAddr common.Address, eventChannel chan *E
 			log.Error("Failed to read message from Ganache WebSocket:", "err", err)
 		}
 
-		fmt.Println("Received message:", string(message))
+		// fmt.Println("Received message:", string(message))
 
 		// 在这里处理事件通知，解析事件数据等
 		if string(message)[2:4] == "id" {

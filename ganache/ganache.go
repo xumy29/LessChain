@@ -32,9 +32,9 @@ func Connect(port int) (*ethclient.Client, error) {
 	return client, err
 }
 
-func myPrivateKey() (*ecdsa.PrivateKey, error) {
-	privateKeyHex := "369bb574424350c46381ed892bff1a83db77aa40c7a7f13a82f17b95879eba08"
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+func myPrivateKey(shardID int) (*ecdsa.PrivateKey, error) {
+	privateKeyHexs := [2]string{"369bb574424350c46381ed892bff1a83db77aa40c7a7f13a82f17b95879eba08", "ce3009672aec74773eb279828ead0786bd049ddd6ca4f32d58b38a85fcf91bb1"}
+	privateKey, err := crypto.HexToECDSA(privateKeyHexs[shardID])
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func DeployContract(client *ethclient.Client, genesisTBs []ContractTB) (common.A
 	bytecode := common.FromHex(myContractByteCode())
 
 	// 获取私钥
-	privateKey, err := myPrivateKey()
+	privateKey, err := myPrivateKey(0)
 	if err != nil {
 		return common.Address{}, nil, big.NewInt(0), err
 	}
@@ -91,7 +91,8 @@ func DeployContract(client *ethclient.Client, genesisTBs []ContractTB) (common.A
 }
 
 var (
-	nonce      uint64 = 0
+	// nonce      uint64 = 0
+	lastNonce  [2]uint64 = [2]uint64{0, 0}
 	nonce_lock sync.Mutex
 )
 
@@ -105,7 +106,7 @@ func AddTB(client *ethclient.Client, contractAddr common.Address, abi *abi.ABI, 
 	}
 
 	// 通过私钥构造签名者
-	privateKey, err := myPrivateKey()
+	privateKey, err := myPrivateKey(int(tb.ShardID))
 	if err != nil {
 		fmt.Println("get myPrivateKey err: ", err)
 		return err
@@ -120,16 +121,39 @@ func AddTB(client *ethclient.Client, contractAddr common.Address, abi *abi.ABI, 
 	auth.GasLimit = uint64(300000) // 设置 gas 限制
 	auth.Value = big.NewInt(0)     // 设置发送的以太币数量（如果有的话）
 	// 构建交易对象
+	// nonce_lock.Lock()
+	// if nonce == 0 {
+	// 	// nonce, err = client.PendingNonceAt(context.Background(), auth.From)
+	// 	// if err != nil {
+	// 	// 	fmt.Println("client.PendingNonceAt err: ", err)
+	// 	// 	return err
+	// 	// }
+	// 	nonce = 190
+	// } else {
+	// 	nonce = nonce + 1
+	// }
+	// nonce_lock.Unlock()
+
+	// 如果在之前的交易中使用了相同的账户地址，而这些交易还未被确认（被区块打包），那么下一笔交易的nonce应该是
+	// 当前账户的最新nonce+1。
 	nonce_lock.Lock()
-	if nonce == 0 {
-		// nonce, err = client.PendingNonceAt(context.Background(), auth.From)
-		// if err != nil {
-		// 	fmt.Println("client.PendingNonceAt err: ", err)
-		// 	return err
-		// }
-		nonce = 190
+	nonce, err := client.PendingNonceAt(context.Background(), auth.From)
+
+	if err != nil {
+		fmt.Println("client.PendingNonceAt err: ", err)
+		return err
+	}
+	// fmt.Printf("client.PendingNonceAt nonce = %v\n", nonce)
+
+	// fmt.Printf("lastNonce = %v\n", lastNonce[tb.ShardID])
+
+	if lastNonce[tb.ShardID] == 0 {
+		lastNonce[tb.ShardID] = nonce
 	} else {
-		nonce = nonce + 1
+		if nonce == lastNonce[tb.ShardID] {
+			nonce = nonce + 1
+		}
+		lastNonce[tb.ShardID] = nonce
 	}
 	nonce_lock.Unlock()
 
@@ -146,6 +170,7 @@ func AddTB(client *ethclient.Client, contractAddr common.Address, abi *abi.ABI, 
 		fmt.Println("auth.Signer err: ", err)
 		return err
 	}
+	// fmt.Printf("auth.Signer nonce = %v\n", signedTx.Nonce())
 
 	// 发送交易
 	err = client.SendTransaction(context.Background(), signedTx)
@@ -154,7 +179,7 @@ func AddTB(client *ethclient.Client, contractAddr common.Address, abi *abi.ABI, 
 		return err
 	}
 
-	fmt.Printf("%v\n", signedTx.Hash().Hex())
+	fmt.Printf("signedTX: %v\n", signedTx.Hash().Hex())
 
 	return nil
 }
