@@ -13,12 +13,12 @@
     "MaxTxNum": 5000,
     "InjectSpeed": 100,
     "RecommitInterval": 5,
-    "MaxBlockTXSize": 100,
+    "MaxBlockTXSize": 200,
 
     "Height2Reconfig": 2000,
 
     "TbchainBlockIntervalSecs": 10,
     "TBChainHeight2Rollback": 2,
 
-    "DatasetDir": "D:/project/blockChain/ethereum_data/14920000_14960000/ExternalTransactionItem.csv"
+    "DatasetDir": "/Users/xumy/Desktop/huanglab/blockchain/dataset/len4_data2.csv"
 }

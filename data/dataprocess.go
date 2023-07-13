@@ -56,9 +56,9 @@ func LoadETHData(filepath string, maxTxNum int) {
 			break
 		}
 		// 该字段为 input，若不为空则表示调用或创建了智能合约，这类交易应该排除掉
-		if row[6] != "0x" {
-			continue
-		}
+		// if row[6] != "0x" {
+		// 	continue
+		// }
 		sender := common.HexToAddress(row[0][2:])
 		recipient := common.HexToAddress(row[1][2:])
 		value := new(big.Int)
