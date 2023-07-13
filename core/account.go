@@ -5,13 +5,18 @@ import (
 	"path/filepath"
 
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 )
 
 const (
-	KeyStoreDir string = "keystore" // Path within the datadir to the keystore
+	KeyStoreDir string = "keystore"
+	/* 默认账户的名字，同时也是其钱包密码 */
+	defaultAccountName string = "account1"
 )
 
 /** w3chain中的账户结构，对以太坊的keystore做了简单封装
+ * 提供创建账户、对消息哈希进行签名、验证签名的功能
  * 目前一个节点对应一个账户
  */
 type W3Account struct {
@@ -24,23 +29,11 @@ func NewW3Account(nodeDatadir string) *W3Account {
 		keyDir: filepath.Join(nodeDatadir, KeyStoreDir),
 	}
 	w3Account.ks = createKeyStore(w3Account.keyDir)
-	names := []string{"account1"}
+	names := []string{defaultAccountName}
 	createAccounts(w3Account.ks, names)
-	printAccounts(w3Account.ks)
 
 	return w3Account
 }
-
-// func (w3Account *W3Account) SignHash(hash []byte) []byte {
-// 	ks := w3Account.ks
-// 	signature, err := ks.SignHash(ks.Accounts()[0], hash)
-// 	if err != nil {
-// 		log.Error("signHashFail", "err", err)
-// 		return []byte{}
-// 	}
-
-// 	return signature
-// }
 
 func createKeyStore(keyDir string) *keystore.KeyStore {
 	ks := keystore.NewPlaintextKeyStore(keyDir)
@@ -56,59 +49,50 @@ func createAccounts(ks *keystore.KeyStore, names []string) {
 }
 
 func printAccounts(ks *keystore.KeyStore) {
-	// walls := ks.Wallets()
-
-	// fmt.Printf("keystore Database has %d Wallets:\n", len(walls))
-
-	// for _, wall := range walls {
-	// 	fmt.Println(wall.Accounts())
-	// }
-
 	for _, acc := range ks.Accounts() {
 		log.Info("new account", "info", acc)
 	}
-
 }
 
-// func (w3account *W3Account) CreateAccount() {
+func (w3Account *W3Account) GetAccountAddress() *common.Address {
+	return &w3Account.ks.Accounts()[0].Address
+}
 
-// }
+func (w3Account *W3Account) SignHash(hash []byte) []byte {
+	ks := w3Account.ks
+	signature, err := ks.SignHashWithPassphrase(ks.Accounts()[0], defaultAccountName, hash)
+	if err != nil {
+		log.Error("signHashFail", "err", err)
+		// fmt.Print("signHashFail", "err", err)
+		return []byte{}
+	}
+	log.Trace("w3account sign hash", "msgHash", hash, "address", ks.Accounts()[0], "sig", signature)
 
-// // deault password is the name
-// // cmd/geth/accountcmd.go
-// func accountCreate(password string) (accounts.Account, error) {
-// 	scryptN := keystore.StandardScryptN
-// 	scryptP := keystore.StandardScryptP
-// 	keydir := KeyStoreDir
+	return signature
+}
 
-// 	// go-ethereum/accounts/keystore:passphrase.go
-// 	account, err := keystore.StoreKey(keydir, password, scryptN, scryptP)
-// 	if err != nil {
-// 		utils.Fatalf("Failed to create account: %v", err)
-// 		os.Exit(1)
-// 	}
-// 	fmt.Printf("\nYour new key was generated\n\n")
-// 	fmt.Printf("Public address of the key:   %s\n", account.Address.Hex())
-// 	fmt.Printf("Path of the secret key file: %s\n\n", account.URL.Path)
-// 	fmt.Printf("- You can share your public address with anyone. Others need it to interact with you.\n")
-// 	fmt.Printf("- You must NEVER share the secret key with anyone! The key controls access to your funds!\n")
-// 	fmt.Printf("- You must BACKUP your key file! Without the key, it's impossible to access account funds!\n")
-// 	fmt.Printf("- You must REMEMBER your password! Without the password, it's impossible to decrypt the key!\n\n")
-// 	return account, nil
-// }
+func (w3Account *W3Account) VerifySignature(msgHash []byte, sig []byte) bool {
+	pubkey, err := secp256k1.RecoverPubkey(msgHash, sig)
+	// fmt.Print(len(pubkey)) // 恢复出来的公钥长度为65个字节，第一个字节固定是0x04
+	if err != nil {
+		log.Error("recover Pubkey Fail.")
+		// fmt.Print("recover Pubkey Fail.")
+		return false
+	}
 
-// func ClearKeyStore() {
-// 	os.RemoveAll(Defaultkeydir)
-// }
+	// 由公钥通过keccak256哈希算法得到32字节的压缩公钥
+	// hasher := sha3.NewLegacyKeccak256()
+	// hasher.Write(pubkey[1:])
+	// pubkeyc := hasher.Sum(nil)
 
-// func createGenesisAccountAndClear() {
-// 	ks := createKeyStore()
+	// fmt.Println(pubkeyc)
+	// fmt.Println(w3Account.GetAccountAddress()[:])
+	// 压缩公钥后20个字节即为账户的地址
+	// if !bytes.Equal(pubkeyc[12:], w3Account.GetAccountAddress()[:]) {
+	// 	fmt.Print("not equal")
+	// 	return false
+	// }
 
-// 	var name []string
-// 	name = append(name, "alice")
-// 	createAccountsKeyStore(ks, name)
-
-// 	printAccountsKeyStore(ks)
-
-// 	ClearKeyStore()
-// }
+	sig = sig[:len(sig)-1] // remove recovery id
+	return secp256k1.VerifySignature(pubkey, msgHash, sig)
+}

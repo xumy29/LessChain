@@ -66,6 +66,7 @@ func NewNode(conf *NodeConfig, parentdataDir string, shardID int, nodeID int) *N
 	}
 
 	node.w3Account = NewW3Account(node.DataDir)
+	printAccounts(node.w3Account.ks)
 
 	db, err := node.OpenDatabase("chaindata", 0, 0, "", false)
 	if err != nil {
@@ -92,6 +93,10 @@ func (n *Node) GetDB() ethdb.Database {
 
 func (n *Node) GetAddr() string {
 	return fmt.Sprintf("%s:%d", n.config.WSHost, n.config.WSPort)
+}
+
+func (n *Node) GetAccount() *W3Account {
+	return n.w3Account
 }
 
 /*

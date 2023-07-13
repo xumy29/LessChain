@@ -19,6 +19,9 @@
 
     "TbchainBlockIntervalSecs": 10,
     "TBChainHeight2Rollback": 2,
+    "MultiSignRequiredNum": 2,
+
+    "BeaconChainMode": 1,
 
     "DatasetDir": "/Users/xumy/Desktop/huanglab/blockchain/dataset/len4_data2.csv"
 }

@@ -1,6 +1,7 @@
 package beaconChain
 
 import (
+	"fmt"
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"time"
@@ -9,7 +10,7 @@ import (
 type TBBlock struct {
 	/** key是分片ID，value是该分片未在信标链上链的区块的信标
 	 * 一个分片可能对应多个信标，取决于分片出块速度 */
-	Tbs map[int][]*TimeBeacon
+	Tbs map[uint32][]*ConfirmedTB
 	/* 时间戳 */
 	Time   uint64
 	Height uint64
@@ -24,9 +25,16 @@ func (tbChain *BeaconChain) loop() {
 	for {
 		select {
 		case <-timer.C:
-			block := tbChain.GenerateBlock()
-			tbChain.PushBlock(block)
-			timer.Reset(blockInterval)
+			if tbChain.mode == 0 || tbChain.mode == 1 {
+				block := tbChain.GenerateBlock()
+				tbChain.PushBlock(block)
+				timer.Reset(blockInterval)
+			} else {
+				err := fmt.Errorf("unknown mode of tbChain! mode=%d", tbChain.mode)
+				log.Error("err cause panic!", "err", err)
+				panic(err)
+			}
+
 		case <-tbChain.stopCh:
 			log.Info("TBChain work loop stop.")
 			return
@@ -35,6 +43,14 @@ func (tbChain *BeaconChain) loop() {
 }
 
 func (tbChain *BeaconChain) GenerateBlock() *TBBlock {
+	if tbChain.mode == 0 {
+		return tbChain.generateSimulationChainBlock()
+	} else {
+		return tbChain.generateGanacheChainBlock()
+	}
+}
+
+func (tbChain *BeaconChain) generateSimulationChainBlock() *TBBlock {
 	tbChain.lock_new.Lock()
 	defer tbChain.lock_new.Unlock()
 	tbChain.lock.Lock()
@@ -43,21 +59,33 @@ func (tbChain *BeaconChain) GenerateBlock() *TBBlock {
 	now := time.Now().Unix()
 	tbChain.height += 1
 
+	confirmTBs := make(map[uint32][]*ConfirmedTB, 0)
 	for shardID, tbs := range tbChain.tbs_new {
-		for _, tb := range tbs {
-			tb.ConfirmTime = uint64(now)
-			tb.ConfirmHeight = tbChain.height
+		shardContract := tbChain.contract.contracts[shardID]
+		for _, signedTb := range tbs {
+			// todo: 验证多签名
+			if !shardContract.VerifyTimeBeacon(signedTb) {
+				log.Error("TBchain verify time beacon fail. this time beacon has no enough valid signatures!!")
+			} else {
+				log.Trace("TBchain verify time beacon success.")
+			}
+			confirmedTB := &ConfirmedTB{
+				TimeBeacon:    signedTb.TimeBeacon,
+				ConfirmTime:   uint64(now),
+				ConfirmHeight: tbChain.height,
+			}
+			confirmTBs[uint32(shardID)] = append(confirmTBs[uint32(shardID)], confirmedTB)
 		}
-		tbChain.tbs[shardID] = append(tbChain.tbs[shardID], tbs...)
+		tbChain.tbs[shardID] = append(tbChain.tbs[shardID], confirmTBs[uint32(shardID)]...)
 	}
 
 	block := &TBBlock{
-		Tbs:    tbChain.tbs_new,
+		Tbs:    confirmTBs,
 		Time:   uint64(now),
 		Height: tbChain.height,
 	}
 
-	tbChain.tbs_new = make(map[int][]*TimeBeacon)
+	tbChain.tbs_new = make(map[int][]*SignedTB)
 
 	log.Debug("tbchain generate block", "info", block)
 	return block

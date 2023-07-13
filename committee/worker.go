@@ -22,7 +22,7 @@ const (
 )
 
 type worker struct {
-	config *core.MinerConfig
+	config *core.CommitteeConfig
 
 	// Channels
 	startCh chan struct{}
@@ -40,7 +40,7 @@ type worker struct {
 	com *Committee
 }
 
-func newWorker(config *core.MinerConfig, shardID uint64) *worker {
+func newWorker(config *core.CommitteeConfig, shardID uint64) *worker {
 	worker := &worker{
 		config:  config,
 		startCh: make(chan struct{}, 1), // at most 1 element
@@ -109,6 +109,9 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		if err != nil {
 			log.Error("worker commit block failed", "err", err)
 		}
+
+		w.broadcastTbInCommittee(block)
+
 		timer.Reset(recommit)
 		/* 通知committee 有新区块产生 */
 		w.InformNewBlock(block)
@@ -153,6 +156,24 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 // worker内部处理交易的函数
 //////////////////////////////////////////
 
+/** 矿工出块以后，生成对应的区块信标，并广播到委员会中
+ * 由委员会对象代表委员会中的节点，直接调用委员会的多签名方法
+ */
+func (w *worker) broadcastTbInCommittee(block *core.Block) {
+	final_header := block.Header()
+	tb := &beaconChain.TimeBeacon{
+		Height:     final_header.Number.Uint64(),
+		ShardID:    uint32(w.shardID),
+		BlockHash:  block.Hash(),
+		TxHash:     final_header.TxHash,
+		StatusHash: final_header.Root,
+	}
+
+	signedTB := w.com.multiSign(tb)
+
+	w.com.AddTB(signedTB)
+}
+
 /* 生成交易收据, 发送给客户端 */
 func (w *worker) sendTXReceipt2Client(txs []*core.Transaction) {
 	table := make(map[uint64]*result.TXReceipt)
@@ -181,7 +202,7 @@ func (w *worker) InformNewBlock(block *core.Block) {
 	w.com.NewBlockGenerated(block)
 }
 
-/* miner/worker.go:commitWork */
+/* 生成区块，执行区块中的交易，确认状态转移，发送区块到分片，发送收据到客户端 */
 func (w *worker) commit(timestamp int64) (*core.Block, error) {
 	stateDB, parentHeight := w.com.getStatusFromShard()
 	w.curHeight = parentHeight.Add(parentHeight, common.Big1)
@@ -201,20 +222,8 @@ func (w *worker) commit(timestamp int64) (*core.Block, error) {
 		return nil, errors.New("failed to commit transition state: " + err.Error())
 	}
 
-	/* 向信标链记录数据 */
-	final_header := block.Header()
-	tb := &beaconChain.TimeBeacon{
-		Height:     final_header.Number.Uint64(),
-		ShardID:    int(w.shardID),
-		BlockHash:  block.Hash(),
-		TxHash:     final_header.TxHash,
-		StatusHash: final_header.Root,
-	}
-
-	w.com.AddTB(tb)
-
 	w.com.AddBlock2Shard(block)
-	/* 生成交易收据, 并记录到result */
+	/* 生成交易收据, 并发送到客户端 */
 	w.sendTXReceipt2Client(txs)
 
 	log.Debug("create block", "shardID", w.shardID, "block Height", header.Number, "# tx", len(txs), "txpoolLen", w.com.txPool.PendingLen()+w.com.TXpool().PendingRollbackLen())

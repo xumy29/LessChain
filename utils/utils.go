@@ -108,3 +108,17 @@ func LastElem(arr interface{}) interface{} {
 
 	return val.Index(len - 1).Interface()
 }
+
+func GetFieldValues(structValue interface{}) (fields map[string]interface{}) {
+	fields = make(map[string]interface{})
+
+	getType := reflect.TypeOf(structValue)
+	getVal := reflect.ValueOf(structValue)
+
+	for i := 0; i < getType.NumField(); i++ {
+		name := getType.Field(i)
+		value := getVal.Field(i)
+		fields[name.Name] = value.Interface()
+	}
+	return
+}

@@ -56,7 +56,7 @@ func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, call
 		com.SetInjectTXDone()
 		// shard、committee -> tbchain
 	case core.MsgTypeCommitteeAddTB:
-		tb := msg.(*beaconChain.TimeBeacon)
+		tb := msg.(*beaconChain.SignedTB)
 		tbChain_ref.AddTimeBeacon(tb)
 		// committee、client <- tbchain
 	case core.MsgTypeGetTB:

@@ -56,7 +56,7 @@ func newNodes(shardNum, shardSize int) []*core.Node {
 	return nodes
 }
 
-func newCommittees(shardNum, shardSize int, config *core.MinerConfig) {
+func newCommittees(shardNum, shardSize int, config *core.CommitteeConfig) {
 	for shardID := 0; shardID < shardNum; shardID++ {
 		com := committee.NewCommittee(uint64(shardID), len(clients), nodes[shardID*shardSize:(shardID+1)*shardSize], config)
 		committees[shardID] = com
