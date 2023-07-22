@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	minRecommitInterval = 5 * time.Second
+	minRecommitInterval = 3 * time.Second
 )
 
 type worker struct {

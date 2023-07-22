@@ -29,8 +29,10 @@ func NewW3Account(nodeDatadir string) *W3Account {
 		keyDir: filepath.Join(nodeDatadir, KeyStoreDir),
 	}
 	w3Account.ks = createKeyStore(w3Account.keyDir)
-	names := []string{defaultAccountName}
-	createAccounts(w3Account.ks, names)
+	if len(w3Account.ks.Accounts()) == 0 {
+		names := []string{defaultAccountName}
+		createAccounts(w3Account.ks, names)
+	}
 
 	return w3Account
 }
@@ -50,7 +52,7 @@ func createAccounts(ks *keystore.KeyStore, names []string) {
 
 func printAccounts(ks *keystore.KeyStore) {
 	for _, acc := range ks.Accounts() {
-		log.Info("new account", "info", acc)
+		log.Info("node account", "info", acc)
 	}
 }
 
@@ -95,4 +97,17 @@ func (w3Account *W3Account) VerifySignature(msgHash []byte, sig []byte) bool {
 
 	sig = sig[:len(sig)-1] // remove recovery id
 	return secp256k1.VerifySignature(pubkey, msgHash, sig)
+}
+
+// ganache 私链上有钱的账户，用来发起提交信标的交易
+// 目前每个账户负责一个委员会的交易
+var GanacheChainAccounts []string = []string{
+	"d12c928f281ed4a05f6dbf434bbbac5706826d9b2e3966077ef580df14073eb3",
+	"635ccd7f8cb78b293486ee535a8aac38d33b400e4833ed07d39d2841995e0cd6",
+	"831d55e90f4a55085ccf8a9acf849d9a6ce00f46fb430e47118d23af308e1486",
+	"d2c42ed9778acdf7f86ce013f5437cfa463f417c0523e5ceaa9e1f8ed48eef5e",
+	"26ea2b1eebb43a50c0fc5f5451073ec0831f85621765fabad93a61132cb14d21",
+	"1d41896df03f6971785b1e3927daa4eed3df9113a267d953b10bfd34775a1ef4",
+	"127ab599973981d4282221e339386b34c15a6b1685e0062ce388afb2ac3f1610",
+	"0406fd4b37b0fef67a4cd1ca447452a0fbe81ec972e8437c2d278614295d2412",
 }

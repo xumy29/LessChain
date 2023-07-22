@@ -40,6 +40,7 @@ type Cfg struct {
 	TbchainBlockIntervalSecs int    `json:"TbchainBlockIntervalSecs"`
 	MultiSignRequiredNum     int    `json:"MultiSignRequiredNum"`
 	BeaconChainMode          int    `json:"BeaconChainMode"`
+	BeaconChainID            int    `json:"BeaconChainID"`
 }
 
 func ReadCfg(filename string) *Cfg {
@@ -89,6 +90,7 @@ func Main(cfgfilename string) {
 	MultiSignRequiredNum := cfg.MultiSignRequiredNum
 	/* mode=0表示运行模拟信标链，mode=1表示运行以太坊私链 */
 	beaconChainMode := cfg.BeaconChainMode
+	beaconChainID := cfg.BeaconChainID
 
 	/* 设置 是否使用 progressbar */
 	result.SetIsProgressBar(IsProgressBar)
@@ -151,7 +153,7 @@ func Main(cfgfilename string) {
 	newCommittees(shardNum, shardSize, committeeConfig)
 
 	/* 初始化信标链 */
-	tbChain = beaconchain.NewTBChain(beaconChainMode, TbchainBlockIntervalSecs, shardNum, MultiSignRequiredNum)
+	tbChain = beaconchain.NewTBChain(beaconChainMode, beaconChainID, TbchainBlockIntervalSecs, shardNum, MultiSignRequiredNum)
 
 	/* 设置各个分片、委员会和客户端、信标链的通信渠道 */
 	messageHub.Init(clients, shards, committees, nodes, tbChain)

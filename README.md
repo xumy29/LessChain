@@ -40,10 +40,10 @@ PS: RecommitInterval 即出块间隔，必须大于等于5s，否则会被强制
 
 + **编译运行**(run模式)
 ``` go
-go build -o w3Chain
-./w3Chain -m run
+go build -o lessChain
+./lessChain -m run
 ```
-PS：windows系统要用exe后缀，即： go build -o w3Chain.exe
+PS：windows系统要用exe后缀，即： go build -o lessChain.exe
     
 ## 编译时go get 超时：
 + 安装 go.mod 的 package时，go get 超时：需要设置代理
@@ -122,6 +122,12 @@ func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, call
 ## committee 模块
 维护交易池，从shard中获取状态，打包区块，执行交易，发送收据到客户端，发送区块到shard，发送信标到信标链，等等。
 委员会会定期重组，其间组成各节点被随机打乱和重新分配。重组时丢弃交易池中的交易（轻量化是第一位）。
+
+## beaconChain 模块
+实现Layer1的信标链。有两种模式可供选择，分别是模拟的时间信标链和通过ganache部署的以太坊的私链。选择后者时需要先安装ganache并在debug.json中设置私链端口号。
+
+## ganache模块
+实现了与ganache私链交互的逻辑，如部署、调用合约、监听事件等。可以在beaconChain中调用。
 
 ## client 模块
 向委员会注入交易，接收交易收据，当信标链对交易所在区块确认后，将交易状态记录到result模块，并对跨分片交易做下一步处理（发送后半部分或者回滚交易）。

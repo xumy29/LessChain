@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
+	"go-w3chain/core"
+	"go-w3chain/log"
 	"go-w3chain/utils"
 	"math/big"
 	"strings"
@@ -17,6 +19,14 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
+
+var (
+	chainID int
+)
+
+func SetChainID(id int) {
+	chainID = id
+}
 
 type ContractTB struct {
 	ShardID    uint32 `json:"shardID" gencodec:"required"`
@@ -33,8 +43,7 @@ func Connect(port int) (*ethclient.Client, error) {
 }
 
 func myPrivateKey(shardID int) (*ecdsa.PrivateKey, error) {
-	privateKeyHexs := [2]string{"369bb574424350c46381ed892bff1a83db77aa40c7a7f13a82f17b95879eba08", "ce3009672aec74773eb279828ead0786bd049ddd6ca4f32d58b38a85fcf91bb1"}
-	privateKey, err := crypto.HexToECDSA(privateKeyHexs[shardID])
+	privateKey, err := crypto.HexToECDSA(core.GanacheChainAccounts[shardID])
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +66,7 @@ func DeployContract(client *ethclient.Client, genesisTBs []ContractTB) (common.A
 		return common.Address{}, nil, big.NewInt(0), err
 	}
 
-	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(5777))
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(int64(chainID)))
 	if err != nil {
 		fmt.Println("bind.NewKeyedTransactorWithChainID err: ", err)
 		return common.Address{}, nil, big.NewInt(0), err
@@ -92,12 +101,13 @@ func DeployContract(client *ethclient.Client, genesisTBs []ContractTB) (common.A
 
 var (
 	// nonce      uint64 = 0
-	lastNonce  [2]uint64 = [2]uint64{0, 0}
+	lastNonce  map[uint32]uint64 = make(map[uint32]uint64)
 	nonce_lock sync.Mutex
 )
 
 // 存储信标到合约
 func AddTB(client *ethclient.Client, contractAddr common.Address, abi *abi.ABI, tb *ContractTB) error {
+	nonce_lock.Lock()
 	// 构造调用数据
 	callData, err := abi.Pack("addTB", *tb)
 	if err != nil {
@@ -111,76 +121,75 @@ func AddTB(client *ethclient.Client, contractAddr common.Address, abi *abi.ABI, 
 		fmt.Println("get myPrivateKey err: ", err)
 		return err
 	}
-	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(5777))
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(int64(chainID)))
 	if err != nil {
 		fmt.Println("bind.NewKeyedTransactorWithChainID err: ", err)
 		return err
 	}
 
 	// 设置交易参数
-	auth.GasLimit = uint64(300000) // 设置 gas 限制
-	auth.Value = big.NewInt(0)     // 设置发送的以太币数量（如果有的话）
-	// 构建交易对象
-	// nonce_lock.Lock()
-	// if nonce == 0 {
-	// 	// nonce, err = client.PendingNonceAt(context.Background(), auth.From)
-	// 	// if err != nil {
-	// 	// 	fmt.Println("client.PendingNonceAt err: ", err)
-	// 	// 	return err
-	// 	// }
-	// 	nonce = 190
-	// } else {
-	// 	nonce = nonce + 1
-	// }
-	// nonce_lock.Unlock()
+	auth.GasLimit = uint64(3000000) // 设置 gas 限制
+	auth.Value = big.NewInt(0)      // 设置发送的以太币数量（如果有的话）
 
-	// 如果在之前的交易中使用了相同的账户地址，而这些交易还未被确认（被区块打包），那么下一笔交易的nonce应该是
-	// 当前账户的最新nonce+1。
-	nonce_lock.Lock()
-	nonce, err := client.PendingNonceAt(context.Background(), auth.From)
+	var nonce uint64
+	_, ok := lastNonce[tb.ShardID]
+	if !ok {
+		// 如果在之前的交易中使用了相同的账户地址，而这些交易还未被确认（被区块打包），那么下一笔交易的nonce应该是
+		// 当前账户的最新nonce+1。
+		// nonce_lock.Lock()
+		nonce, err = client.PendingNonceAt(context.Background(), auth.From)
+		if err != nil {
+			log.Error("client.PendingNonceAt err", "err", err)
+			fmt.Println("client.PendingNonceAt err: ", err)
+			return err
+		}
 
-	if err != nil {
-		fmt.Println("client.PendingNonceAt err: ", err)
-		return err
-	}
-	// fmt.Printf("client.PendingNonceAt nonce = %v\n", nonce)
-
-	// fmt.Printf("lastNonce = %v\n", lastNonce[tb.ShardID])
-
-	if lastNonce[tb.ShardID] == 0 {
 		lastNonce[tb.ShardID] = nonce
 	} else {
-		if nonce == lastNonce[tb.ShardID] {
-			nonce = nonce + 1
-		}
+		nonce = lastNonce[tb.ShardID] + 1
 		lastNonce[tb.ShardID] = nonce
 	}
-	nonce_lock.Unlock()
+	// nonce_lock.Unlock()
 
+	// mustSend：循环发送直到交易发送成功、
 	gasPrice, err := client.SuggestGasPrice(context.Background())
 	if err != nil {
+		log.Error("client.SuggestGasPrice err", "err", err)
 		fmt.Println("client.SuggestGasPrice err: ", err)
 		return err
 	}
-	tx := types.NewTransaction(nonce, contractAddr, big.NewInt(0), auth.GasLimit, gasPrice, callData)
+	for true {
+		tx := types.NewTransaction(nonce, contractAddr, big.NewInt(0), auth.GasLimit, gasPrice, callData)
 
-	// 签名交易
-	signedTx, err := auth.Signer(auth.From, tx)
-	if err != nil {
-		fmt.Println("auth.Signer err: ", err)
-		return err
+		// 签名交易
+		signedTx, err := auth.Signer(auth.From, tx)
+		if err != nil {
+			log.Error("auth.Signer err", "err", err)
+			fmt.Println("auth.Signer err: ", err)
+			return err
+		}
+
+		// 发送交易
+		err = client.SendTransaction(context.Background(), signedTx)
+		if err != nil {
+			log.Error("client.SendTransaction err", "err", err, "txtype", "AddTB", "shardID", tb.ShardID, "height", tb.Height,
+				"gasPrice", gasPrice, "nonce", nonce)
+			fmt.Println("client.SendTransaction err: ", err)
+
+			if err.Error() != "transaction underpriced" {
+				return err
+			} else {
+				gasPrice = new(big.Int).Mul(gasPrice, big.NewInt(2))
+			}
+		} else {
+			// fmt.Printf("signedTX: %v\n", signedTx.Hash().Hex())
+			break
+		}
 	}
-	// fmt.Printf("auth.Signer nonce = %v\n", signedTx.Nonce())
 
-	// 发送交易
-	err = client.SendTransaction(context.Background(), signedTx)
-	if err != nil {
-		fmt.Println("client.SendTransaction err: ", err)
-		return err
-	}
-
-	fmt.Printf("signedTX: %v\n", signedTx.Hash().Hex())
-
+	log.Debug("sendTransaction success!", "txtype", "AddTB", "shardID", tb.ShardID, "height", tb.Height,
+		"gasPrice", gasPrice, "nonce", nonce)
+	nonce_lock.Unlock()
 	return nil
 }
 

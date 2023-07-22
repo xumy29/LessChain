@@ -11,11 +11,13 @@ import (
 )
 
 var (
-	genesisTBs   map[uint32]*ganache.ContractTB = make(map[uint32]*ganache.ContractTB)
-	client       *ethclient.Client
+	genesisTBs map[uint32]*ganache.ContractTB = make(map[uint32]*ganache.ContractTB)
+	// 每个委员会指配一个client，client与ganache交互，获取gasPrcie、nonce等链与账户信息
+	// 并发调用client的方法或短时间内连续调用有时会出现问题，比如connection reset by peer等，应尽量避免
+	clients      []*ethclient.Client
 	contractAddr common.Address
 	contractABI  *abi.ABI
-	// 最多缓存100个已确认的信标
+	// 缓存websocket返回的事件（代表确认信标），最多缓存100个已确认的信标
 	eventChannel chan *ganache.Event = make(chan *ganache.Event, 100)
 )
 
@@ -30,9 +32,9 @@ func (tbChain *BeaconChain) AddTimeBeacon2GanacheChain(signedtb *SignedTB) {
 		StatusHash: tb.StatusHash.Hex(),
 	}
 	if tb.Height == 0 {
-		tbChain.addGenesisTB(contractTB)
+		tbChain.addGanacheGenesisTB(contractTB)
 	} else {
-		ganache.AddTB(client, contractAddr, contractABI, contractTB)
+		ganache.AddTB(clients[contractTB.ShardID], contractAddr, contractABI, contractTB)
 	}
 }
 
@@ -79,7 +81,7 @@ func (tbChain *BeaconChain) generateGanacheChainBlock() *TBBlock {
 	return block
 }
 
-func (tbChain *BeaconChain) addGenesisTB(tb *ganache.ContractTB) {
+func (tbChain *BeaconChain) addGanacheGenesisTB(tb *ganache.ContractTB) {
 	genesisTBs[tb.ShardID] = tb
 	if len(genesisTBs) == tbChain.shardNum {
 		// 转化为数组形式
@@ -88,22 +90,27 @@ func (tbChain *BeaconChain) addGenesisTB(tb *ganache.ContractTB) {
 			tbs[shardID] = *tb
 		}
 
-		deployContract(tbs)
+		ganache.SetChainID(tbChain.chainID)
+		tbChain.deployContract(tbs)
 
 		go ganache.SubscribeEvents(7545, contractAddr, eventChannel)
 
 	}
 }
 
-func deployContract(genesisTBs []ganache.ContractTB) {
+func (tbChain *BeaconChain) deployContract(genesisTBs []ganache.ContractTB) {
 	// 创建合约，各分片创世区块作为构造函数的参数
 	var err error
-	client, err = ganache.Connect(7545)
-	if err != nil {
-		log.Error("could not connect to ganache chain!", "err", err)
-		panic(err)
+	for i := 0; i < tbChain.shardNum; i++ {
+		client, err := ganache.Connect(7545)
+		if err != nil {
+			log.Error("could not connect to ganache chain!", "err", err)
+			panic(err)
+		}
+		clients = append(clients, client)
 	}
-	contractAddr, contractABI, _, err = ganache.DeployContract(client, genesisTBs)
+
+	contractAddr, contractABI, _, err = ganache.DeployContract(clients[0], genesisTBs)
 	if err != nil {
 		log.Error("error occurs during deploying contract.", "err", err)
 		panic(err)

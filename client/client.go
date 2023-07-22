@@ -40,6 +40,9 @@ type Client struct {
 	/* txs 中交易ID到交易的映射 */
 	txs_map map[uint64]*core.Transaction
 
+	/* 已注入到分片的交易数量 */
+	injectCnt int
+
 	/* 委员会发送给客户端的待处理的交易收据 */
 	tx_reply *list.List
 	/* tx_reply 的锁 */
@@ -162,13 +165,13 @@ func VerifyTxMKproof(proof []byte, tb *beaconChain.TimeBeacon) bool {
 
 /* 所有交易执行完成则结束 */
 func (c *Client) CanStopV1() bool {
-	log.Trace("client queue length", "tx_reply", c.tx_reply.Len(), "cross_tx_expired", len(c.cross_tx_expired),
+	log.Debug("client queue length", "tx_reply", c.tx_reply.Len(), "cross_tx_expired", len(c.cross_tx_expired),
 		"cross2_txs", len(c.cross2_txs), "cross1_confirm_height_map", len(c.cross1_confirm_height_map))
-	return c.CanStopV2() && c.tx_reply.Len() == 0 && len(c.cross_tx_expired) == 0 &&
+	return len(c.txs) == c.injectCnt && c.tx_reply.Len() == 0 && len(c.cross_tx_expired) == 0 &&
 		len(c.cross2_txs) == 0 && len(c.cross1_confirm_height_map) == 0
 }
 
 /* 客户端初始交易注入完成则结束 */
 func (c *Client) CanStopV2() bool {
-	return true
+	return c.injectCnt == len(c.txs)
 }
