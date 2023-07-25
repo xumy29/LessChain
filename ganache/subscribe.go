@@ -138,9 +138,9 @@ func handleMessage(data string) *Event {
 	shardID := decodedData["shardID"].(uint32)
 	height := decodedData["height"].(uint64)
 
-	fmt.Printf("Message: %s\n", message)
-	fmt.Printf("ShardID: %d\n", shardID)
-	fmt.Printf("Height: %d\n", height)
+	// fmt.Printf("Message: %s\n", message)
+	// fmt.Printf("ShardID: %d\n", shardID)
+	// fmt.Printf("Height: %d\n", height)
 
 	return &Event{
 		Msg:     message,

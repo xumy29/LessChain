@@ -40,8 +40,9 @@ type ConfirmedTB struct {
 
 type BeaconChain struct {
 	/* mode=0表示运行模拟信标链，mode=1表示运行以太坊私链 */
-	mode    int
-	chainID int
+	mode      int
+	chainID   int
+	chainPort int
 
 	shardNum   int
 	messageHub core.MessageHub
@@ -63,10 +64,11 @@ type BeaconChain struct {
 /** 新建一条信标链
  * required 表示一个信标需要收到的多签名最小数量
  */
-func NewTBChain(mode, chainID, blockIntervalSecs, shardNum, required int) *BeaconChain {
+func NewTBChain(mode, chainID, chainPort, blockIntervalSecs, shardNum, required int) *BeaconChain {
 	tbChain := &BeaconChain{
 		mode:              mode,
 		chainID:           chainID,
+		chainPort:         chainPort,
 		shardNum:          shardNum,
 		tbs:               make(map[int][]*ConfirmedTB),
 		tbs_new:           make(map[int][]*SignedTB),

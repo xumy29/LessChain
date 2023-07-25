@@ -111,3 +111,5 @@ var GanacheChainAccounts []string = []string{
 	"127ab599973981d4282221e339386b34c15a6b1685e0062ce388afb2ac3f1610",
 	"0406fd4b37b0fef67a4cd1ca447452a0fbe81ec972e8437c2d278614295d2412",
 }
+
+var GanachePublicAccount string = "a8f1cfa29a4562a35667a51d7cf71239c6d6820130bc7cb52d0c83713d1cad75"

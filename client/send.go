@@ -34,9 +34,7 @@ func (c *Client) InjectTXs(cid int, inject_speed int, addrTable map[common.Addre
 		cross2TxSentCnt := c.sendCross2Txs(inject_speed-rollbackTxSentCnt, addrTable)
 
 		c.injectCnt = c.sendPendingTxs(c.injectCnt, inject_speed-rollbackTxSentCnt-cross2TxSentCnt, addrTable, resBroadcastMap)
-		// 很奇怪，CanStopV1里面包含了c.injectCnt == len(c.txs)，但如果以下语句删去c.injectCnt == len(c.txs)，就会使得程序
-		// 运行时卡住在某一进度，无限循环下去。
-		if c.injectCnt == len(c.txs) && c.CanStopV1() {
+		if c.CanStopV1() {
 			break
 		}
 

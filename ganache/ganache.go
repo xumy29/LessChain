@@ -43,7 +43,11 @@ func Connect(port int) (*ethclient.Client, error) {
 }
 
 func myPrivateKey(shardID int) (*ecdsa.PrivateKey, error) {
-	privateKey, err := crypto.HexToECDSA(core.GanacheChainAccounts[shardID])
+	account := core.GanachePublicAccount
+	if shardID >= 0 {
+		account = core.GanacheChainAccounts[shardID]
+	}
+	privateKey, err := crypto.HexToECDSA(account)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +65,7 @@ func DeployContract(client *ethclient.Client, genesisTBs []ContractTB) (common.A
 	bytecode := common.FromHex(myContractByteCode())
 
 	// 获取私钥
-	privateKey, err := myPrivateKey(0)
+	privateKey, err := myPrivateKey(-1)
 	if err != nil {
 		return common.Address{}, nil, big.NewInt(0), err
 	}
@@ -100,14 +104,16 @@ func DeployContract(client *ethclient.Client, genesisTBs []ContractTB) (common.A
 }
 
 var (
-	// nonce      uint64 = 0
-	lastNonce  map[uint32]uint64 = make(map[uint32]uint64)
-	nonce_lock sync.Mutex
+	lastNonce map[uint32]uint64 = make(map[uint32]uint64)
+	// 通过该锁使不同委员会的AddTB方法串行执行，避免一些并发调用导致的问题
+	call_lock      sync.Mutex
+	lowestGasPrice *big.Int = big.NewInt(0)
 )
 
 // 存储信标到合约
 func AddTB(client *ethclient.Client, contractAddr common.Address, abi *abi.ABI, tb *ContractTB) error {
-	nonce_lock.Lock()
+	call_lock.Lock()
+	defer call_lock.Unlock()
 	// 构造调用数据
 	callData, err := abi.Pack("addTB", *tb)
 	if err != nil {
@@ -128,8 +134,8 @@ func AddTB(client *ethclient.Client, contractAddr common.Address, abi *abi.ABI, 
 	}
 
 	// 设置交易参数
-	auth.GasLimit = uint64(3000000) // 设置 gas 限制
-	auth.Value = big.NewInt(0)      // 设置发送的以太币数量（如果有的话）
+	auth.GasLimit = uint64(30000000) // 设置 gas 限制
+	auth.Value = big.NewInt(0)       // 设置发送的以太币数量（如果有的话）
 
 	var nonce uint64
 	_, ok := lastNonce[tb.ShardID]
@@ -151,15 +157,19 @@ func AddTB(client *ethclient.Client, contractAddr common.Address, abi *abi.ABI, 
 	}
 	// nonce_lock.Unlock()
 
-	// mustSend：循环发送直到交易发送成功、
-	gasPrice, err := client.SuggestGasPrice(context.Background())
-	if err != nil {
-		log.Error("client.SuggestGasPrice err", "err", err)
-		fmt.Println("client.SuggestGasPrice err: ", err)
-		return err
+	if lowestGasPrice.Uint64() == 0 {
+		gasPrice, err := client.SuggestGasPrice(context.Background())
+		if err != nil {
+			log.Error("client.SuggestGasPrice err", "err", err)
+			fmt.Println("client.SuggestGasPrice err: ", err)
+			return err
+		}
+		lowestGasPrice = gasPrice
 	}
+
+	// mustSend：循环发送直到交易发送成功
 	for true {
-		tx := types.NewTransaction(nonce, contractAddr, big.NewInt(0), auth.GasLimit, gasPrice, callData)
+		tx := types.NewTransaction(nonce, contractAddr, big.NewInt(0), auth.GasLimit, lowestGasPrice, callData)
 
 		// 签名交易
 		signedTx, err := auth.Signer(auth.From, tx)
@@ -172,14 +182,16 @@ func AddTB(client *ethclient.Client, contractAddr common.Address, abi *abi.ABI, 
 		// 发送交易
 		err = client.SendTransaction(context.Background(), signedTx)
 		if err != nil {
-			log.Error("client.SendTransaction err", "err", err, "txtype", "AddTB", "shardID", tb.ShardID, "height", tb.Height,
-				"gasPrice", gasPrice, "nonce", nonce)
+			log.Debug("client.SendTransaction err", "err", err, "txtype", "AddTB", "shardID", tb.ShardID, "height", tb.Height,
+				"gasPrice", lowestGasPrice, "nonce", nonce)
 			fmt.Println("client.SendTransaction err: ", err)
 
 			if err.Error() != "transaction underpriced" {
 				return err
 			} else {
-				gasPrice = new(big.Int).Mul(gasPrice, big.NewInt(2))
+				// 每次提升10%的手续费，并将该手续费作为最低手续费
+				toAdd := new(big.Int).Div(lowestGasPrice, big.NewInt(10))
+				lowestGasPrice = new(big.Int).Add(lowestGasPrice, toAdd)
 			}
 		} else {
 			// fmt.Printf("signedTX: %v\n", signedTx.Hash().Hex())
@@ -188,8 +200,13 @@ func AddTB(client *ethclient.Client, contractAddr common.Address, abi *abi.ABI, 
 	}
 
 	log.Debug("sendTransaction success!", "txtype", "AddTB", "shardID", tb.ShardID, "height", tb.Height,
-		"gasPrice", gasPrice, "nonce", nonce)
-	nonce_lock.Unlock()
+		"gasPrice", lowestGasPrice, "nonce", nonce)
+	// pendingCnt, err := client.PendingTransactionCount(context.Background())
+	// if err != nil {
+	// 	log.Debug("client.PendingTransactionCount err", "err", err)
+	// } else {
+	// 	log.Debug("client.PendingTransactionCount", "cnt", pendingCnt)
+	// }
 	return nil
 }
 

@@ -93,7 +93,7 @@ func (tbChain *BeaconChain) addGanacheGenesisTB(tb *ganache.ContractTB) {
 		ganache.SetChainID(tbChain.chainID)
 		tbChain.deployContract(tbs)
 
-		go ganache.SubscribeEvents(7545, contractAddr, eventChannel)
+		go ganache.SubscribeEvents(tbChain.chainPort, contractAddr, eventChannel)
 
 	}
 }
@@ -102,7 +102,7 @@ func (tbChain *BeaconChain) deployContract(genesisTBs []ganache.ContractTB) {
 	// 创建合约，各分片创世区块作为构造函数的参数
 	var err error
 	for i := 0; i < tbChain.shardNum; i++ {
-		client, err := ganache.Connect(7545)
+		client, err := ganache.Connect(tbChain.chainPort)
 		if err != nil {
 			log.Error("could not connect to ganache chain!", "err", err)
 			panic(err)

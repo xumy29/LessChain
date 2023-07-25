@@ -55,6 +55,7 @@ func (c *Client) GetTB(shardID uint32, height uint64) *beaconChain.ConfirmedTB {
 func (c *Client) AddTBs(tbs_new map[uint32][]*beaconChain.ConfirmedTB, height uint64) {
 	for shardID, tbs := range tbs_new {
 		for _, tb := range tbs {
+			log.Debug("addTB to c.tbs", "shardID", shardID, "blockHeight", tb.Height)
 			c.tbs[shardID][tb.Height] = tb
 		}
 	}
@@ -84,6 +85,7 @@ func (c *Client) processTXReceipts() {
 		r := e.Value.(*result.TXReceipt)
 		// 信标未确认，跳过
 		if _, ok := c.tbs[uint32(r.ShardID)][r.BlockHeight]; !ok {
+			// log.Debug("unconfirmed receipts", "shardID", r.ShardID, "blockHeight", r.BlockHeight)
 			e = n
 			continue
 		}

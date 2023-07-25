@@ -7,7 +7,7 @@
 
     "ClientNum": 1,
 
-    "ShardNum": 2,
+    "ShardNum": 8,
     "ShardSize": 4,
 
     "MaxTxNum": 5000,
@@ -22,6 +22,7 @@
     "MultiSignRequiredNum": 2,
 
     "BeaconChainMode": 1,
+    "BeaconChainPort": 8545,
     "BeaconChainID": 1337,
 
     "DatasetDir": "/Users/xumy/Desktop/huanglab/blockchain/dataset/len4_data2.csv"
