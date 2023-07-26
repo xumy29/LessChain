@@ -1,10 +1,12 @@
 package client
 
 import (
+	"fmt"
 	"go-w3chain/beaconChain"
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/result"
+	"go-w3chain/utils"
 )
 
 /**
@@ -57,6 +59,7 @@ func (c *Client) AddTBs(tbs_new map[uint32][]*beaconChain.ConfirmedTB, height ui
 		for _, tb := range tbs {
 			log.Debug("addTB to c.tbs", "shardID", shardID, "blockHeight", tb.Height)
 			c.tbs[shardID][tb.Height] = tb
+			c.shard_cur_heights[shardID] = uint64(utils.Max(int(c.shard_cur_heights[shardID]), int(tb.Height)))
 		}
 	}
 	c.tbchain_height = height
@@ -96,33 +99,33 @@ func (c *Client) processTXReceipts() {
 		if r.TxStatus == result.IntraSuccess {
 			// do nothing
 		} else if r.TxStatus == result.CrossTXType1Success {
-			// 1. 记录到 cross1_confirm_height_map 中
-			c.cross1_confirm_height_map[r.TxID] = tb.ConfirmHeight
-			// 2. 加入cross2队列
+			// 1. 加入cross2队列
 			txid := r.TxID
 			tx := *c.txs_map[txid]
 			tx.TXtype = core.CrossTXType2
 			tx.TXStatus = result.DefaultStatus
 			tx.ConfirmHeight = c.tbchain_height
+			tx.Cross1ConfirmHeight = c.shard_cur_heights[uint32(tx.Recipient_sid)]
 			c.cross2_txs = append(c.cross2_txs, &tx)
 			log.Trace("tracing transaction", "txid", r.TxID, "status", result.GetStatusString(r.TxStatus), "time", r.ConfirmTimeStamp)
 			log.Trace("tracing transaction", "txid", r.TxID, "status", "client add tx to cross2_txs (list)", "time", r.ConfirmTimeStamp)
+			// 2. 记录到 cross1_confirm_height_map 中
+			c.cross1_confirm_height_map[r.TxID] = c.shard_cur_heights[uint32(tx.Recipient_sid)]
 		} else if r.TxStatus == result.CrossTXType2Success {
+			// 只要是确认了，就一定不是超时的
 			// 删除cross1_confirm_height_map中的项
 			if _, ok := c.cross1_confirm_height_map[r.TxID]; !ok {
-				// 出现以下这种情况，一般是因为委员会打包时未超时，客户端收到后却超时了，所以客户端将cross1_confirm_height_map中的项删除并可能发出回滚交易了
-				// 按照理论设计，这种情况应该仍然认为交易未超时。回滚交易在委员会1也不会被执行。
-				// log.Debug("got cross2TXReply, but txid not in cross1_confirm_height_map, rollback TX may have been sent.", "txid", r.TxID, "tbchain_height", c.tbchain_height)
+				log.Error(fmt.Sprintf("err: tx %d should be in c.cross1_confirm_height_map, but actually not in.", r.TxID))
 			} else {
 				delete(c.cross1_confirm_height_map, r.TxID)
 			}
 			log.Trace("tracing transaction", "txid", r.TxID, "status", result.GetStatusString(r.TxStatus), "time", r.ConfirmTimeStamp)
 		} else if r.TxStatus == result.RollbackSuccess {
-			res_status := result.GetResult().AllTXStatus[r.TxID]
-			if len(res_status) > 0 && res_status[len(res_status)-1] == result.CrossTXType2Success {
-				// 如果交易后半部分已经执行成功，回滚交易不能被执行
-				log.Error("this tx should not be rolled back!", "txid", r.TxID)
-			}
+			// res_status := result.GetResult().AllTXStatus[r.TxID]
+			// if len(res_status) > 0 && res_status[len(res_status)-1] == result.CrossTXType2Success {
+			// 	// 如果交易后半部分已经执行成功，回滚交易不能被执行
+			// 	log.Error("this tx should not be rolled back!", "txid", r.TxID)
+			// }
 			log.Trace("tracing transaction", "txid", r.TxID, "status", result.GetStatusString(r.TxStatus), "time", r.ConfirmTimeStamp)
 		}
 		l.Remove(e)

@@ -39,11 +39,16 @@ type Transaction struct {
 	Timestamp uint64
 	/** 信标链上的确认时间
 	 * 对于片内交易和cross1交易，交易执行后该值赋为确认时间
-	 * 对于cross2交易，交易执行前该值是cross1的确认时间，用于判断是否超时；交易执行后是cross2的确认时间
+	 * 对于cross2交易，交易执行前该值是cross1的确认时间；交易执行后是cross2的确认时间
 	 */
 	ConfirmTimestamp uint64
 	/* 信标链上确认该交易的高度 */
 	ConfirmHeight uint64
+	/** cross1交易被确认时，接收分片的确认高度，即信标链上已确认的接收分片的信标最大高度
+	 * 注意，是接收分片的确认高度，不是发送分片的确认高度
+	 */
+	Cross1ConfirmHeight uint64
+
 	Sender_sid    uint64
 	Recipient_sid uint64
 	TXStatus      uint64

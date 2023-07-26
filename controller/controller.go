@@ -32,7 +32,7 @@ type Cfg struct {
 	MaxTxNum                 int    `json:"MaxTxNum"`
 	InjectSpeed              int    `json:"InjectSpeed"`
 	RecommitIntervalSecs     int    `json:"RecommitInterval"`
-	TBChainHeight2Rollback   int    `json:"TBChainHeight2Rollback"`
+	Height2Rollback          int    `json:"Height2Rollback"`
 	Height2Reconfig          int    `json:"Height2Reconfig"`
 	MaxBlockTXSize           int    `json:"MaxBlockTXSize"`
 	DatasetDir               string `json:"DatasetDir"`
@@ -80,7 +80,7 @@ func Main(cfgfilename string) {
 	injectSpeed := cfg.InjectSpeed
 	recommitIntervalSecs := cfg.RecommitIntervalSecs
 	recommitInterval := time.Duration(recommitIntervalSecs) * time.Second
-	rollbackHeight := cfg.TBChainHeight2Rollback
+	rollbackHeight := cfg.Height2Rollback
 	/* 注意这里的height指的是信标链上区块的height，不是矿工所在分片的区块的height */
 	height2Reconfig := cfg.Height2Reconfig
 	maxBlockTXSize := cfg.MaxBlockTXSize

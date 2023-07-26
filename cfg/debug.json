@@ -7,7 +7,7 @@
 
     "ClientNum": 1,
 
-    "ShardNum": 8,
+    "ShardNum": 4,
     "ShardSize": 4,
 
     "MaxTxNum": 5000,
@@ -18,11 +18,11 @@
     "Height2Reconfig": 2000,
 
     "TbchainBlockIntervalSecs": 10,
-    "TBChainHeight2Rollback": 2,
+    "Height2Rollback": 4,
     "MultiSignRequiredNum": 2,
 
     "BeaconChainMode": 1,
-    "BeaconChainPort": 8545,
+    "BeaconChainPort": 7545,
     "BeaconChainID": 1337,
 
     "DatasetDir": "/Users/xumy/Desktop/huanglab/blockchain/dataset/len4_data2.csv"

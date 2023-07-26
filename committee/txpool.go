@@ -110,6 +110,7 @@ func (pool *TxPool) Pending(maxBlockSize int) []*core.Transaction {
 	maxBlockSize -= i
 	i = 0
 	pendinglen := len(pool.pending)
+	_, parentBlockHeight := pool.com.getStatusFromShard()
 	for {
 		if i == maxBlockSize || i >= pendinglen {
 			break
@@ -117,8 +118,8 @@ func (pool *TxPool) Pending(maxBlockSize int) []*core.Transaction {
 		tx := pool.pending[i]
 		// 为保证交易原子性，cross2 交易应判断是否超时
 		if tx.TXtype == core.CrossTXType2 {
-			// tx.ConfirmHeight是信标链上确认cross1交易的区块的高度
-			if pool.com.tbchain_height >= tx.ConfirmHeight+tx.RollbackHeight {
+			// 如果新区块高度超过回滚高度，则丢弃交易
+			if parentBlockHeight.Uint64()+1 > tx.Cross1ConfirmHeight+tx.RollbackHeight {
 				// 如果cross2交易已超时，不会选择该交易进行打包，队列指针后移时需要将maxBlockSize也+1
 				i++
 				maxBlockSize++
