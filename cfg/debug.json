@@ -9,6 +9,7 @@
 
     "ShardNum": 4,
     "ShardSize": 4,
+    "MultiSignRequiredNum": 2,
 
     "MaxTxNum": 5000,
     "InjectSpeed": 100,
@@ -19,9 +20,8 @@
 
     "TbchainBlockIntervalSecs": 10,
     "Height2Rollback": 4,
-    "MultiSignRequiredNum": 2,
 
-    "BeaconChainMode": 1,
+    "BeaconChainMode": 0,
     "BeaconChainPort": 7545,
     "BeaconChainID": 1337,
 

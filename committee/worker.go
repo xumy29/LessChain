@@ -164,9 +164,9 @@ func (w *worker) broadcastTbInCommittee(block *core.Block) {
 	tb := &beaconChain.TimeBeacon{
 		Height:     final_header.Number.Uint64(),
 		ShardID:    uint32(w.shardID),
-		BlockHash:  block.Hash(),
-		TxHash:     final_header.TxHash,
-		StatusHash: final_header.Root,
+		BlockHash:  block.Hash().Hex(),
+		TxHash:     final_header.TxHash.Hex(),
+		StatusHash: final_header.Root.Hex(),
 	}
 
 	signedTB := w.com.multiSign(tb)

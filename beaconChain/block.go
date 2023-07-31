@@ -8,12 +8,12 @@ import (
 )
 
 type TBBlock struct {
-	/** key是分片ID，value是该分片未在信标链上链的区块的信标
-	 * 一个分片可能对应多个信标，取决于分片出块速度 */
-	Tbs map[uint32][]*ConfirmedTB
 	/* 时间戳 */
 	Time   uint64
 	Height uint64
+	/** key是分片ID，value是该分片未在信标链上链的区块的信标
+	 * 一个分片可能对应多个信标，取决于分片出块速度 */
+	Tbs [][]*ConfirmedTB
 }
 
 func (tbChain *BeaconChain) loop() {
@@ -59,7 +59,8 @@ func (tbChain *BeaconChain) generateSimulationChainBlock() *TBBlock {
 	now := time.Now().Unix()
 	tbChain.height += 1
 
-	confirmTBs := make(map[uint32][]*ConfirmedTB, 0)
+	// confirmTBs := make(map[uint32][]*ConfirmedTB, 0)
+	confirmTBs := make([][]*ConfirmedTB, tbChain.shardNum)
 	for shardID, tbs := range tbChain.tbs_new {
 		shardContract := tbChain.contract.contracts[shardID]
 		for _, signedTb := range tbs {

@@ -6,33 +6,90 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"golang.org/x/crypto/sha3"
 )
 
 type TimeBeacon struct {
-	ShardID    uint32      `json:"shardID" gencodec:"required"`
-	Height     uint64      `json:"height" gencodec:"required"`
-	BlockHash  common.Hash `json:"blockHash" gencodec:"required"`
-	TxHash     common.Hash `json:"txHash" gencodec:"required"`
-	StatusHash common.Hash `json:"statusHash" gencodec:"required"`
+	ShardID    uint32 `json:"shardID" gencodec:"required"`
+	Height     uint64 `json:"height" gencodec:"required"`
+	BlockHash  string `json:"blockHash" gencodec:"required"`
+	TxHash     string `json:"txHash" gencodec:"required"`
+	StatusHash string `json:"statusHash" gencodec:"required"`
 }
 
-/* Hash returns the keccak256 hash of its RLP encoding. */
-func (tb *TimeBeacon) Hash() common.Hash {
-	hash, err := core.RlpHash(tb)
-	if err != nil {
-		log.Error("time beacon hash fail.", "err", err)
+/* abiEncode 对应的是solidity的abi.encode，而不是abi.encodePacked，
+只在特殊情况下，encode和encodePacked两者编码结果才相同 */
+func (tb *TimeBeacon) AbiEncode() []byte {
+	uint32Ty, e1 := abi.NewType("uint32", "uint32", nil)
+	uint64Ty, e2 := abi.NewType("uint64", "uint64", nil)
+	stringTy, e3 := abi.NewType("string", "string", nil)
+	if e1 != nil || e2 != nil || e3 != nil {
+		log.Error("abi.newtype err")
 	}
-	return hash
+
+	arguments := abi.Arguments{
+		{
+			Type: uint32Ty,
+		},
+		{
+			Type: uint64Ty,
+		},
+		{
+			Type: stringTy,
+		},
+		{
+			Type: stringTy,
+		},
+		{
+			Type: stringTy,
+		},
+	}
+
+	bytes, err := arguments.Pack(
+		tb.ShardID,
+		tb.Height,
+		tb.BlockHash,
+		tb.TxHash,
+		tb.StatusHash,
+	)
+	if err != nil {
+		log.Error("arguments.pack", "err", err)
+	}
+
+	return bytes
 }
+
+/* 先 ABI 编码，再 Keccak256 哈希*/
+func (tb *TimeBeacon) Hash() []byte {
+	encoded := tb.AbiEncode()
+
+	hash := sha3.NewLegacyKeccak256()
+	hash.Write(encoded)
+
+	res := hash.Sum(nil)
+	log.Debug("TimeBeacon AbiEncode", "shardID", tb.ShardID, "height", tb.Height, "got hash", res)
+	return res
+}
+
+// /* Hash returns the keccak256 hash of its RLP encoding. */
+// func (tb *TimeBeacon) Hash() common.Hash {
+// 	hash, err := core.RlpHash(tb)
+// 	if err != nil {
+// 		log.Error("time beacon hash fail.", "err", err)
+// 	}
+// 	return hash
+// }
 
 type SignedTB struct {
-	*TimeBeacon
-	Sigs [][]byte
+	TimeBeacon
+	Sigs    [][]byte
+	Signers []common.Address
 }
 
 type ConfirmedTB struct {
-	*TimeBeacon
+	TimeBeacon
 	ConfirmTime uint64
 	/* 信标链上包含该信标的区块的高度，注意不是分片自身的区块高度 */
 	ConfirmHeight uint64
@@ -58,7 +115,8 @@ type BeaconChain struct {
 	stopCh            chan struct{}
 	wg                sync.WaitGroup
 
-	contract *Contract
+	contract         *Contract
+	required_sig_cnt uint32
 }
 
 /** 新建一条信标链
@@ -76,6 +134,7 @@ func NewTBChain(mode, chainID, chainPort, blockIntervalSecs, shardNum, required 
 		height:            0,
 		stopCh:            make(chan struct{}),
 		contract:          NewContract(shardNum, required),
+		required_sig_cnt:  uint32(required),
 	}
 	log.Info("NewTBChain")
 	tbChain.wg.Add(1)
@@ -148,4 +207,25 @@ func (tbChain *BeaconChain) GetTimeBeacon(shardID int, height uint64) *Confirmed
 		return nil
 	}
 	return tbs_shard[height]
+}
+
+func (tb *TimeBeacon) AbiEncodeV2() []byte {
+	structTy, _ := abi.NewType("tuple", "struct ty", []abi.ArgumentMarshaling{
+		{Name: "shardID", Type: "uint32"},
+		{Name: "height", Type: "uint64"},
+		{Name: "blockHash", Type: "string"},
+		{Name: "txHash", Type: "string"},
+		{Name: "StatusHash", Type: "string"},
+	})
+
+	args := abi.Arguments{
+		{Type: structTy},
+	}
+
+	bytes, err := args.Pack(tb)
+	if err != nil {
+		log.Error("arguments.pack", "err", err)
+	}
+
+	return bytes
 }

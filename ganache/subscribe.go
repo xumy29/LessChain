@@ -81,6 +81,7 @@ func SubscribeEvents(port int, contractAddr common.Address, eventChannel chan *E
 		err = json.Unmarshal(message, &response)
 		if err != nil {
 			fmt.Println("Failed to unmarshal JSON:", err)
+			log.Debug("Failed to unmarshal JSON", "err", err)
 			continue
 		}
 
@@ -134,13 +135,23 @@ func handleMessage(data string) *Event {
 		panic(err)
 	}
 
+	// 读取数据前可以先打印看看有哪些字段
+	// fmt.Printf("decodedData: %v\n", decodedData)
+
 	message := decodedData["message"].(string)
 	shardID := decodedData["shardID"].(uint32)
 	height := decodedData["height"].(uint64)
 
-	// fmt.Printf("Message: %s\n", message)
-	// fmt.Printf("ShardID: %d\n", shardID)
-	// fmt.Printf("Height: %d\n", height)
+	// addr := common.Address{}
+	// if decodedData["address"] != nil {
+	// 	addr = decodedData["address"].(common.Address)
+	// }
+	// addr := decodedData["addr"].([32]byte)
+
+	fmt.Printf("Message: %s\t", message)
+	fmt.Printf("ShardID: %d\t", shardID)
+	fmt.Printf("Height: %d\n", height)
+	// fmt.Printf("Address: %v\n", addr)
 
 	return &Event{
 		Msg:     message,

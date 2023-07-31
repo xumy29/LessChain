@@ -1,12 +1,15 @@
 package core
 
 import (
+	"crypto/ecdsa"
+	"fmt"
 	"go-w3chain/log"
+	"go-w3chain/utils"
 	"path/filepath"
 
-	"github.com/ethereum/go-ethereum/accounts/keystore"
+	secp256k1 "github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto/secp256k1"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 const (
@@ -20,83 +23,83 @@ const (
  * 目前一个节点对应一个账户
  */
 type W3Account struct {
-	keyDir string
-	ks     *keystore.KeyStore
+	privateKey  *ecdsa.PrivateKey
+	pubKey      *ecdsa.PublicKey
+	accountAddr common.Address
+	keyDir      string
 }
 
 func NewW3Account(nodeDatadir string) *W3Account {
 	w3Account := &W3Account{
-		keyDir: filepath.Join(nodeDatadir, KeyStoreDir),
+		privateKey: newPrivateKey(),
+		keyDir:     filepath.Join(nodeDatadir, KeyStoreDir),
 	}
-	w3Account.ks = createKeyStore(w3Account.keyDir)
-	if len(w3Account.ks.Accounts()) == 0 {
-		names := []string{defaultAccountName}
-		createAccounts(w3Account.ks, names)
-	}
-
+	w3Account.pubKey = &w3Account.privateKey.PublicKey
+	w3Account.accountAddr = crypto.PubkeyToAddress(*w3Account.pubKey)
+	// fmt.Printf("create addr: %v\n", w3Account.accountAddr)
 	return w3Account
 }
 
-func createKeyStore(keyDir string) *keystore.KeyStore {
-	ks := keystore.NewPlaintextKeyStore(keyDir)
-
-	return ks
-}
-
-func createAccounts(ks *keystore.KeyStore, names []string) {
-	// deault password is the name
-	for _, name := range names {
-		ks.NewAccount(name)
+func newPrivateKey() *ecdsa.PrivateKey {
+	// 选择椭圆曲线，这里选择 secp256k1 曲线
+	s, err := secp256k1.GeneratePrivateKey()
+	if err != nil {
+		log.Error("generate private key fail", "err", err)
 	}
-}
-
-func printAccounts(ks *keystore.KeyStore) {
-	for _, acc := range ks.Accounts() {
-		log.Info("node account", "info", acc)
-	}
-}
-
-func (w3Account *W3Account) GetAccountAddress() *common.Address {
-	return &w3Account.ks.Accounts()[0].Address
+	privateKey := s.ToECDSA()
+	return privateKey
 }
 
 func (w3Account *W3Account) SignHash(hash []byte) []byte {
-	ks := w3Account.ks
-	signature, err := ks.SignHashWithPassphrase(ks.Accounts()[0], defaultAccountName, hash)
+	sig, err := crypto.Sign(hash, w3Account.privateKey)
 	if err != nil {
 		log.Error("signHashFail", "err", err)
-		// fmt.Print("signHashFail", "err", err)
 		return []byte{}
 	}
-	log.Trace("w3account sign hash", "msgHash", hash, "address", ks.Accounts()[0], "sig", signature)
+	// log.Trace("w3account sign hash", "msgHash", hash, "address", w3Account.accountAddr, "sig", sig)
 
-	return signature
+	return sig
 }
 
-func (w3Account *W3Account) VerifySignature(msgHash []byte, sig []byte) bool {
-	pubkey, err := secp256k1.RecoverPubkey(msgHash, sig)
-	// fmt.Print(len(pubkey)) // 恢复出来的公钥长度为65个字节，第一个字节固定是0x04
+/* 这个方法是被该账户以外的其他账户调用，以验证签名的正确性的
+所以不能直接获取公钥和地址，要从签名中恢复
+*/
+func VerifySignature(msgHash []byte, sig []byte, expected_addr common.Address) bool {
+	// 恢复公钥
+	pubKeyBytes, err := crypto.Ecrecover(msgHash, sig)
 	if err != nil {
-		log.Error("recover Pubkey Fail.")
-		// fmt.Print("recover Pubkey Fail.")
-		return false
+		log.Error("ecrecover fail", "err", err)
+		// fmt.Printf("ecrecover err: %v\n", err)
 	}
 
-	// 由公钥通过keccak256哈希算法得到32字节的压缩公钥
-	// hasher := sha3.NewLegacyKeccak256()
-	// hasher.Write(pubkey[1:])
-	// pubkeyc := hasher.Sum(nil)
+	pubkey, err := crypto.UnmarshalPubkey(pubKeyBytes)
+	if err != nil {
+		log.Error("UnmarshalPubkey fail", "err", err)
+		// fmt.Printf("UnmarshalPubkey err: %v\n", err)
+	}
 
-	// fmt.Println(pubkeyc)
-	// fmt.Println(w3Account.GetAccountAddress()[:])
-	// 压缩公钥后20个字节即为账户的地址
-	// if !bytes.Equal(pubkeyc[12:], w3Account.GetAccountAddress()[:]) {
-	// 	fmt.Print("not equal")
-	// 	return false
-	// }
+	recovered_addr := crypto.PubkeyToAddress(*pubkey)
+	return recovered_addr == expected_addr
+}
 
-	sig = sig[:len(sig)-1] // remove recovery id
-	return secp256k1.VerifySignature(pubkey, msgHash, sig)
+/* 接收一个随机种子，用私钥生成一个随机数输出和对应的证明 */
+func (w3Account *W3Account) GenerateVRFOutput(randSeed []byte) *utils.VRFResult {
+	vrfResult := utils.GenerateVRF(w3Account.privateKey, randSeed)
+	return vrfResult
+}
+
+/* 接收随机数输出和对应证明，用公钥验证该随机数输出是否合法 */
+func (w3Account *W3Account) VerifyVRFOutput(vrfResult *utils.VRFResult, randSeed []byte) bool {
+	return utils.VerifyVRF(w3Account.pubKey, randSeed, vrfResult)
+}
+
+func printAccounts(w3Account *W3Account) {
+	log.Info("node account", "keyDir", w3Account.keyDir, "address", w3Account.accountAddr)
+	log.Info(fmt.Sprintf("privateKey: %x", crypto.FromECDSA(w3Account.privateKey)))
+}
+
+func (w3Account *W3Account) GetAccountAddress() *common.Address {
+	return &w3Account.accountAddr
 }
 
 // ganache 私链上有钱的账户，用来发起提交信标的交易
@@ -113,3 +116,27 @@ var GanacheChainAccounts []string = []string{
 }
 
 var GanachePublicAccount string = "a8f1cfa29a4562a35667a51d7cf71239c6d6820130bc7cb52d0c83713d1cad75"
+
+/* 下面两个函数是不用以太坊库实现的签名和验证方法 */
+// func (w3Account *W3Account) SignHash(hash []byte) []byte {
+// 	r, s, err := ecdsa.Sign(rand.Reader, w3Account.privateKey, hash)
+// 	if err != nil {
+// 		log.Error("signHashFail", "err", err)
+// 		return []byte{}
+// 	}
+// 	signature := append(r.Bytes(), s.Bytes()...)
+// 	log.Trace("w3account sign hash", "msgHash", hash, "address", w3Account.accountAddr, "sig", signature)
+
+// 	return signature
+// }
+
+// func (w3Account *W3Account) VerifySignature(msgHash []byte, sig []byte) bool {
+// 	rBytes := sig[:len(sig)/2]
+// 	sBytes := sig[len(sig)/2:]
+// 	r := new(big.Int).SetBytes(rBytes)
+// 	s := new(big.Int).SetBytes(sBytes)
+
+// 	valid := ecdsa.Verify(w3Account.pubKey, msgHash, r, s)
+
+// 	return valid
+// }

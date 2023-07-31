@@ -56,7 +56,7 @@ func myPrivateKey(shardID int) (*ecdsa.PrivateKey, error) {
 }
 
 // 部署合约
-func DeployContract(client *ethclient.Client, genesisTBs []ContractTB) (common.Address, *abi.ABI, *big.Int, error) {
+func DeployContract(client *ethclient.Client, genesisTBs []ContractTB, required_sig_cnt uint32) (common.Address, *abi.ABI, *big.Int, error) {
 	// 编译 Solidity 合约并获取合约 ABI 和字节码
 	contractABI, err := abi.JSON(strings.NewReader(myContractABI()))
 	if err != nil {
@@ -85,7 +85,7 @@ func DeployContract(client *ethclient.Client, genesisTBs []ContractTB) (common.A
 	// }
 
 	// 部署合约
-	address, tx, _, err := bind.DeployContract(auth, contractABI, bytecode, client, genesisTBs)
+	address, tx, _, err := bind.DeployContract(auth, contractABI, bytecode, client, genesisTBs, required_sig_cnt)
 	if err != nil {
 		fmt.Println("DeployContract err: ", err)
 		return common.Address{}, nil, big.NewInt(0), err
@@ -111,11 +111,12 @@ var (
 )
 
 // 存储信标到合约
-func AddTB(client *ethclient.Client, contractAddr common.Address, abi *abi.ABI, tb *ContractTB) error {
+func AddTB(client *ethclient.Client, contractAddr common.Address,
+	abi *abi.ABI, tb *ContractTB, sigs [][]byte, signers []common.Address) error {
 	call_lock.Lock()
 	defer call_lock.Unlock()
 	// 构造调用数据
-	callData, err := abi.Pack("addTB", *tb)
+	callData, err := abi.Pack("addTB", *tb, sigs, signers)
 	if err != nil {
 		fmt.Println("abi.Pack err: ", err)
 		return err
@@ -199,8 +200,9 @@ func AddTB(client *ethclient.Client, contractAddr common.Address, abi *abi.ABI, 
 		}
 	}
 
-	log.Debug("sendTransaction success!", "txtype", "AddTB", "shardID", tb.ShardID, "height", tb.Height,
-		"gasPrice", lowestGasPrice, "nonce", nonce)
+	// log.Debug("sendTransaction success!", "txtype", "AddTB", "shardID", tb.ShardID, "height", tb.Height,
+	// 	"gasPrice", lowestGasPrice, "nonce", nonce)
+
 	// pendingCnt, err := client.PendingTransactionCount(context.Background())
 	// if err != nil {
 	// 	log.Debug("client.PendingTransactionCount err", "err", err)

@@ -13,7 +13,6 @@ import (
 var (
 	genesisTBs map[uint32]*ganache.ContractTB = make(map[uint32]*ganache.ContractTB)
 	// 每个委员会指配一个client，client与ganache交互，获取gasPrcie、nonce等链与账户信息
-	// 并发调用client的方法或短时间内连续调用有时会出现问题，比如connection reset by peer等，应尽量避免
 	clients      []*ethclient.Client
 	contractAddr common.Address
 	contractABI  *abi.ABI
@@ -23,19 +22,20 @@ var (
 
 func (tbChain *BeaconChain) AddTimeBeacon2GanacheChain(signedtb *SignedTB) {
 	tb := signedtb.TimeBeacon
-	// 将字节数组转化为字符串
+	// 转化为合约中的结构（目前两结构的成员变量是完全相同的）
 	contractTB := &ganache.ContractTB{
 		ShardID:    tb.ShardID,
 		Height:     tb.Height,
-		BlockHash:  tb.BlockHash.Hex(),
-		TxHash:     tb.TxHash.Hex(),
-		StatusHash: tb.StatusHash.Hex(),
+		BlockHash:  tb.BlockHash,
+		TxHash:     tb.TxHash,
+		StatusHash: tb.StatusHash,
 	}
 	if tb.Height == 0 {
 		tbChain.addGanacheGenesisTB(contractTB)
 	} else {
-		ganache.AddTB(clients[contractTB.ShardID], contractAddr, contractABI, contractTB)
+		ganache.AddTB(clients[contractTB.ShardID], contractAddr, contractABI, contractTB, signedtb.Sigs, signedtb.Signers)
 	}
+	log.Debug("AddTimeBeacon", "info", signedtb)
 }
 
 func (tbChain *BeaconChain) generateGanacheChainBlock() *TBBlock {
@@ -56,11 +56,11 @@ func (tbChain *BeaconChain) generateGanacheChainBlock() *TBBlock {
 	now := time.Now().Unix()
 	tbChain.height += 1 // todo: 调整为真实高度
 
-	confirmTBs := make(map[uint32][]*ConfirmedTB, 0)
+	confirmTBs := make([][]*ConfirmedTB, tbChain.shardNum)
 	for shardID, tbs := range tbs_new {
 		for _, tb := range tbs {
 			confirmedTB := &ConfirmedTB{
-				TimeBeacon:    tb,
+				TimeBeacon:    *tb,
 				ConfirmTime:   uint64(now),
 				ConfirmHeight: tbChain.height,
 			}
@@ -110,7 +110,7 @@ func (tbChain *BeaconChain) deployContract(genesisTBs []ganache.ContractTB) {
 		clients = append(clients, client)
 	}
 
-	contractAddr, contractABI, _, err = ganache.DeployContract(clients[0], genesisTBs)
+	contractAddr, contractABI, _, err = ganache.DeployContract(clients[0], genesisTBs, tbChain.required_sig_cnt)
 	if err != nil {
 		log.Error("error occurs during deploying contract.", "err", err)
 		panic(err)

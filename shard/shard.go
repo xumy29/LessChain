@@ -117,12 +117,12 @@ func (s *Shard) AddGenesisTB() {
 	tb := &beaconChain.TimeBeacon{
 		Height:     g_header.Number.Uint64(),
 		ShardID:    uint32(s.shardID),
-		BlockHash:  genesisBlock.Hash(),
-		TxHash:     g_header.TxHash,
-		StatusHash: g_header.Root,
+		BlockHash:  genesisBlock.Hash().Hex(),
+		TxHash:     g_header.TxHash.Hex(),
+		StatusHash: g_header.Root.Hex(),
 	}
 	signedTb := &beaconChain.SignedTB{
-		TimeBeacon: tb,
+		TimeBeacon: *tb,
 		// 创世区块暂时不需要签名
 	}
 	s.messageHub.Send(core.MsgTypeCommitteeAddTB, 0, signedTb, nil)

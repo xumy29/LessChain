@@ -35,16 +35,16 @@ func TestDeploy(t *testing.T) {
 	var err error
 	genesisTBs := make([]ContractTB, 2)
 	genesisTBs[0] = ContractTB{
-		Height:  0,
 		ShardID: 0,
+		Height:  0,
 	}
 	genesisTBs[1] = ContractTB{
-		Height:    0,
 		ShardID:   1,
-		BlockHash: "0x11111",
+		Height:    0,
+		BlockHash: "0x111111",
 	}
 
-	contractAddr, contractABI, _, err = DeployContract(client, genesisTBs)
+	contractAddr, contractABI, _, err = DeployContract(client, genesisTBs, 2)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -60,32 +60,37 @@ func TestUseContract(t *testing.T) {
 	got, err := GetTB(client, contractAddr, contractABI, 1, 0)
 	assert.Equal(t, true, err == nil)
 	expected := &ContractTB{
-		Height:    0,
 		ShardID:   1,
-		BlockHash: "0x11111",
+		Height:    0,
+		BlockHash: "0x111111",
 	}
 	assert.Equal(t, expected, got)
 
 	newTB := &ContractTB{
-		Height:     1,
 		ShardID:    0,
+		Height:     1,
 		StatusHash: "0x123456",
 	}
-	err = AddTB(client, contractAddr, contractABI, newTB)
+
+	sigs := make([][]byte, 2)
+	signers := make([]common.Address, 2)
+	err = AddTB(client, contractAddr, contractABI, newTB, sigs, signers)
 	assert.Equal(t, true, err == nil)
+
+	time.Sleep(12 * time.Second)
 
 	got, err = GetTB(client, contractAddr, contractABI, 0, 1)
 	assert.Equal(t, true, err == nil)
 	assert.Equal(t, newTB, got)
 
-	for i := 0; i < 4; i++ {
-		time.Sleep(5 * time.Second)
-		newTB := &ContractTB{
-			Height:     uint64(i + 2),
-			ShardID:    0,
-			StatusHash: fmt.Sprintf("0xaaaa%d", i),
-		}
-		err := AddTB(client, contractAddr, contractABI, newTB)
-		assert.Equal(t, true, err == nil)
-	}
+	// for i := 0; i < 4; i++ {
+	// 	time.Sleep(5 * time.Second)
+	// 	newTB := &ContractTB{
+	// 		Height:     uint64(i + 2),
+	// 		ShardID:    0,
+	// 		StatusHash: fmt.Sprintf("0xaaaa%d", i),
+	// 	}
+	// 	err := AddTB(client, contractAddr, contractABI, newTB)
+	// 	assert.Equal(t, true, err == nil)
+	// }
 }

@@ -3,8 +3,8 @@ package beaconChain
 import (
 	"go-w3chain/log"
 
-	"github.com/ethereum/go-ethereum/crypto/secp256k1"
-	"golang.org/x/crypto/sha3"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 /** 模拟信标链上的一个合约，验证对应分片的信标的多签名
@@ -28,44 +28,37 @@ func NewShardContract(shardID int, required int) *ShardContract {
  * 地址长度：20个字节
  * 未完成
  */
-func checkAddressValidity(address []byte) bool {
+func checkAddressValidity(address common.Address) bool {
 	// todo: 验证该地址
 	return true
 }
 
-/** 由完整公钥推出地址
- * 公钥长度：65个字节
- * 地址长度：20个字节
- */
-func pubkey2Addr(pubkey []byte) []byte {
-	// 由公钥通过keccak256哈希算法得到32字节的压缩公钥
-	hasher := sha3.NewLegacyKeccak256()
-	hasher.Write(pubkey[1:])
-	pubkeyc := hasher.Sum(nil)
-
-	// 压缩公钥后20个字节即为账户的地址
-	accountAddress := pubkeyc[len(pubkeyc)-20:]
-	return accountAddress
-}
-
 func (contract *ShardContract) VerifyTimeBeacon(tb *SignedTB) bool {
-	msgHash := tb.TimeBeacon.Hash().Bytes()
+	msgHash := tb.TimeBeacon.Hash()
 	sig_num := 0
-	for _, sig := range tb.Sigs {
-		pubkey, err := secp256k1.RecoverPubkey(msgHash, sig)
+	for i := 0; i < len(tb.Signers); i++ {
+		sig := tb.Sigs[i]
+		signer := tb.Signers[i]
+		// 恢复公钥
+		pubKeyBytes, err := crypto.Ecrecover(msgHash, sig)
 		if err != nil {
 			log.Error("shardContract recover Pubkey Fail.", "err", err)
-			continue
 		}
-		if !checkAddressValidity(pubkey2Addr(pubkey)) {
+
+		pubkey, err := crypto.UnmarshalPubkey(pubKeyBytes)
+		if err != nil {
+			log.Error("UnmarshalPubkey fail.", "err", err)
+		}
+
+		recovered_addr := crypto.PubkeyToAddress(*pubkey)
+		if !checkAddressValidity(recovered_addr) {
 			log.Error("shardContract check address validity fail. This address has no right to sign this time beacon.")
-			continue
 		}
-		sig = sig[:len(sig)-1] // remove recovery id
-		checkSigPass := secp256k1.VerifySignature(pubkey, msgHash, sig)
+		checkSigPass := recovered_addr == signer
 		if checkSigPass {
 			sig_num += 1
 			if sig_num >= contract.required_validators_num_for_sign {
+				// log.Debug("contract verify signedTB... pass.", "shardID", contract.shardID, "# of sigs", len(tb.Sigs), "need", contract.required_validators_num_for_sign)
 				return true
 			}
 		}

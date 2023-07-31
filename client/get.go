@@ -54,15 +54,15 @@ func (c *Client) GetTB(shardID uint32, height uint64) *beaconChain.ConfirmedTB {
  * 客户端收到新确认信标后，遍历 tx_reply，如果某个交易的区块信标已确认，则对该交易进行后续处理
  * 客户端收到新确认信标后，检查是否有超时的跨片交易
  */
-func (c *Client) AddTBs(tbs_new map[uint32][]*beaconChain.ConfirmedTB, height uint64) {
-	for shardID, tbs := range tbs_new {
+func (c *Client) AddTBs(tbblock *beaconChain.TBBlock) {
+	for shardID, tbs := range tbblock.Tbs {
 		for _, tb := range tbs {
-			log.Debug("addTB to c.tbs", "shardID", shardID, "blockHeight", tb.Height)
-			c.tbs[shardID][tb.Height] = tb
-			c.shard_cur_heights[shardID] = uint64(utils.Max(int(c.shard_cur_heights[shardID]), int(tb.Height)))
+			// log.Debug("addTB to c.tbs", "shardID", shardID, "blockHeight", tb.Height)
+			c.tbs[uint32(shardID)][tb.Height] = tb
+			c.shard_cur_heights[uint32(shardID)] = uint64(utils.Max(int(c.shard_cur_heights[uint32(shardID)]), int(tb.Height)))
 		}
 	}
-	c.tbchain_height = height
+	c.tbchain_height = tbblock.Height
 	c.processTXReceipts()
 	c.checkExpiredTXs()
 

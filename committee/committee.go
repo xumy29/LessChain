@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"sync/atomic"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 )
 
@@ -22,8 +23,9 @@ type Committee struct {
 	Nodes      []*core.Node
 	txPool     *TxPool
 	/* 计数器，初始等于客户端个数，每一个客户端发送注入完成信号时计数器减一 */
-	injectNotDone  int32
-	tbchain_height uint64
+	injectNotDone      int32
+	tbchain_height     uint64
+	tbchain_block_hash common.Hash
 }
 
 func NewCommittee(shardID uint64, clientCnt int, nodes []*core.Node, config *core.CommitteeConfig) *Committee {
@@ -108,15 +110,19 @@ func (com *Committee) SetMessageHub(hub core.MessageHub) {
 
 /** 信标链主动向委员会推送新确认的信标时调用此函数
  * 一般情况下信标链应该只向委员会推送其关注的分片和高度的信标，这里进行了简化，默认全部推送
- * 委员会收到新确认信标后，
  */
-func (com *Committee) AddTBs(tbs_new map[uint32][]*beaconChain.ConfirmedTB, height uint64) {
+func (com *Committee) AddTBs(tbblock *beaconChain.TBBlock) {
 	// for shardID, tbs := range tbs_new {
 	// 	for _, tb := range tbs {
 	// 		c.tbs[shardID][tb.Height] = tb
 	// 	}
 	// }
-	com.tbchain_height = height
+	hash, err := core.RlpHash(tbblock)
+	if err != nil {
+		log.Error("RlpHash tbblock fail.", "err", err)
+	}
+	com.tbchain_block_hash = hash
+	com.tbchain_height = tbblock.Height
 
 }
 

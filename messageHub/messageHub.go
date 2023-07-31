@@ -80,12 +80,12 @@ func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, call
 	case core.MsgTypeTBChainPushTB2Clients:
 		block := msg.(*beaconChain.TBBlock)
 		for _, c := range clients_ref {
-			c.AddTBs(block.Tbs, block.Height)
+			c.AddTBs(block)
 		}
 	case core.MsgTypeTBChainPushTB2Coms:
 		block := msg.(*beaconChain.TBBlock)
 		for _, c := range committees_ref {
-			c.AddTBs(block.Tbs, block.Height)
+			c.AddTBs(block)
 		}
 	case core.MsgTypeClientGetCross2ProofFromShard:
 		shard := shards_ref[id]

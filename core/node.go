@@ -66,7 +66,7 @@ func NewNode(conf *NodeConfig, parentdataDir string, shardID int, nodeID int) *N
 	}
 
 	node.w3Account = NewW3Account(node.DataDir)
-	printAccounts(node.w3Account.ks)
+	printAccounts(node.w3Account)
 
 	db, err := node.OpenDatabase("chaindata", 0, 0, "", false)
 	if err != nil {
@@ -116,7 +116,7 @@ func (n *Node) OpenDatabase(name string, cache, handles int, namespace string, r
 	var err error
 	n.db, err = rawdb.NewLevelDBDatabase(n.ResolvePath(name), cache, handles, namespace, readonly)
 
-	log.Debug("openDatabase", "node dataDir", n.DataDir)
+	log.Trace("openDatabase", "node dataDir", n.DataDir)
 	// log.Trace("Database", "node keyDir", n.keyDir)
 	// log.Trace("Database", "node chaindata", n.ResolvePath(name))
 
@@ -128,5 +128,5 @@ func (n *Node) CloseDatabase() {
 	if err != nil {
 		log.Error("closeDatabase fail.", "nodeConfig", n.config)
 	}
-	log.Debug("closeDatabase", "nodeID", n.NodeID)
+	// log.Debug("closeDatabase", "nodeID", n.NodeID)
 }

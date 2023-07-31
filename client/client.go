@@ -171,9 +171,9 @@ func VerifyTxMKproof(proof []byte, tb *beaconChain.TimeBeacon) bool {
 
 /* 所有交易执行完成则结束 */
 func (c *Client) CanStopV1() bool {
-	log.Debug("client queue length", "tx_reply", c.tx_reply.Len(), "cross1_confirm_height_map", len(c.cross1_confirm_height_map),
-		"cross2_txs", len(c.cross2_txs), "cross_tx_expired", len(c.cross_tx_expired),
-		"c.injectCnt", c.injectCnt, "len(c.txs)", len(c.txs))
+	// log.Debug("client queue length", "tx_reply", c.tx_reply.Len(), "cross1_confirm_height_map", len(c.cross1_confirm_height_map),
+	// 	"cross2_txs", len(c.cross2_txs), "cross_tx_expired", len(c.cross_tx_expired),
+	// 	"c.injectCnt", c.injectCnt, "len(c.txs)", len(c.txs))
 	return len(c.txs) == c.injectCnt && c.tx_reply.Len() == 0 && len(c.cross_tx_expired) == 0 &&
 		len(c.cross2_txs) == 0 && len(c.cross1_confirm_height_map) == 0
 }
