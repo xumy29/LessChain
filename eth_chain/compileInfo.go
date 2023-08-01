@@ -1,4 +1,4 @@
-package ganache
+package eth_chain
 
 func myContractABI() string {
 	abi := `

@@ -1,4 +1,4 @@
-package ganache
+package eth_chain
 
 import (
 	"context"
@@ -42,10 +42,14 @@ func Connect(port int) (*ethclient.Client, error) {
 	return client, err
 }
 
-func myPrivateKey(shardID int) (*ecdsa.PrivateKey, error) {
-	account := core.GanachePublicAccount
-	if shardID >= 0 {
+func myPrivateKey(shardID int, mode int) (*ecdsa.PrivateKey, error) {
+	var account string
+	if mode == 1 {
 		account = core.GanacheChainAccounts[shardID]
+	} else if mode == 2 {
+		account = core.GethChainAccounts[shardID]
+	} else {
+		log.Error("unknown chain mode", "mode", mode)
 	}
 	privateKey, err := crypto.HexToECDSA(account)
 	if err != nil {
@@ -57,6 +61,7 @@ func myPrivateKey(shardID int) (*ecdsa.PrivateKey, error) {
 
 // 部署合约
 func DeployContract(client *ethclient.Client,
+	mode int,
 	genesisTBs []ContractTB,
 	required_sig_cnt uint32) (common.Address, *abi.ABI, *big.Int, error) {
 
@@ -68,7 +73,7 @@ func DeployContract(client *ethclient.Client,
 	bytecode := common.FromHex(myContractByteCode())
 
 	// 获取私钥
-	privateKey, err := myPrivateKey(-1)
+	privateKey, err := myPrivateKey(0, mode)
 	if err != nil {
 		return common.Address{}, nil, big.NewInt(0), err
 	}
@@ -107,13 +112,13 @@ var (
 
 // 存储信标到合约
 func AddTB(client *ethclient.Client, contractAddr common.Address,
-	abi *abi.ABI, tb *ContractTB, sigs [][]byte, signers []common.Address) error {
+	abi *abi.ABI, mode int, tb *ContractTB, sigs [][]byte, signers []common.Address) error {
 
 	call_lock.Lock()
 	defer call_lock.Unlock()
 
 	var tmpShardID uint32 = 0
-	// tmpShardID = tb.ShardID
+	tmpShardID = tb.ShardID
 
 	// 构造调用数据
 	callData, err := abi.Pack("addTB", *tb, sigs, signers)
@@ -123,7 +128,7 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 	}
 
 	// 通过私钥构造签名者
-	privateKey, err := myPrivateKey(int(tmpShardID))
+	privateKey, err := myPrivateKey(int(tmpShardID), mode)
 	if err != nil {
 		fmt.Println("get myPrivateKey err: ", err)
 		return err

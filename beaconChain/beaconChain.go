@@ -96,7 +96,9 @@ type ConfirmedTB struct {
 }
 
 type BeaconChain struct {
-	/* mode=0表示运行模拟信标链，mode=1表示运行以太坊私链 */
+	/* mode=0表示运行模拟信标链，mode=1表示运行ganache搭建的以太坊私链
+	mode=2表示运行geth搭建的以太坊私链
+	*/
 	mode      int
 	chainID   int
 	chainPort int
@@ -173,8 +175,8 @@ func (tbChain *BeaconChain) AddGenesisTB(signedTb *SignedTB) {
 func (tbChain *BeaconChain) AddTimeBeacon(tb *SignedTB) {
 	if tbChain.mode == 0 {
 		tbChain.AddTimeBeacon2SimulationChain(tb)
-	} else if tbChain.mode == 1 {
-		tbChain.AddTimeBeacon2GanacheChain(tb)
+	} else if tbChain.mode == 1 || tbChain.mode == 2 {
+		tbChain.AddTimeBeacon2EthChain(tb)
 	} else {
 		log.Error("unknown beaconChain mode!", "mode", tbChain.mode)
 	}

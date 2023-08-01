@@ -25,14 +25,13 @@ func (tbChain *BeaconChain) loop() {
 	for {
 		select {
 		case <-timer.C:
-			if tbChain.mode == 0 || tbChain.mode == 1 {
+			if tbChain.mode == 0 || tbChain.mode == 1 || tbChain.mode == 2 {
 				block := tbChain.GenerateBlock()
 				tbChain.PushBlock(block)
 				timer.Reset(blockInterval)
 			} else {
 				err := fmt.Errorf("unknown mode of tbChain! mode=%d", tbChain.mode)
-				log.Error("err cause panic!", "err", err)
-				panic(err)
+				log.Error("err occurs", "err", err)
 			}
 
 		case <-tbChain.stopCh:
@@ -45,8 +44,11 @@ func (tbChain *BeaconChain) loop() {
 func (tbChain *BeaconChain) GenerateBlock() *TBBlock {
 	if tbChain.mode == 0 {
 		return tbChain.generateSimulationChainBlock()
+	} else if tbChain.mode == 1 || tbChain.mode == 2 {
+		return tbChain.generateEthChainBlock()
 	} else {
-		return tbChain.generateGanacheChainBlock()
+		log.Error("unknown mode", "mode", tbChain.mode)
+		return nil
 	}
 }
 

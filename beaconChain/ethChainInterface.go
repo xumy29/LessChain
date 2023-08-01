@@ -1,7 +1,7 @@
 package beaconChain
 
 import (
-	"go-w3chain/ganache"
+	"go-w3chain/eth_chain"
 	"go-w3chain/log"
 	"time"
 
@@ -11,19 +11,19 @@ import (
 )
 
 var (
-	genesisTBs map[uint32]*ganache.ContractTB = make(map[uint32]*ganache.ContractTB)
-	// 每个委员会指配一个client，client与ganache交互，获取gasPrcie、nonce等链与账户信息
+	genesisTBs map[uint32]*eth_chain.ContractTB = make(map[uint32]*eth_chain.ContractTB)
+	// 每个委员会指配一个client，client与以太坊私链交互，获取gasPrcie、nonce等链与账户信息
 	clients      []*ethclient.Client
 	contractAddr common.Address
 	contractABI  *abi.ABI
 	// 缓存websocket返回的事件（代表确认信标），最多缓存100个已确认的信标
-	eventChannel chan *ganache.Event = make(chan *ganache.Event, 100)
+	eventChannel chan *eth_chain.Event = make(chan *eth_chain.Event, 100)
 )
 
-func (tbChain *BeaconChain) AddTimeBeacon2GanacheChain(signedtb *SignedTB) {
+func (tbChain *BeaconChain) AddTimeBeacon2EthChain(signedtb *SignedTB) {
 	tb := signedtb.TimeBeacon
 	// 转化为合约中的结构（目前两结构的成员变量是完全相同的）
-	contractTB := &ganache.ContractTB{
+	contractTB := &eth_chain.ContractTB{
 		ShardID:    tb.ShardID,
 		Height:     tb.Height,
 		BlockHash:  tb.BlockHash,
@@ -31,14 +31,14 @@ func (tbChain *BeaconChain) AddTimeBeacon2GanacheChain(signedtb *SignedTB) {
 		StatusHash: tb.StatusHash,
 	}
 	if tb.Height == 0 {
-		tbChain.addGanacheGenesisTB(contractTB)
+		tbChain.addEthChainGenesisTB(contractTB)
 	} else {
-		ganache.AddTB(clients[contractTB.ShardID], contractAddr, contractABI, contractTB, signedtb.Sigs, signedtb.Signers)
+		eth_chain.AddTB(clients[contractTB.ShardID], contractAddr, contractABI, tbChain.mode, contractTB, signedtb.Sigs, signedtb.Signers)
 	}
 	log.Debug("AddTimeBeacon", "info", signedtb)
 }
 
-func (tbChain *BeaconChain) generateGanacheChainBlock() *TBBlock {
+func (tbChain *BeaconChain) generateEthChainBlock() *TBBlock {
 	tbs_new := make(map[uint32][]*TimeBeacon)
 	for {
 		if len(eventChannel) == 0 {
@@ -81,36 +81,36 @@ func (tbChain *BeaconChain) generateGanacheChainBlock() *TBBlock {
 	return block
 }
 
-func (tbChain *BeaconChain) addGanacheGenesisTB(tb *ganache.ContractTB) {
+func (tbChain *BeaconChain) addEthChainGenesisTB(tb *eth_chain.ContractTB) {
 	genesisTBs[tb.ShardID] = tb
 	if len(genesisTBs) == tbChain.shardNum {
 		// 转化为数组形式
-		tbs := make([]ganache.ContractTB, tbChain.shardNum)
+		tbs := make([]eth_chain.ContractTB, tbChain.shardNum)
 		for shardID, tb := range genesisTBs {
 			tbs[shardID] = *tb
 		}
 
-		ganache.SetChainID(tbChain.chainID)
+		eth_chain.SetChainID(tbChain.chainID)
 		tbChain.deployContract(tbs)
 
-		go ganache.SubscribeEvents(tbChain.chainPort, contractAddr, eventChannel)
+		go eth_chain.SubscribeEvents(tbChain.chainPort, contractAddr, eventChannel)
 
 	}
 }
 
-func (tbChain *BeaconChain) deployContract(genesisTBs []ganache.ContractTB) {
+func (tbChain *BeaconChain) deployContract(genesisTBs []eth_chain.ContractTB) {
 	// 创建合约，各分片创世区块作为构造函数的参数
 	var err error
 	for i := 0; i < tbChain.shardNum; i++ {
-		client, err := ganache.Connect(tbChain.chainPort)
+		client, err := eth_chain.Connect(tbChain.chainPort)
 		if err != nil {
-			log.Error("could not connect to ganache chain!", "err", err)
+			log.Error("could not connect to eth chain!", "err", err)
 			panic(err)
 		}
 		clients = append(clients, client)
 	}
 
-	contractAddr, contractABI, _, err = ganache.DeployContract(clients[0], genesisTBs, tbChain.required_sig_cnt)
+	contractAddr, contractABI, _, err = eth_chain.DeployContract(clients[0], tbChain.mode, genesisTBs, tbChain.required_sig_cnt)
 	if err != nil {
 		log.Error("error occurs during deploying contract.", "err", err)
 		panic(err)

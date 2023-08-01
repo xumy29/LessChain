@@ -1,4 +1,4 @@
-package ganache
+package eth_chain
 
 import (
 	"encoding/json"
@@ -43,8 +43,7 @@ func SubscribeEvents(port int, contractAddr common.Address, eventChannel chan *E
 	// 创建 WebSocket 连接
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
-		log.Error("Failed to connect to Ganache WebSocket:", "err", err)
-		panic(err)
+		log.Error("Failed to connect to eth_chain WebSocket:", "err", err)
 	}
 	defer conn.Close()
 
@@ -61,22 +60,30 @@ func SubscribeEvents(port int, contractAddr common.Address, eventChannel chan *E
 	err = conn.WriteMessage(websocket.TextMessage, subscribeRequest)
 	if err != nil {
 		log.Error("Failed to send subscription request:", "err", err)
-		panic(err)
 	}
+
+	defer close(eventChannel)
+
+	// 第一个返回消息
+	_, message, err := conn.ReadMessage()
+	if err != nil {
+		log.Error("Failed to read message from eth_chain WebSocket:", "err", err)
+	}
+	log.Debug("websocket subscribe response", "content", string(message))
 
 	// 处理事件通知
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
-			log.Error("Failed to read message from Ganache WebSocket:", "err", err)
+			log.Error("Failed to read message from eth_chain WebSocket:", "err", err)
 		}
 
 		// fmt.Println("Received message:", string(message))
 
-		// 在这里处理事件通知，解析事件数据等
-		if string(message)[2:4] == "id" {
-			continue
-		}
+		// // 在这里处理事件通知，解析事件数据等
+		// if string(message)[2:4] == "id" {
+		// 	continue
+		// }
 		var response WebSocketResponse
 		err = json.Unmarshal(message, &response)
 		if err != nil {
@@ -128,13 +135,13 @@ func handleMessage(data string) *Event {
 	`
 	abi, err := abi.JSON(strings.NewReader(eventABI))
 	if err != nil {
-		panic(err)
+		log.Error("abi.JSON fail", "err", err)
 	}
 
 	decodedData := make(map[string]interface{})
 	err = abi.UnpackIntoMap(decodedData, "LogMessage", common.FromHex(data))
 	if err != nil {
-		panic(err)
+		log.Error("abi.UnpackIntoMap", "err", err)
 	}
 
 	// 读取数据前可以先打印看看有哪些字段

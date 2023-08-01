@@ -6,3 +6,5 @@ results
 logs
 figs
 lessChain*
+*/geth-chain-data/data/geth/*
+*DS_Store

@@ -1,4 +1,4 @@
-package ganache
+package eth_chain
 
 import (
 	"context"
@@ -44,7 +44,7 @@ func TestDeploy(t *testing.T) {
 		BlockHash: "0x111111",
 	}
 
-	contractAddr, contractABI, _, err = DeployContract(client, genesisTBs, 2)
+	contractAddr, contractABI, _, err = DeployContract(client, 2, genesisTBs, 2)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -74,7 +74,7 @@ func TestUseContract(t *testing.T) {
 
 	sigs := make([][]byte, 2)
 	signers := make([]common.Address, 2)
-	err = AddTB(client, contractAddr, contractABI, newTB, sigs, signers)
+	err = AddTB(client, contractAddr, contractABI, 2, newTB, sigs, signers)
 	assert.Equal(t, true, err == nil)
 
 	time.Sleep(12 * time.Second)
