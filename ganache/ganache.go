@@ -56,7 +56,10 @@ func myPrivateKey(shardID int) (*ecdsa.PrivateKey, error) {
 }
 
 // 部署合约
-func DeployContract(client *ethclient.Client, genesisTBs []ContractTB, required_sig_cnt uint32) (common.Address, *abi.ABI, *big.Int, error) {
+func DeployContract(client *ethclient.Client,
+	genesisTBs []ContractTB,
+	required_sig_cnt uint32) (common.Address, *abi.ABI, *big.Int, error) {
+
 	// 编译 Solidity 合约并获取合约 ABI 和字节码
 	contractABI, err := abi.JSON(strings.NewReader(myContractABI()))
 	if err != nil {
@@ -75,14 +78,6 @@ func DeployContract(client *ethclient.Client, genesisTBs []ContractTB, required_
 		fmt.Println("bind.NewKeyedTransactorWithChainID err: ", err)
 		return common.Address{}, nil, big.NewInt(0), err
 	}
-
-	// // 构建交易数据
-	// gasLimit := uint64(3000000)
-	// gasPrice, err := client.SuggestGasPrice(context.Background())
-	// if err != nil {
-	// 	fmt.Println("SuggestGasPrice err: ", err)
-	// 	return common.Address{}, nil, big.NewInt(0), err
-	// }
 
 	// 部署合约
 	address, tx, _, err := bind.DeployContract(auth, contractABI, bytecode, client, genesisTBs, required_sig_cnt)
@@ -113,8 +108,13 @@ var (
 // 存储信标到合约
 func AddTB(client *ethclient.Client, contractAddr common.Address,
 	abi *abi.ABI, tb *ContractTB, sigs [][]byte, signers []common.Address) error {
+
 	call_lock.Lock()
 	defer call_lock.Unlock()
+
+	var tmpShardID uint32 = 0
+	// tmpShardID = tb.ShardID
+
 	// 构造调用数据
 	callData, err := abi.Pack("addTB", *tb, sigs, signers)
 	if err != nil {
@@ -123,7 +123,7 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 	}
 
 	// 通过私钥构造签名者
-	privateKey, err := myPrivateKey(int(tb.ShardID))
+	privateKey, err := myPrivateKey(int(tmpShardID))
 	if err != nil {
 		fmt.Println("get myPrivateKey err: ", err)
 		return err
@@ -139,11 +139,10 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 	auth.Value = big.NewInt(0)       // 设置发送的以太币数量（如果有的话）
 
 	var nonce uint64
-	_, ok := lastNonce[tb.ShardID]
+	_, ok := lastNonce[tmpShardID]
 	if !ok {
 		// 如果在之前的交易中使用了相同的账户地址，而这些交易还未被确认（被区块打包），那么下一笔交易的nonce应该是
 		// 当前账户的最新nonce+1。
-		// nonce_lock.Lock()
 		nonce, err = client.PendingNonceAt(context.Background(), auth.From)
 		if err != nil {
 			log.Error("client.PendingNonceAt err", "err", err)
@@ -151,10 +150,10 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 			return err
 		}
 
-		lastNonce[tb.ShardID] = nonce
+		lastNonce[tmpShardID] = nonce
 	} else {
-		nonce = lastNonce[tb.ShardID] + 1
-		lastNonce[tb.ShardID] = nonce
+		nonce = lastNonce[tmpShardID] + 1
+		lastNonce[tmpShardID] = nonce
 	}
 	// nonce_lock.Unlock()
 

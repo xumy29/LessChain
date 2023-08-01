@@ -101,6 +101,7 @@ func closeCommittees(recommitIntervalSecs, logProgressInterval int, isLogProgres
 		isInjectDone := true
 		for _, c := range clients {
 			isInjectDone = isInjectDone && c.CanStopV1()
+			c.LogQueues()
 		}
 		for _, com := range committees {
 			isInjectDone = isInjectDone && com.CanStopV1()

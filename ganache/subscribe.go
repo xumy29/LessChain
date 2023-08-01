@@ -90,6 +90,8 @@ func SubscribeEvents(port int, contractAddr common.Address, eventChannel chan *E
 		event := handleMessage(data)
 		if event.Msg == "addTB" {
 			eventChannel <- event
+		} else if event.Msg == "insufficient valid signatures" {
+			log.Error("insufficient valid signatures", "shardID", event.ShardID, "height", event.Height)
 		}
 	}
 }

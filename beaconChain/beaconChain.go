@@ -69,7 +69,7 @@ func (tb *TimeBeacon) Hash() []byte {
 	hash.Write(encoded)
 
 	res := hash.Sum(nil)
-	log.Debug("TimeBeacon AbiEncode", "shardID", tb.ShardID, "height", tb.Height, "got hash", res)
+	// log.Debug("TimeBeacon AbiEncode", "shardID", tb.ShardID, "height", tb.Height, "got hash", res)
 	return res
 }
 
