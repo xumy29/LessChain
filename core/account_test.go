@@ -14,7 +14,7 @@ var (
 )
 
 func TestCreateAccount(t *testing.T) {
-	w3Account = NewW3Account(dataDir)
+	w3Account = NewW3Account(dataDir, 0, 1)
 }
 
 func TestSignHash(t *testing.T) {
@@ -24,5 +24,17 @@ func TestSignHash(t *testing.T) {
 func TestVerifySinature(t *testing.T) {
 	if !VerifySignature(testmsg, sig, *w3Account.GetAccountAddress()) {
 		t.Error("wrong verify sig")
+	}
+}
+
+func TestVRF(t *testing.T) {
+	seed, err := RlpHash("random seed")
+	if err != nil {
+		t.Error("rlpHash fail")
+	}
+	vrfResult := w3Account.GenerateVRFOutput(seed[:])
+	valid := w3Account.VerifyVRFOutput(vrfResult, seed[:])
+	if !valid {
+		t.Error("verify vrf fail.")
 	}
 }

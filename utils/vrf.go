@@ -17,6 +17,8 @@ type VRFResult struct {
 }
 
 // GenerateVRF 使用私钥进行 VRF 计算
+//
+// VRF算法：采用第三方库ecvrf
 func GenerateVRF(privateKey *ecdsa.PrivateKey, input []byte) *VRFResult {
 	output, proof, err := ecvrf.Secp256k1Sha256Tai.Prove(privateKey, input)
 	if err != nil {
@@ -29,6 +31,8 @@ func GenerateVRF(privateKey *ecdsa.PrivateKey, input []byte) *VRFResult {
 }
 
 // VerifyVRF 使用公钥进行 VRF 结果验证
+//
+// VRF算法：采用第三方库ecvrf
 func VerifyVRF(publicKey *ecdsa.PublicKey, input []byte, vrfResult *VRFResult) bool {
 	output, err := ecvrf.Secp256k1Sha256Tai.Verify(publicKey, input, vrfResult.Proof)
 	if err != nil {

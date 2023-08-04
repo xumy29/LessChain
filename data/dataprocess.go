@@ -11,10 +11,10 @@ import (
 	"go-w3chain/log"
 	"go-w3chain/result"
 	"go-w3chain/shard"
+	"go-w3chain/utils"
 	"io"
 	"math/big"
 	"os"
-	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -116,29 +116,15 @@ func InjectTX2Client(clients []*client.Client) {
 func SetAddrTable(shardNum int) {
 	addrTable = make(map[common.Address]int)
 	for _, tx := range alltxs {
-		sid := Addr2Shard(tx.Sender.Hex(), shardNum) // id = 0,1,..
+		sid := utils.Addr2Shard(tx.Sender.Hex(), shardNum) // id = 0,1,..
 		addrTable[*tx.Sender] = sid
-		to_sid := Addr2Shard(tx.Recipient.Hex(), shardNum) // id = 0,1,..
+		to_sid := utils.Addr2Shard(tx.Recipient.Hex(), shardNum) // id = 0,1,..
 		addrTable[*tx.Recipient] = to_sid
 	}
 }
 
 func GetAddrTable() map[common.Address]int {
 	return addrTable
-}
-
-/**
- * 根据 尾数 id 划分
- */
-func Addr2Shard(addr string, shardNum int) int {
-	// 只取地址后五位已绝对够用
-	addr = addr[len(addr)-5:]
-	num, err := strconv.ParseInt(addr, 16, 32)
-	// num, err := strconv.ParseInt(senderAddr, 10, 32)
-	if err != nil {
-		log.Error("Parse address to shardID error!", "err:", err)
-	}
-	return int(num) % shardNum
 }
 
 /**

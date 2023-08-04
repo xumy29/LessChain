@@ -57,7 +57,7 @@ type Node struct {
 	commID int
 }
 
-func NewNode(conf *NodeConfig, parentdataDir string, shardID int, nodeID int) *Node {
+func NewNode(conf *NodeConfig, parentdataDir string, shardID int, nodeID int, shardNum uint32) *Node {
 	node := &Node{
 		config:  conf,
 		DataDir: filepath.Join(parentdataDir, conf.Name),
@@ -65,7 +65,7 @@ func NewNode(conf *NodeConfig, parentdataDir string, shardID int, nodeID int) *N
 		NodeID:  nodeID,
 	}
 
-	node.w3Account = NewW3Account(node.DataDir)
+	node.w3Account = NewW3Account(node.DataDir, uint32(shardID), shardNum)
 	printAccounts(node.w3Account)
 
 	db, err := node.OpenDatabase("chaindata", 0, 0, "", false)

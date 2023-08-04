@@ -59,11 +59,22 @@ func myPrivateKey(shardID int, mode int) (*ecdsa.PrivateKey, error) {
 	return privateKey, nil
 }
 
+// 获取信标链最新区块哈希
+func GetLatestBlockHash(client *ethclient.Client) (common.Hash, uint64) {
+	header, err := client.HeaderByNumber(context.Background(), nil)
+	if err != nil {
+		log.Error("get tbchain latest block header fail", "err", err)
+	}
+	height := header.Number.Uint64()
+	return header.Hash(), height
+}
+
 // 部署合约
 func DeployContract(client *ethclient.Client,
 	mode int,
 	genesisTBs []ContractTB,
-	required_sig_cnt uint32) (common.Address, *abi.ABI, *big.Int, error) {
+	required_sig_cnt uint32,
+	shard_num uint32) (common.Address, *abi.ABI, *big.Int, error) {
 
 	// 编译 Solidity 合约并获取合约 ABI 和字节码
 	contractABI, err := abi.JSON(strings.NewReader(myContractABI()))
@@ -85,7 +96,7 @@ func DeployContract(client *ethclient.Client,
 	}
 
 	// 部署合约
-	address, tx, _, err := bind.DeployContract(auth, contractABI, bytecode, client, genesisTBs, required_sig_cnt)
+	address, tx, _, err := bind.DeployContract(auth, contractABI, bytecode, client, genesisTBs, required_sig_cnt, shard_num)
 	if err != nil {
 		fmt.Println("DeployContract err: ", err)
 		return common.Address{}, nil, big.NewInt(0), err
@@ -112,7 +123,9 @@ var (
 
 // 存储信标到合约
 func AddTB(client *ethclient.Client, contractAddr common.Address,
-	abi *abi.ABI, mode int, tb *ContractTB, sigs [][]byte, signers []common.Address) error {
+	abi *abi.ABI, mode int, tb *ContractTB,
+	sigs [][]byte, vrfs [][]byte, seedHeight uint64,
+	signers []common.Address) error {
 
 	call_lock.Lock()
 	defer call_lock.Unlock()
@@ -121,7 +134,7 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 	tmpShardID = tb.ShardID
 
 	// 构造调用数据
-	callData, err := abi.Pack("addTB", *tb, sigs, signers)
+	callData, err := abi.Pack("addTB", *tb, sigs, vrfs, seedHeight, signers)
 	if err != nil {
 		fmt.Println("abi.Pack err: ", err)
 		return err

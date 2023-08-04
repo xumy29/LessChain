@@ -5,10 +5,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"go-w3chain/log"
 	"io"
-	"log"
 	"os"
 	"reflect"
+	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -28,7 +29,7 @@ func IntToHex(num int64) []byte {
 	buff := new(bytes.Buffer)
 	err := binary.Write(buff, binary.BigEndian, num)
 	if err != nil {
-		log.Panic(err)
+		log.Error("InToHex err", "err", err)
 	}
 
 	return buff.Bytes()
@@ -121,4 +122,18 @@ func GetFieldValues(structValue interface{}) (fields map[string]interface{}) {
 		fields[name.Name] = value.Interface()
 	}
 	return
+}
+
+/**
+ * 根据 尾数 id 划分
+ */
+func Addr2Shard(addr string, shardNum int) int {
+	// 只取地址后四位已绝对够用
+	addr = addr[len(addr)-4:]
+	num, err := strconv.ParseInt(addr, 16, 32)
+	// num, err := strconv.ParseInt(senderAddr, 10, 32)
+	if err != nil {
+		log.Error("Parse address to shardID error!", "err:", err)
+	}
+	return int(num) % shardNum
 }

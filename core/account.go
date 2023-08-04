@@ -29,9 +29,19 @@ type W3Account struct {
 	keyDir      string
 }
 
-func NewW3Account(nodeDatadir string) *W3Account {
+func NewW3Account(nodeDatadir string, expected_shardID uint32, shardNum uint32) *W3Account {
+	var _privateKey *ecdsa.PrivateKey
+	for true {
+		_privateKey = newPrivateKey()
+		addr := crypto.PubkeyToAddress(_privateKey.PublicKey)
+		shardID := utils.Addr2Shard(addr.Hex(), int(shardNum))
+		if shardID == int(expected_shardID) {
+			break
+		}
+	}
+
 	w3Account := &W3Account{
-		privateKey: newPrivateKey(),
+		privateKey: _privateKey,
 		keyDir:     filepath.Join(nodeDatadir, KeyStoreDir),
 	}
 	w3Account.pubKey = &w3Account.privateKey.PublicKey
@@ -84,13 +94,19 @@ func VerifySignature(msgHash []byte, sig []byte, expected_addr common.Address) b
 
 /* 接收一个随机种子，用私钥生成一个随机数输出和对应的证明 */
 func (w3Account *W3Account) GenerateVRFOutput(randSeed []byte) *utils.VRFResult {
-	vrfResult := utils.GenerateVRF(w3Account.privateKey, randSeed)
+	// vrfResult := utils.GenerateVRF(w3Account.privateKey, randSeed)
+	sig := w3Account.SignHash(randSeed)
+	vrfResult := &utils.VRFResult{
+		RandomValue: sig,
+		Proof:       w3Account.accountAddr[:],
+	}
 	return vrfResult
 }
 
 /* 接收随机数输出和对应证明，用公钥验证该随机数输出是否合法 */
 func (w3Account *W3Account) VerifyVRFOutput(vrfResult *utils.VRFResult, randSeed []byte) bool {
-	return utils.VerifyVRF(w3Account.pubKey, randSeed, vrfResult)
+	// return utils.VerifyVRF(w3Account.pubKey, randSeed, vrfResult)
+	return VerifySignature(randSeed, vrfResult.RandomValue, common.BytesToAddress(vrfResult.Proof))
 }
 
 func printAccounts(w3Account *W3Account) {

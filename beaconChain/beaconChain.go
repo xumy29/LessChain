@@ -84,8 +84,10 @@ func (tb *TimeBeacon) Hash() []byte {
 
 type SignedTB struct {
 	TimeBeacon
-	Sigs    [][]byte
-	Signers []common.Address
+	Sigs       [][]byte
+	Vrfs       [][]byte
+	SeedHeight uint64
+	Signers    []common.Address
 }
 
 type ConfirmedTB struct {

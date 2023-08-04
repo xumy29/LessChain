@@ -20,6 +20,10 @@ var (
 	eventChannel chan *eth_chain.Event = make(chan *eth_chain.Event, 100)
 )
 
+func GetEthChainLatestBlockHash(shardID uint32) (common.Hash, uint64) {
+	return eth_chain.GetLatestBlockHash(clients[shardID])
+}
+
 func (tbChain *BeaconChain) AddTimeBeacon2EthChain(signedtb *SignedTB) {
 	tb := signedtb.TimeBeacon
 	// 转化为合约中的结构（目前两结构的成员变量是完全相同的）
@@ -33,7 +37,9 @@ func (tbChain *BeaconChain) AddTimeBeacon2EthChain(signedtb *SignedTB) {
 	if tb.Height == 0 {
 		tbChain.addEthChainGenesisTB(contractTB)
 	} else {
-		eth_chain.AddTB(clients[contractTB.ShardID], contractAddr, contractABI, tbChain.mode, contractTB, signedtb.Sigs, signedtb.Signers)
+		eth_chain.AddTB(clients[contractTB.ShardID], contractAddr,
+			contractABI, tbChain.mode, contractTB, signedtb.Sigs, signedtb.Vrfs,
+			signedtb.SeedHeight, signedtb.Signers)
 	}
 	log.Debug("AddTimeBeacon", "info", signedtb)
 }
@@ -110,7 +116,10 @@ func (tbChain *BeaconChain) deployContract(genesisTBs []eth_chain.ContractTB) {
 		clients = append(clients, client)
 	}
 
-	contractAddr, contractABI, _, err = eth_chain.DeployContract(clients[0], tbChain.mode, genesisTBs, tbChain.required_sig_cnt)
+	contractAddr, contractABI, _, err = eth_chain.DeployContract(clients[0],
+		tbChain.mode, genesisTBs,
+		tbChain.required_sig_cnt,
+		uint32(tbChain.shardNum))
 	if err != nil {
 		log.Error("error occurs during deploying contract.", "err", err)
 		panic(err)
