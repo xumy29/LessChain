@@ -22,7 +22,6 @@ import (
 var (
 	alltxs []*core.Transaction
 
-	txtable   map[uint64]int         // txid 映射到 shardID
 	addrTable map[common.Address]int // 账户地址 映射到 shardID
 
 	tx2ClientTable map[uint64]int // txid 映射到客户端ID
@@ -118,8 +117,10 @@ func SetAddrTable(shardNum int) {
 	for _, tx := range alltxs {
 		sid := utils.Addr2Shard(tx.Sender.Hex(), shardNum) // id = 0,1,..
 		addrTable[*tx.Sender] = sid
+		tx.Sender_sid = uint32(sid)
 		to_sid := utils.Addr2Shard(tx.Recipient.Hex(), shardNum) // id = 0,1,..
 		addrTable[*tx.Recipient] = to_sid
+		tx.Recipient_sid = uint32(to_sid)
 	}
 }
 
@@ -165,4 +166,15 @@ func PrintTXs(num int) {
 		log.Debug("shows TXs", "tx", alltxs[i])
 		// log.Trace("shows TXs", "id", alltxs[i].ID, "broadcast time", alltxs[i].Timestamp, "Confirm time", alltxs[i].ConfirmTimestamp)
 	}
+}
+
+// for debug
+func GetAlltxs() []*core.Transaction {
+	return alltxs
+}
+
+func ClearAll() {
+	alltxs = nil
+	addrTable = nil
+	tx2ClientTable = nil
 }

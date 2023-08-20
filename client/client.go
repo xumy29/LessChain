@@ -100,7 +100,7 @@ func NewClient(id, rollbackHeight, shardNum int) *Client {
 func (c *Client) Start(injectSpeed, recommitIntervalSecs int, addrTable map[common.Address]int) {
 	c.addrTable = addrTable
 	c.wg.Add(1)
-	go c.SendTXs(injectSpeed, addrTable)
+	go c.SendTXs(injectSpeed)
 	// c.wg.Add(1)
 	// go c.CheckExpiredTXs(recommitIntervalSecs)
 }

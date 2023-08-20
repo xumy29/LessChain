@@ -6,34 +6,32 @@ import (
 	"go-w3chain/result"
 	"go-w3chain/utils"
 	"time"
-
-	"github.com/ethereum/go-ethereum/common"
 )
 
 /**
  * 按一定速率发送交易到分片
  * 目前的实现未通过网络传输
  */
-func (c *Client) SendTXs(inject_speed int, addrTable map[common.Address]int) {
+func (c *Client) SendTXs(inject_speed int) {
 	defer c.wg.Done()
-	c.InjectTXs(c.cid, inject_speed, addrTable)
+	c.InjectTXs(c.cid, inject_speed)
 }
 
 /**
  * 按一定速率将客户端的交易注入到分片
  */
-func (c *Client) InjectTXs(cid int, inject_speed int, addrTable map[common.Address]int) {
+func (c *Client) InjectTXs(cid int, inject_speed int) {
 	c.injectCnt = 0
 	resBroadcastMap := make(map[uint64]uint64)
 	// 按秒注入
 	for {
 		time.Sleep(1000 * time.Millisecond) //fixme 应该记录下面的运行时间
 		// start := time.Now().UnixMilli()
-		rollbackTxSentCnt := c.sendRollbackTxs(inject_speed, addrTable)
+		rollbackTxSentCnt := c.sendRollbackTxs(inject_speed)
 
-		cross2TxSentCnt := c.sendCross2Txs(inject_speed-rollbackTxSentCnt, addrTable)
+		cross2TxSentCnt := c.sendCross2Txs(inject_speed - rollbackTxSentCnt)
 
-		c.injectCnt = c.sendPendingTxs(c.injectCnt, inject_speed-rollbackTxSentCnt-cross2TxSentCnt, addrTable, resBroadcastMap)
+		c.injectCnt = c.sendPendingTxs(c.injectCnt, inject_speed-rollbackTxSentCnt-cross2TxSentCnt, resBroadcastMap)
 		if c.CanStopV1() {
 			break
 		}
@@ -49,7 +47,7 @@ func (c *Client) InjectTXs(cid int, inject_speed int, addrTable map[common.Addre
 
 }
 
-func (c *Client) sendRollbackTxs(maxTxNum2Pack int, addrTable map[common.Address]int) int {
+func (c *Client) sendRollbackTxs(maxTxNum2Pack int) int {
 	c.e_lock.Lock()
 	defer c.e_lock.Unlock()
 	rollbackTxSentCnt := utils.Min(maxTxNum2Pack, len(c.cross_tx_expired))
@@ -70,8 +68,7 @@ func (c *Client) sendRollbackTxs(maxTxNum2Pack int, addrTable map[common.Address
 		tx.TXtype = core.RollbackTXType
 		tx.TXStatus = result.DefaultStatus
 		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "client send rollback tx to committee", "time", now)
-		shardidx := addrTable[*tx.Sender]
-		shardtxs[shardidx] = append(shardtxs[shardidx], &tx)
+		shardtxs[tx.Sender_sid] = append(shardtxs[tx.Sender_sid], &tx)
 	}
 	/* 注入到各分片 */
 	for i := 0; i < c.shard_num; i++ {
@@ -83,7 +80,7 @@ func (c *Client) sendRollbackTxs(maxTxNum2Pack int, addrTable map[common.Address
 }
 
 /* 从cross2队列中取交易发送，优先于pending队列, 交易被发送后从队列中移除*/
-func (c *Client) sendCross2Txs(maxTxNum2Pack int, addrTable map[common.Address]int) int {
+func (c *Client) sendCross2Txs(maxTxNum2Pack int) int {
 	c.c2_lock.Lock()
 	defer c.c2_lock.Unlock()
 	cross2TxSentCnt := utils.Min(maxTxNum2Pack, len(c.cross2_txs))
@@ -101,8 +98,7 @@ func (c *Client) sendCross2Txs(maxTxNum2Pack int, addrTable map[common.Address]i
 	for i := 0; i < cross2TxSentCnt; i++ {
 		tx := c.cross2_txs[i]
 		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "client send cross2 to committee", "time", now)
-		shardidx := addrTable[*tx.Recipient]
-		shardtxs[shardidx] = append(shardtxs[shardidx], tx)
+		shardtxs[tx.Recipient_sid] = append(shardtxs[tx.Recipient_sid], tx)
 	}
 	/* 注入到各分片 */
 	for i := 0; i < c.shard_num; i++ {
@@ -114,7 +110,7 @@ func (c *Client) sendCross2Txs(maxTxNum2Pack int, addrTable map[common.Address]i
 }
 
 /* 从pending队列中取交易发送 */
-func (c *Client) sendPendingTxs(cnt, maxTxNum2Pack int, addrTable map[common.Address]int, resBroadcastMap map[uint64]uint64) int {
+func (c *Client) sendPendingTxs(cnt, maxTxNum2Pack int, resBroadcastMap map[uint64]uint64) int {
 	if maxTxNum2Pack == 0 {
 		return cnt
 	}
@@ -131,7 +127,7 @@ func (c *Client) sendPendingTxs(cnt, maxTxNum2Pack int, addrTable map[common.Add
 	for i := cnt; i < upperBound; i++ {
 		tx := c.txs[i]
 		// 根据发送地址和接收地址确认交易类型
-		if addrTable[*tx.Sender] == addrTable[*tx.Recipient] {
+		if tx.Sender_sid == tx.Recipient_sid {
 			tx.TXtype = core.IntraTXType
 		} else {
 			tx.TXtype = core.CrossTXType1
@@ -143,8 +139,7 @@ func (c *Client) sendPendingTxs(cnt, maxTxNum2Pack int, addrTable map[common.Add
 		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "client broadcast to committee", "time", now)
 
 		resBroadcastMap[tx.ID] = tx.Timestamp
-		shardidx := addrTable[*tx.Sender]
-		shardtxs[shardidx] = append(shardtxs[shardidx], tx)
+		shardtxs[tx.Sender_sid] = append(shardtxs[tx.Sender_sid], tx)
 
 	}
 	/* 注入到各分片 */

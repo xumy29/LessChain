@@ -19,7 +19,7 @@
     "Height2Reconfig": 2000,
 
     "TbchainBlockIntervalSecs": 10,
-    "Height2Rollback": 6,
+    "Height2Rollback": 4,
 
     "BeaconChainMode": 2,
     "BeaconChainPort": 8545,

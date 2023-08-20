@@ -49,8 +49,8 @@ type Transaction struct {
 	 */
 	Cross1ConfirmHeight uint64
 
-	Sender_sid    uint64
-	Recipient_sid uint64
+	Sender_sid    uint32
+	Recipient_sid uint32
 	TXStatus      uint64
 
 	/* 客户端信息 */

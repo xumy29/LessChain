@@ -1,6 +1,6 @@
 *.exe
 test.go
-draw.py
+draw*.py
 newest_result*
 results
 logs
@@ -8,3 +8,4 @@ figs
 lessChain*
 */geth-chain-data/data/geth/*
 *DS_Store
+*.log
