@@ -121,6 +121,7 @@ type BeaconChain struct {
 
 	contract         *Contract
 	required_sig_cnt uint32
+	addrs            [][]common.Address
 }
 
 /** 新建一条信标链
@@ -139,6 +140,7 @@ func NewTBChain(mode, chainID, chainPort, blockIntervalSecs, shardNum, required 
 		stopCh:            make(chan struct{}),
 		contract:          NewContract(shardNum, required),
 		required_sig_cnt:  uint32(required),
+		addrs:             make([][]common.Address, shardNum),
 	}
 	log.Info("NewTBChain")
 	tbChain.wg.Add(1)
@@ -156,24 +158,6 @@ func (tbChain *BeaconChain) SetMessageHub(hub core.MessageHub) {
 	tbChain.messageHub = hub
 }
 
-func (tbChain *BeaconChain) AddGenesisTB(signedTb *SignedTB) {
-	tbChain.lock.Lock()
-	defer tbChain.lock.Unlock()
-	tb := signedTb.TimeBeacon
-	tbs_shard := tbChain.tbs[int(tb.ShardID)]
-	if tb.Height != uint64(len(tbs_shard)) {
-		log.Warn("Could not add time beacon because the height didn't match!", "expected", len(tbs_shard), "got", tb.Height)
-	}
-	confirmedTb := &ConfirmedTB{
-		TimeBeacon:    tb,
-		ConfirmTime:   uint64(time.Now().Unix()),
-		ConfirmHeight: 0,
-	}
-	tbChain.tbs[int(tb.ShardID)] = append(tbChain.tbs[int(tb.ShardID)], confirmedTb)
-	log.Debug("AddGenesisTimeBeacon", "info", tb)
-
-}
-
 func (tbChain *BeaconChain) AddTimeBeacon(tb *SignedTB) {
 	if tbChain.mode == 0 {
 		tbChain.AddTimeBeacon2SimulationChain(tb)
@@ -181,6 +165,15 @@ func (tbChain *BeaconChain) AddTimeBeacon(tb *SignedTB) {
 		tbChain.AddTimeBeacon2EthChain(tb)
 	} else {
 		log.Error("unknown beaconChain mode!", "mode", tbChain.mode)
+	}
+}
+
+func (tbChain *BeaconChain) SetAddrs(addrs []common.Address, vrfs [][]byte, seedHeight uint64, shardID uint32) {
+	if tbChain.mode == 1 || tbChain.mode == 2 {
+		tbChain.addrs[shardID] = addrs
+		if seedHeight > 0 {
+			tbChain.AdjustEthChainRecordedAddrs(addrs, vrfs, seedHeight, shardID)
+		}
 	}
 }
 
@@ -202,6 +195,24 @@ func (tbChain *BeaconChain) AddTimeBeacon2SimulationChain(tb *SignedTB) {
 	}
 	tbChain.tbs_new[int(tb.ShardID)] = append(tbChain.tbs_new[int(tb.ShardID)], tb)
 	log.Debug("AddTimeBeacon", "info", tb)
+}
+
+func (tbChain *BeaconChain) AddGenesisTB(signedTb *SignedTB) {
+	tbChain.lock.Lock()
+	defer tbChain.lock.Unlock()
+	tb := signedTb.TimeBeacon
+	tbs_shard := tbChain.tbs[int(tb.ShardID)]
+	if tb.Height != uint64(len(tbs_shard)) {
+		log.Warn("Could not add time beacon because the height didn't match!", "expected", len(tbs_shard), "got", tb.Height)
+	}
+	confirmedTb := &ConfirmedTB{
+		TimeBeacon:    tb,
+		ConfirmTime:   uint64(time.Now().Unix()),
+		ConfirmHeight: 0,
+	}
+	tbChain.tbs[int(tb.ShardID)] = append(tbChain.tbs[int(tb.ShardID)], confirmedTb)
+	log.Debug("AddGenesisTimeBeacon", "info", tb)
+
 }
 
 func (tbChain *BeaconChain) GetTimeBeacon(shardID int, height uint64) *ConfirmedTB {

@@ -61,6 +61,10 @@ func newWorker(config *core.CommitteeConfig, shardID uint64) *worker {
 	return worker
 }
 
+func (w *worker) setCommittee(com *Committee) {
+	w.com = com
+}
+
 //////////////////////////////////////////
 // worker 生命周期函数
 //////////////////////////////////////////
@@ -113,8 +117,12 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		w.broadcastTbInCommittee(block)
 
 		timer.Reset(recommit)
-		/* 通知committee 有新区块产生 */
+
+		/* 通知committee 有新区块产生
+		   当出完一个块需要重组时，worker会阻塞在这个函数内
+		*/
 		w.InformNewBlock(block)
+
 	}
 
 	for {

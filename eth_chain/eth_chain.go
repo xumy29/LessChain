@@ -69,12 +69,22 @@ func GetLatestBlockHash(client *ethclient.Client) (common.Hash, uint64) {
 	return header.Hash(), height
 }
 
+func GetBlockHash(client *ethclient.Client, height uint64) common.Hash {
+	header, err := client.HeaderByNumber(context.Background(), big.NewInt(int64(height)))
+	if err != nil {
+		log.Error("get tbchain block header fail", "height", height, "err", err)
+	}
+	return header.Hash()
+}
+
 // 部署合约
 func DeployContract(client *ethclient.Client,
 	mode int,
 	genesisTBs []ContractTB,
 	required_sig_cnt uint32,
-	shard_num uint32) (common.Address, *abi.ABI, *big.Int, error) {
+	shard_num uint32,
+	addrs [][]common.Address,
+) (common.Address, *abi.ABI, *big.Int, error) {
 
 	// 编译 Solidity 合约并获取合约 ABI 和字节码
 	contractABI, err := abi.JSON(strings.NewReader(myContractABI()))
@@ -96,7 +106,8 @@ func DeployContract(client *ethclient.Client,
 	}
 
 	// 部署合约
-	address, tx, _, err := bind.DeployContract(auth, contractABI, bytecode, client, genesisTBs, required_sig_cnt, shard_num)
+	log.Debug("addrs", "addr", addrs)
+	address, tx, _, err := bind.DeployContract(auth, contractABI, bytecode, client, genesisTBs, required_sig_cnt, shard_num, addrs)
 	if err != nil {
 		fmt.Println("DeployContract err: ", err)
 		return common.Address{}, nil, big.NewInt(0), err
@@ -186,7 +197,7 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 	}
 
 	// mustSend：循环发送直到交易发送成功
-	for true {
+	for {
 		tx := types.NewTransaction(nonce, contractAddr, big.NewInt(0), auth.GasLimit, lowestGasPrice, callData)
 
 		// 签名交易
@@ -217,16 +228,103 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 		}
 	}
 
-	// log.Debug("sendTransaction success!", "txtype", "AddTB", "shardID", tb.ShardID, "height", tb.Height,
-	// 	"gasPrice", lowestGasPrice, "nonce", nonce)
-
-	// pendingCnt, err := client.PendingTransactionCount(context.Background())
-	// if err != nil {
-	// 	log.Debug("client.PendingTransactionCount err", "err", err)
-	// } else {
-	// 	log.Debug("client.PendingTransactionCount", "cnt", pendingCnt)
-	// }
 	return nil
+}
+
+func AdjustRecordedAddrs(client *ethclient.Client, contractAddr common.Address,
+	abi *abi.ABI, mode int,
+	shardID uint32, addrs []common.Address,
+	vrfs [][]byte, seedHeight uint64,
+) error {
+
+	call_lock.Lock()
+	defer call_lock.Unlock()
+	// 构造调用数据
+	callData, err := abi.Pack("adjustRecordedAddrs", addrs, vrfs, seedHeight)
+	if err != nil {
+		fmt.Println("abi.Pack err: ", err)
+		return err
+	}
+
+	// 通过私钥构造签名者
+	privateKey, err := myPrivateKey(int(shardID), mode)
+	if err != nil {
+		fmt.Println("get myPrivateKey err: ", err)
+		return err
+	}
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(int64(chainID)))
+	if err != nil {
+		fmt.Println("bind.NewKeyedTransactorWithChainID err: ", err)
+		return err
+	}
+
+	// 设置交易参数
+	auth.GasLimit = uint64(30000000) // 设置 gas 限制
+	auth.Value = big.NewInt(0)       // 设置发送的以太币数量（如果有的话）
+
+	var nonce uint64
+	_, ok := lastNonce[shardID]
+	if !ok {
+		// 如果在之前的交易中使用了相同的账户地址，而这些交易还未被确认（被区块打包），那么下一笔交易的nonce应该是
+		// 当前账户的最新nonce+1。
+		nonce, err = client.PendingNonceAt(context.Background(), auth.From)
+		if err != nil {
+			log.Error("client.PendingNonceAt err", "err", err)
+			fmt.Println("client.PendingNonceAt err: ", err)
+			return err
+		}
+
+		lastNonce[shardID] = nonce
+	} else {
+		nonce = lastNonce[shardID] + 1
+		lastNonce[shardID] = nonce
+	}
+	// nonce_lock.Unlock()
+
+	if lowestGasPrice.Uint64() == 0 {
+		gasPrice, err := client.SuggestGasPrice(context.Background())
+		if err != nil {
+			log.Error("client.SuggestGasPrice err", "err", err)
+			fmt.Println("client.SuggestGasPrice err: ", err)
+			return err
+		}
+		lowestGasPrice = gasPrice
+	}
+
+	// mustSend：循环发送直到交易发送成功
+	for {
+		tx := types.NewTransaction(nonce, contractAddr, big.NewInt(0), auth.GasLimit, lowestGasPrice, callData)
+
+		// 签名交易
+		signedTx, err := auth.Signer(auth.From, tx)
+		if err != nil {
+			log.Error("auth.Signer err", "err", err)
+			fmt.Println("auth.Signer err: ", err)
+			return err
+		}
+
+		// 发送交易
+		err = client.SendTransaction(context.Background(), signedTx)
+		if err != nil {
+			log.Debug("client.SendTransaction err", "err", err, "txtype", "adjustRecordedAddrs", "shardID", shardID, "seedHeight", seedHeight,
+				"gasPrice", lowestGasPrice, "nonce", nonce)
+			fmt.Println("client.SendTransaction err: ", err)
+
+			if err.Error() != "transaction underpriced" {
+				return err
+			} else {
+				// 每次提升10%的手续费，并将该手续费作为最低手续费
+				toAdd := new(big.Int).Div(lowestGasPrice, big.NewInt(10))
+				lowestGasPrice = new(big.Int).Add(lowestGasPrice, toAdd)
+			}
+		} else {
+			// fmt.Printf("signedTX: %v\n", signedTx.Hash().Hex())
+			break
+		}
+	}
+
+	return nil
+
 }
 
 // 从合约读取信标

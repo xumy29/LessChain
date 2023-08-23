@@ -55,6 +55,8 @@ type Node struct {
 	shardID int
 	/* 节点所在委员会的ID */
 	commID int
+	/* 节点上一次运行vrf得到的结果 */
+	VrfValue []byte
 }
 
 func NewNode(conf *NodeConfig, parentdataDir string, shardID int, nodeID int, shardNum uint32) *Node {
@@ -62,10 +64,11 @@ func NewNode(conf *NodeConfig, parentdataDir string, shardID int, nodeID int, sh
 		config:  conf,
 		DataDir: filepath.Join(parentdataDir, conf.Name),
 		shardID: shardID,
+		commID:  shardID,
 		NodeID:  nodeID,
 	}
 
-	node.w3Account = NewW3Account(node.DataDir, uint32(shardID), shardNum)
+	node.w3Account = NewW3Account(node.DataDir)
 	printAccounts(node.w3Account)
 
 	db, err := node.OpenDatabase("chaindata", 0, 0, "", false)

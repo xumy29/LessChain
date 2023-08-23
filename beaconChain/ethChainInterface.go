@@ -24,6 +24,10 @@ func GetEthChainLatestBlockHash(shardID uint32) (common.Hash, uint64) {
 	return eth_chain.GetLatestBlockHash(clients[shardID])
 }
 
+func GetEthChainBlockHash(shardID uint32, height uint64) common.Hash {
+	return eth_chain.GetBlockHash(clients[shardID], height)
+}
+
 func (tbChain *BeaconChain) AddTimeBeacon2EthChain(signedtb *SignedTB) {
 	tb := signedtb.TimeBeacon
 	// 转化为合约中的结构（目前两结构的成员变量是完全相同的）
@@ -37,11 +41,22 @@ func (tbChain *BeaconChain) AddTimeBeacon2EthChain(signedtb *SignedTB) {
 	if tb.Height == 0 {
 		tbChain.addEthChainGenesisTB(contractTB)
 	} else {
-		eth_chain.AddTB(clients[contractTB.ShardID], contractAddr,
+		err := eth_chain.AddTB(clients[contractTB.ShardID], contractAddr,
 			contractABI, tbChain.mode, contractTB, signedtb.Sigs, signedtb.Vrfs,
 			signedtb.SeedHeight, signedtb.Signers)
+		if err != nil {
+			log.Error("eth_chain.AddTB err", "err", err)
+		}
 	}
 	log.Debug("AddTimeBeacon", "info", signedtb)
+}
+
+func (tbChain *BeaconChain) AdjustEthChainRecordedAddrs(addrs []common.Address, vrfs [][]byte, seedHeight uint64, shardID uint32) {
+	err := eth_chain.AdjustRecordedAddrs(clients[shardID], contractAddr,
+		contractABI, tbChain.mode, shardID, addrs, vrfs, seedHeight)
+	if err != nil {
+		log.Error("eth_chain.AdjustRecordedAddrs err", "err", err)
+	}
 }
 
 func (tbChain *BeaconChain) generateEthChainBlock() *TBBlock {
@@ -119,7 +134,8 @@ func (tbChain *BeaconChain) deployContract(genesisTBs []eth_chain.ContractTB) {
 	contractAddr, contractABI, _, err = eth_chain.DeployContract(clients[0],
 		tbChain.mode, genesisTBs,
 		tbChain.required_sig_cnt,
-		uint32(tbChain.shardNum))
+		uint32(tbChain.shardNum),
+		tbChain.addrs)
 	if err != nil {
 		log.Error("error occurs during deploying contract.", "err", err)
 		panic(err)

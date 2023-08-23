@@ -137,3 +137,10 @@ func Addr2Shard(addr string, shardNum int) int {
 	}
 	return int(num) % shardNum
 }
+
+/* 将vrf值映射到分片ID
+此方法暂时只适用于基于ecdsa的vrf算法
+*/
+func VrfValue2Shard(value []byte, shardNum uint32) uint32 {
+	return uint32(uint8(value[0])) % shardNum
+}

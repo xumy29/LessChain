@@ -26,6 +26,7 @@ type Committee struct {
 	injectNotDone      int32
 	tbchain_height     uint64
 	tbchain_block_hash common.Hash
+	to_reconfig        bool // 收到特定高度的信标链区块后设为true，准备重组
 }
 
 func NewCommittee(shardID uint64, clientCnt int, nodes []*core.Node, config *core.CommitteeConfig) *Committee {
@@ -39,10 +40,11 @@ func NewCommittee(shardID uint64, clientCnt int, nodes []*core.Node, config *cor
 		Nodes:         nodes,
 		txPool:        pool,
 		injectNotDone: int32(clientCnt),
+		to_reconfig:   false,
 	}
 	log.Info("NewCommittee", "shardID", shardID, "nodeIDs", utils.GetFieldValueforList(nodes, "NodeID"))
-	worker.com = com
-	pool.com = com
+	worker.setCommittee(com)
+	pool.setCommittee(com)
 
 	return com
 }
@@ -55,13 +57,26 @@ func (com *Committee) Close() {
 	com.worker.close()
 }
 
+func (com *Committee) SetInjectTXDone() {
+	atomic.AddInt32(&com.injectNotDone, -1)
+}
+
+/* 交易注入完成且交易池空即可停止 */
+func (com *Committee) CanStopV1() bool {
+	return com.CanStopV2() && com.txPool.Empty()
+}
+
+/* 交易注入完成即可停止 */
+func (com *Committee) CanStopV2() bool {
+	return com.injectNotDone == 0
+}
+
 /**
- * 判断是否达到重组条件
- * 当committee触发重组时，该方法会被阻塞，直到重组完成
+ * 刚出完一个块判断是否达到重组条件
+ * 当committee触发重组时，会在该方法会被阻塞，直到重组完成
  */
 func (com *Committee) NewBlockGenerated(block *core.Block) {
-	height := block.NumberU64()
-	if height > 0 && height%uint64(com.config.Height2Reconfig) == 0 {
+	if com.to_reconfig {
 		previousNodes := utils.GetFieldValueforList(com.Nodes, "NodeID")
 
 		com.SendReconfigMsg()
@@ -75,13 +90,24 @@ func (com *Committee) NewBlockGenerated(block *core.Block) {
 			"previous nodeIDs", previousNodes,
 			"now nodeIDs", utils.GetFieldValueforList(com.Nodes, "NodeID"),
 		)
+		com.to_reconfig = false
 	}
 }
 
 func (com *Committee) Reconfig(nodes []*core.Node) {
 	com.Nodes = nodes
-	// 委员会重组后，清空交易池，并标记被丢弃的交易
-	com.txPool = com.txPool.Reset()
+
+	// 发起交易调用合约，更新委员会节点地址列表
+	addrs := make([]common.Address, len(nodes))
+	vrfs := make([][]byte, len(nodes))
+	for i, node := range nodes {
+		addrs[i] = *node.GetAccount().GetAccountAddress()
+		vrfs[i] = node.VrfValue
+	}
+	com.AdjustRecordedAddrs(addrs, vrfs, com.tbchain_height)
+
+	// // 委员会重组后，清空交易池，并标记被丢弃的交易
+	// com.txPool = com.txPool.Reset()
 }
 
 func (com *Committee) InjectTXs(txs []*core.Transaction) {
@@ -124,20 +150,27 @@ func (com *Committee) AddTBs(tbblock *beaconChain.TBBlock) {
 	com.tbchain_block_hash = hash
 	com.tbchain_height = tbblock.Height
 
+	// 收到特定高度的信标链区块后准备重组
+	if com.tbchain_height > 0 && com.tbchain_height%uint64(com.config.Height2Reconfig) == 0 {
+		com.to_reconfig = true
+	}
 }
 
-func (com *Committee) SetInjectTXDone() {
-	atomic.AddInt32(&com.injectNotDone, -1)
+/* 向信标链发起交易，更新委员会地址列表
+ */
+func (com *Committee) AdjustRecordedAddrs(addrs []common.Address, vrfs [][]byte, seedHeight uint64) {
+	data := &AdjustAddrs{
+		Addrs:      addrs,
+		Vrfs:       vrfs,
+		SeedHeight: seedHeight,
+	}
+	com.messageHub.Send(core.MsgTypeCommitteeAdjustAddrs, com.shardID, data, nil)
 }
 
-/* 交易注入完成且交易池空即可停止 */
-func (com *Committee) CanStopV1() bool {
-	return com.CanStopV2() && com.txPool.Empty()
-}
-
-/* 交易注入完成即可停止 */
-func (com *Committee) CanStopV2() bool {
-	return com.injectNotDone == 0
+type AdjustAddrs struct {
+	Addrs      []common.Address
+	Vrfs       [][]byte
+	SeedHeight uint64
 }
 
 /**
@@ -192,7 +225,7 @@ func (com *Committee) AddTB(tb *beaconChain.SignedTB) {
 }
 
 func (com *Committee) SendReconfigMsg() {
-	com.messageHub.Send(core.MsgTypeReady4Reconfig, com.shardID, nil, nil)
+	com.messageHub.Send(core.MsgTypeReady4Reconfig, com.shardID, com.tbchain_height, nil)
 }
 
 func (com *Committee) SetReconfigRes(res []*core.Node) {

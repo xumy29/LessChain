@@ -5,6 +5,8 @@ const (
 	MsgTypeCommitteeReply2Client
 	MsgTypeSetInjectDone2Committee
 	MsgTypeCommitteeAddTB
+	MsgTypeCommitteeInitialAddrs
+	MsgTypeCommitteeAdjustAddrs
 	MsgTypeGetTB
 	MsgTypeComGetStateFromShard
 	MsgTypeAddBlock2Shard

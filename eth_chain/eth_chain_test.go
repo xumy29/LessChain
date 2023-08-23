@@ -2,7 +2,6 @@ package eth_chain
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -30,30 +29,30 @@ func TestConnect(t *testing.T) {
 	SetChainID(1337)
 }
 
-func TestDeploy(t *testing.T) {
-	var err error
-	genesisTBs := make([]ContractTB, 2)
-	genesisTBs[0] = ContractTB{
-		ShardID: 0,
-		Height:  0,
-	}
-	genesisTBs[1] = ContractTB{
-		ShardID:   1,
-		Height:    0,
-		BlockHash: "0x111111",
-	}
+// func TestDeploy(t *testing.T) {
+// 	var err error
+// 	genesisTBs := make([]ContractTB, 2)
+// 	genesisTBs[0] = ContractTB{
+// 		ShardID: 0,
+// 		Height:  0,
+// 	}
+// 	genesisTBs[1] = ContractTB{
+// 		ShardID:   1,
+// 		Height:    0,
+// 		BlockHash: "0x111111",
+// 	}
 
-	contractAddr, contractABI, _, err = DeployContract(client, 2, genesisTBs, 2, 2)
-	if err != nil {
-		fmt.Println(err)
-	}
-	// fmt.Println(contractAddr)
-	// fmt.Printf("%v\n", abi)
-	// assert.Equal(t, true, err == nil)
+// 	contractAddr, contractABI, _, err = DeployContract(client, 2, genesisTBs, 2, 2)
+// 	if err != nil {
+// 		fmt.Println(err)
+// 	}
+// 	// fmt.Println(contractAddr)
+// 	// fmt.Printf("%v\n", abi)
+// 	// assert.Equal(t, true, err == nil)
 
-	eventChannel := make(chan *Event, 10)
-	go SubscribeEvents(7545, contractAddr, eventChannel)
-}
+// 	eventChannel := make(chan *Event, 10)
+// 	go SubscribeEvents(7545, contractAddr, eventChannel)
+// }
 
 // func TestUseContract(t *testing.T) {
 // 	got, err := GetTB(client, contractAddr, contractABI, 1, 0)

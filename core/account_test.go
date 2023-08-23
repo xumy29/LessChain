@@ -14,7 +14,7 @@ var (
 )
 
 func TestCreateAccount(t *testing.T) {
-	w3Account = NewW3Account(dataDir, 0, 1)
+	w3Account = NewW3Account(dataDir)
 }
 
 func TestSignHash(t *testing.T) {

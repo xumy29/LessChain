@@ -125,6 +125,12 @@ func (s *Shard) AddGenesisTB() {
 		TimeBeacon: *tb,
 		// 创世区块暂时不需要签名
 	}
+	addrs := make([]common.Address, 0)
+	for _, node := range s.nodes {
+		addrs = append(addrs, *node.GetAccount().GetAccountAddress())
+	}
+	s.messageHub.Send(core.MsgTypeCommitteeInitialAddrs, uint64(s.shardID), addrs, nil)
+
 	s.messageHub.Send(core.MsgTypeCommitteeAddTB, 0, signedTb, nil)
 }
 

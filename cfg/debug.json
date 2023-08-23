@@ -8,15 +8,15 @@
     "ClientNum": 1,
 
     "ShardNum": 4,
-    "ShardSize": 4,
+    "ShardSize": 6,
     "MultiSignRequiredNum": 1,
 
     "MaxTxNum": 5000,
-    "InjectSpeed": 100,
+    "InjectSpeed": 300,
     "RecommitInterval": 3,
     "MaxBlockTXSize": 200,
 
-    "Height2Reconfig": 2000,
+    "Height2Reconfig": 2,
 
     "TbchainBlockIntervalSecs": 10,
     "Height2Rollback": 4,
@@ -25,5 +25,5 @@
     "BeaconChainPort": 8545,
     "BeaconChainID": 1337,
 
-    "DatasetDir": "/Users/xumy/Desktop/huanglab/blockchain/dataset/len4_data2.csv"
+    "DatasetDir": "data/len4_data2.csv"
 }

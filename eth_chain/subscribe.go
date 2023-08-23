@@ -126,6 +126,12 @@ func handleMessage(data string) *Event {
 					"internalType": "uint64",
 					"name": "height",
 					"type": "uint64"
+				},
+				{
+					"indexed": false,
+					"internalType": "address",
+					"name": "addr",
+					"type": "address"
 				}
 			],
 			"name": "LogMessage",
@@ -145,22 +151,25 @@ func handleMessage(data string) *Event {
 	}
 
 	// 读取数据前可以先打印看看有哪些字段
+	// 而且需要检查eventABI是否正确
 	// fmt.Printf("decodedData: %v\n", decodedData)
 
 	message := decodedData["message"].(string)
 	shardID := decodedData["shardID"].(uint32)
 	height := decodedData["height"].(uint64)
 
-	// addr := common.Address{}
-	// if decodedData["address"] != nil {
-	// 	addr = decodedData["address"].(common.Address)
-	// }
+	addr := common.Address{}
+	if decodedData["addr"] != nil {
+		addr = decodedData["addr"].(common.Address)
+	}
 	// addr := decodedData["addr"].([32]byte)
 
 	fmt.Printf("Message: %s\t", message)
 	fmt.Printf("ShardID: %d\t", shardID)
 	fmt.Printf("Height: %d\n", height)
-	// fmt.Printf("Address: %v\n", addr)
+	if (addr != common.Address{}) {
+		fmt.Printf("Address: %v\n", addr)
+	}
 
 	return &Event{
 		Msg:     message,

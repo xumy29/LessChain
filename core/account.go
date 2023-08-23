@@ -29,16 +29,8 @@ type W3Account struct {
 	keyDir      string
 }
 
-func NewW3Account(nodeDatadir string, expected_shardID uint32, shardNum uint32) *W3Account {
-	var _privateKey *ecdsa.PrivateKey
-	for true {
-		_privateKey = newPrivateKey()
-		addr := crypto.PubkeyToAddress(_privateKey.PublicKey)
-		shardID := utils.Addr2Shard(addr.Hex(), int(shardNum))
-		if shardID == int(expected_shardID) {
-			break
-		}
-	}
+func NewW3Account(nodeDatadir string) *W3Account {
+	_privateKey := newPrivateKey()
 
 	w3Account := &W3Account{
 		privateKey: _privateKey,
@@ -142,6 +134,7 @@ var GethChainAccounts []string = []string{
 	"f8108cd35deae7352e45ec693cdea8e38e3bd85bbbaf85332e5287af228b836d",
 	"c9856af76f135a475350b5727dad741352f0418c4a7f521c3e8cc9f5adf2a074",
 	"ce0f724e265d4814dd65e7d70287915d3b10915333db7b6787cd35ed5c3b1b19",
+	"077c0fd242868369ca2767c340a7b7c0614266aa3ac046b5bae9b86302c50737",
 }
 
 /* 下面两个函数是不用以太坊库实现的签名和验证方法 */

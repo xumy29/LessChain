@@ -31,6 +31,10 @@ func NewTxPool(shardID int) *TxPool {
 	return pool
 }
 
+func (pool *TxPool) setCommittee(com *Committee) {
+	pool.com = com
+}
+
 /* 重置交易池，返回新的交易池 */
 func (pool *TxPool) Reset() *TxPool {
 	// 标记交易池中剩下的交易为 dropped
@@ -47,8 +51,9 @@ func (pool *TxPool) Reset() *TxPool {
 	result.SetTXReceiptV2(table)
 
 	// 生成新的交易池
-	return NewTxPool(pool.shardID)
-
+	newpool := NewTxPool(pool.shardID)
+	newpool.setCommittee(pool.com)
+	return newpool
 }
 
 /* 向交易池中添加交易，调用此方法的方法必须加锁 */

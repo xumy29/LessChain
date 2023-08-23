@@ -9,6 +9,8 @@ import (
 	"go-w3chain/result"
 	"go-w3chain/shard"
 	"go-w3chain/utils"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 type GoodMessageHub struct {
@@ -58,6 +60,12 @@ func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, call
 	case core.MsgTypeCommitteeAddTB:
 		tb := msg.(*beaconChain.SignedTB)
 		tbChain_ref.AddTimeBeacon(tb)
+	case core.MsgTypeCommitteeInitialAddrs:
+		addrs := msg.([]common.Address)
+		tbChain_ref.SetAddrs(addrs, nil, 0, uint32(id))
+	case core.MsgTypeCommitteeAdjustAddrs:
+		data := msg.(*committee.AdjustAddrs)
+		tbChain_ref.SetAddrs(data.Addrs, data.Vrfs, data.SeedHeight, uint32(id))
 		// committee、client <- tbchain
 	case core.MsgTypeGetTB:
 		height := msg.(uint64)
@@ -76,7 +84,8 @@ func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, call
 		shard.Addblock(block)
 		// committee -> hub
 	case core.MsgTypeReady4Reconfig:
-		toReconfig()
+		seedHeight := msg.(uint64)
+		toReconfig(seedHeight)
 	case core.MsgTypeTBChainPushTB2Clients:
 		block := msg.(*beaconChain.TBBlock)
 		for _, c := range clients_ref {
