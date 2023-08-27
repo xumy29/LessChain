@@ -54,6 +54,8 @@ func (com *Committee) Start() {
 }
 
 func (com *Committee) Close() {
+	// 避免退出时因reconfigCh阻塞导致worker无法退出
+	com.reconfigCh <- nil
 	com.worker.close()
 }
 

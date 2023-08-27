@@ -48,7 +48,7 @@ func (tbChain *BeaconChain) AddTimeBeacon2EthChain(signedtb *SignedTB) {
 			log.Error("eth_chain.AddTB err", "err", err)
 		}
 	}
-	log.Debug("AddTimeBeacon", "info", signedtb)
+	log.Debug("AddTbTXSent", "info", signedtb)
 }
 
 func (tbChain *BeaconChain) AdjustEthChainRecordedAddrs(addrs []common.Address, vrfs [][]byte, seedHeight uint64, shardID uint32) {
@@ -57,6 +57,7 @@ func (tbChain *BeaconChain) AdjustEthChainRecordedAddrs(addrs []common.Address, 
 	if err != nil {
 		log.Error("eth_chain.AdjustRecordedAddrs err", "err", err)
 	}
+	log.Debug("AdjustAddrsTXSent", "shardID", shardID, "seedHeight", seedHeight)
 }
 
 func (tbChain *BeaconChain) generateEthChainBlock() *TBBlock {
@@ -98,7 +99,7 @@ func (tbChain *BeaconChain) generateEthChainBlock() *TBBlock {
 
 	tbChain.tbs_new = make(map[int][]*SignedTB)
 
-	log.Debug("tbchain generate block", "info", block)
+	log.Debug("TBchainGenerateBlock", "info", block)
 	return block
 }
 

@@ -124,7 +124,7 @@ var GanacheChainAccounts []string = []string{
 }
 
 // geth 私链上有钱的账户私钥，用来发起提交信标的交易
-// 目前每个账户负责一个委员会的交易
+// 目前每个账户负责一个或多个委员会的交易
 var GethChainAccounts []string = []string{
 	"a65d8aa17661de2eebf80c481c1d359558c3674fdc6ad916ff56e468710f5fb9",
 	"4454d10f67d9470646044fd8bad1f0fc6f1ba7f20045695389b38844c0e1f835",
@@ -134,7 +134,6 @@ var GethChainAccounts []string = []string{
 	"f8108cd35deae7352e45ec693cdea8e38e3bd85bbbaf85332e5287af228b836d",
 	"c9856af76f135a475350b5727dad741352f0418c4a7f521c3e8cc9f5adf2a074",
 	"ce0f724e265d4814dd65e7d70287915d3b10915333db7b6787cd35ed5c3b1b19",
-	"077c0fd242868369ca2767c340a7b7c0614266aa3ac046b5bae9b86302c50737",
 }
 
 /* 下面两个函数是不用以太坊库实现的签名和验证方法 */

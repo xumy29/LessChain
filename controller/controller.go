@@ -47,6 +47,9 @@ func Main(cfgfilename string) {
 	beaconChainMode := cfg.BeaconChainMode
 	beaconChainID := cfg.BeaconChainID
 	beaconChainPort := cfg.BeaconChainPort
+	/* mode=0表示所有交易执行完成才退出，mode=1表示交易停止注入则退出 */
+	exitMode := cfg.ExitMode
+	reconfigTime := cfg.ReconfigTime
 
 	/* 设置日志存储路径 */
 	if LogFile == "" {
@@ -74,11 +77,11 @@ func Main(cfgfilename string) {
 	data.LoadETHData(datasetDir, maxTxNum)
 
 	/* 创建一个消息中心 */
-	messageHub := messageHub.NewMessageHub()
+	messageHub := messageHub.NewMessageHub(reconfigTime)
 
 	/* 初始化客户端，分配交易到客户端 */
 	clients = make([]*client.Client, clientNum)
-	newClients(rollbackHeight, shardNum)
+	newClients(rollbackHeight, shardNum, exitMode)
 
 	data.SetTX2ClientTable(clientNum)
 	data.InjectTX2Client(clients)
@@ -122,7 +125,7 @@ func Main(cfgfilename string) {
 	startClients(injectSpeed, recommitIntervalSecs, data.GetAddrTable())
 
 	/* 循环判断各客户端和委员会能否停止, 若能则停止；循环打印进度 */
-	closeCommittees(recommitIntervalSecs, ProgressInterval, IsLogProgress)
+	closeCommittees(recommitIntervalSecs, ProgressInterval, IsLogProgress, exitMode)
 	closeNodes()
 
 	stopTBChain()

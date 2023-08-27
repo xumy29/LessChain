@@ -5,6 +5,7 @@ import (
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/utils"
+	"time"
 )
 
 var randSeedHeight uint64
@@ -33,6 +34,8 @@ func reconfig(seedHeight uint64) {
 		newShardID := utils.VrfValue2Shard(vrfValue, uint32(len(shards_ref)))
 		nodes_4_shards[newShardID] = append(nodes_4_shards[newShardID], node)
 	}
+
+	time.Sleep(time.Duration(reconfigTime) * time.Second)
 
 	// 更新各委员会的节点
 	for _, com := range committees_ref {

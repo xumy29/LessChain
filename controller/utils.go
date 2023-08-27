@@ -22,9 +22,9 @@ var clients []*client.Client
 var nodes []*core.Node
 var tbChain *beaconChain.BeaconChain
 
-func newClients(rollbackHeight, shardNum int) {
+func newClients(rollbackHeight, shardNum int, exitMode int) {
 	for cid := 0; cid < len(clients); cid++ {
-		clients[cid] = client.NewClient(cid, rollbackHeight, shardNum)
+		clients[cid] = client.NewClient(cid, rollbackHeight, shardNum, exitMode)
 		log.Info("NewClient", "Info", clients[cid])
 	}
 }
@@ -87,7 +87,7 @@ func startClients(injectSpeed int, recommitIntervalSecs int, addrTable map[commo
  * 循环判断各客户端和委员会能否停止, 若能则停止
  * 循环打印交易总执行进度
  */
-func closeCommittees(recommitIntervalSecs, logProgressInterval int, isLogProgress bool) {
+func closeCommittees(recommitIntervalSecs, logProgressInterval int, isLogProgress bool, exitMode int) {
 	log.Info("Monitor txpools and try to stop shards")
 	sleepSecs := int(math.Ceil(float64(recommitIntervalSecs) / 2))
 	iterNum := int(math.Ceil(float64(logProgressInterval) / float64(sleepSecs)))
@@ -97,14 +97,29 @@ func closeCommittees(recommitIntervalSecs, logProgressInterval int, isLogProgres
 	} else {
 		log.Info("Set log progress false")
 	}
+
 	for {
 		isInjectDone := true
 		for _, c := range clients {
-			isInjectDone = isInjectDone && c.CanStopV1()
+			canStop := false
+			if exitMode == 0 {
+				canStop = c.CanStopV1()
+			} else if exitMode == 1 {
+				canStop = c.CanStopV2()
+			}
+			isInjectDone = isInjectDone && canStop
 			c.LogQueues()
+			// log.Debug("client can stop", "ss", isInjectDone)
 		}
 		for _, com := range committees {
-			isInjectDone = isInjectDone && com.CanStopV1()
+			canStop := false
+			if exitMode == 0 {
+				canStop = com.CanStopV1()
+			} else if exitMode == 1 {
+				canStop = com.CanStopV2()
+			}
+			isInjectDone = isInjectDone && canStop
+			// log.Debug("committee can stop", "ss", isInjectDone)
 		}
 		if isInjectDone {
 			for _, com := range committees {

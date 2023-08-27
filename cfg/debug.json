@@ -7,23 +7,25 @@
 
     "ClientNum": 1,
 
-    "ShardNum": 4,
+    "ShardNum": 16,
     "ShardSize": 6,
     "MultiSignRequiredNum": 1,
 
-    "MaxTxNum": 5000,
-    "InjectSpeed": 300,
-    "RecommitInterval": 3,
-    "MaxBlockTXSize": 200,
+    "MaxTxNum": 320000,
+    "InjectSpeed": 4000,
+    "RecommitInterval": 4,
+    "MaxBlockTXSize": 1000,
 
-    "Height2Reconfig": 2,
+    "Height2Reconfig": 2000,
 
     "TbchainBlockIntervalSecs": 10,
-    "Height2Rollback": 4,
+    "Height2Rollback": 6,
 
     "BeaconChainMode": 2,
     "BeaconChainPort": 8545,
     "BeaconChainID": 1337,
+
+    "ExitMode": 1,
 
     "DatasetDir": "data/len4_data2.csv"
 }

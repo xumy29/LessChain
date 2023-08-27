@@ -1,6 +1,6 @@
 *.exe
 test.go
-draw*.py
+draw_examples.py
 newest_result*
 results
 logs

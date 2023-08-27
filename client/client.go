@@ -21,6 +21,8 @@ type Client struct {
 	ip   string
 	port int
 
+	exitMode int
+
 	cid            int
 	rollbackHeight int
 
@@ -74,10 +76,11 @@ type Client struct {
 	wg sync.WaitGroup
 }
 
-func NewClient(id, rollbackHeight, shardNum int) *Client {
+func NewClient(id, rollbackHeight, shardNum int, exitMode int) *Client {
 	c := &Client{
 		ip:                        defaultIP,
 		port:                      defaultPort,
+		exitMode:                  exitMode,
 		cid:                       id,
 		rollbackHeight:            rollbackHeight,
 		stopCh:                    make(chan struct{}),

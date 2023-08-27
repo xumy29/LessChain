@@ -30,12 +30,16 @@ var (
 
 	/* 所有节点的ID，按委员会的顺序排序 */
 	allnodes_id []int
+
+	// 一次重组需要的时间，单位秒
+	reconfigTime int
 )
 
-func NewMessageHub() *GoodMessageHub {
+func NewMessageHub(_reconfigTime int) *GoodMessageHub {
 	hub := &GoodMessageHub{
 		mid: 1,
 	}
+	reconfigTime = _reconfigTime
 	return hub
 }
 

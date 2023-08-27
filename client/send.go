@@ -23,6 +23,8 @@ func (c *Client) SendTXs(inject_speed int) {
 func (c *Client) InjectTXs(cid int, inject_speed int) {
 	c.injectCnt = 0
 	resBroadcastMap := make(map[uint64]uint64)
+
+	msgsent := false
 	// 按秒注入
 	for {
 		time.Sleep(1000 * time.Millisecond) //fixme 应该记录下面的运行时间
@@ -35,15 +37,20 @@ func (c *Client) InjectTXs(cid int, inject_speed int) {
 		if c.CanStopV1() {
 			break
 		}
+		if c.CanStopV2() && !msgsent {
+			/* 通知分片交易注入完成 */
+			for i := 0; i < c.shard_num; i++ {
+				c.messageHub.Send(core.MsgTypeSetInjectDone2Committee, uint64(i), struct{}{}, nil)
+			}
+			msgsent = true
+			if c.exitMode == 1 {
+				break
+			}
+		}
 
 	}
 	/* 记录广播结果 */
 	result.SetBroadcastMap(resBroadcastMap)
-
-	/* 通知分片交易注入完成 */
-	for i := 0; i < c.shard_num; i++ {
-		c.messageHub.Send(core.MsgTypeSetInjectDone2Committee, uint64(i), struct{}{}, nil)
-	}
 
 }
 

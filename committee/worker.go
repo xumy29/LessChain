@@ -116,12 +116,13 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 
 		w.broadcastTbInCommittee(block)
 
-		timer.Reset(recommit)
-
 		/* 通知committee 有新区块产生
 		   当出完一个块需要重组时，worker会阻塞在这个函数内
 		*/
 		w.InformNewBlock(block)
+
+		// 如果有重组，应在重组完成后再开始打包交易
+		timer.Reset(recommit)
 
 	}
 
