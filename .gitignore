@@ -9,3 +9,4 @@ lessChain*
 */geth-chain-data/data/geth/*
 *DS_Store
 *.log
+len*.csv

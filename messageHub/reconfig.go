@@ -39,6 +39,6 @@ func reconfig(seedHeight uint64) {
 
 	// 更新各委员会的节点
 	for _, com := range committees_ref {
-		com.SetReconfigRes(nodes_4_shards[uint32(com.GetShardID())])
+		go com.SetReconfigRes(nodes_4_shards[uint32(com.GetShardID())])
 	}
 }

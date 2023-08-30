@@ -59,7 +59,7 @@ type Node struct {
 	VrfValue []byte
 }
 
-func NewNode(conf *NodeConfig, parentdataDir string, shardID int, nodeID int, shardNum uint32) *Node {
+func NewNode(conf *NodeConfig, parentdataDir string, shardID int, nodeID int) *Node {
 	node := &Node{
 		config:  conf,
 		DataDir: filepath.Join(parentdataDir, conf.Name),

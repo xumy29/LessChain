@@ -50,6 +50,7 @@ func Main(cfgfilename string) {
 	/* mode=0表示所有交易执行完成才退出，mode=1表示交易停止注入则退出 */
 	exitMode := cfg.ExitMode
 	reconfigTime := cfg.ReconfigTime
+	height2Confirm := cfg.Height2Confirm
 
 	/* 设置日志存储路径 */
 	if LogFile == "" {
@@ -112,7 +113,8 @@ func Main(cfgfilename string) {
 	newCommittees(shardNum, shardSize, committeeConfig)
 
 	/* 初始化信标链 */
-	tbChain = beaconchain.NewTBChain(beaconChainMode, beaconChainID, beaconChainPort, TbchainBlockIntervalSecs, shardNum, MultiSignRequiredNum)
+	tbChain = beaconchain.NewTBChain(beaconChainMode, beaconChainID, beaconChainPort,
+		TbchainBlockIntervalSecs, shardNum, MultiSignRequiredNum, height2Confirm)
 
 	/* 设置各个分片、委员会和客户端、信标链的通信渠道 */
 	messageHub.Init(clients, shards, committees, nodes, tbChain)

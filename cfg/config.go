@@ -20,6 +20,7 @@ type Cfg struct {
 	RecommitIntervalSecs     int    `json:"RecommitInterval"`
 	Height2Rollback          int    `json:"Height2Rollback"`
 	Height2Reconfig          int    `json:"Height2Reconfig"`
+	Height2Confirm           int    `json:"Height2Confirm"`
 	MaxBlockTXSize           int    `json:"MaxBlockTXSize"`
 	DatasetDir               string `json:"DatasetDir"`
 	ShardSize                int    `json:"ShardSize"`

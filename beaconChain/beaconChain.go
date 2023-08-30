@@ -122,12 +122,15 @@ type BeaconChain struct {
 	contract         *Contract
 	required_sig_cnt uint32
 	addrs            [][]common.Address
+
+	height2Confirm uint64
+	tbBlocks       map[uint64]*TBBlock
 }
 
 /** 新建一条信标链
  * required 表示一个信标需要收到的多签名最小数量
  */
-func NewTBChain(mode, chainID, chainPort, blockIntervalSecs, shardNum, required int) *BeaconChain {
+func NewTBChain(mode, chainID, chainPort, blockIntervalSecs, shardNum, required, _height2Confirm int) *BeaconChain {
 	tbChain := &BeaconChain{
 		mode:              mode,
 		chainID:           chainID,
@@ -141,6 +144,8 @@ func NewTBChain(mode, chainID, chainPort, blockIntervalSecs, shardNum, required 
 		contract:          NewContract(shardNum, required),
 		required_sig_cnt:  uint32(required),
 		addrs:             make([][]common.Address, shardNum),
+		height2Confirm:    uint64(_height2Confirm),
+		tbBlocks:          make(map[uint64]*TBBlock),
 	}
 	log.Info("NewTBChain")
 	tbChain.wg.Add(1)

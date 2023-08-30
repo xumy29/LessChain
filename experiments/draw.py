@@ -213,22 +213,26 @@ def RollBackRate(dataPath):
     plt.rcParams['figure.figsize'] = (width, height)
     plt.grid('on', alpha=0.5)
     shards = [8,16,32]
-    rollback_height = [5,6,8]
-    labels = ['5 blocks', '6 blocks', '8 blocks']
+    rollback_height = [6,8,12]
+    labels = ['S = 8', 'S = 16', 'S = 32']
     # colors = ['#82c6d5', '#f2e2a9', '#fffff3']
     colors = ['tab:brown', 'tab:red', 'tab:green']
     linestyles = ['x-', '.-', 's-']
     markersizes = [7,12,6]
     
-    for i in range(len(rollback_height)):
-        path = os.path.join(getStorePath(), dataPath+'height'+str(rollback_height[i])+'/')
-        _,_,rate = getData(shards, path)
-        plt.plot(shards, rate, linestyles[i], label=labels[i], color=colors[i], markersize=markersizes[i])
-    plt.xticks(shards, fontsize=16)
+    for i in range(len(shards)):
+        rates = []
+        for j in range(len(rollback_height)):
+            path = os.path.join(getStorePath(), dataPath+'height'+str(rollback_height[j])+'/')
+            cur_shard = [shards[i]]
+            tps,latency,rate = getData(cur_shard, path)
+            rates.append(rate)
+        plt.plot(rollback_height, rates, linestyles[i], label=labels[i], color=colors[i], markersize=markersizes[i])
+    plt.xticks(rollback_height, fontsize=16)
     plt.yticks(fontsize=16)
-    plt.xlabel('Number of shards', fontsize=18)
+    plt.xlabel('Height to rollback', fontsize=18)
     plt.ylabel('Prop. of TXs rollback', fontsize=18)
-    plt.legend(fontsize=16, loc='center',bbox_to_anchor=(0.2,0.2))
+    plt.legend(fontsize=16, loc='center',bbox_to_anchor=(0.7,0.45))
     plt.tight_layout()
     # plt.savefig('figs/rollbackRate.pdf')
     storePath = os.path.join(getStorePath(), 'figs/rollbackRate.png')
@@ -236,30 +240,92 @@ def RollBackRate(dataPath):
     plt.show()
 
 
-def Reconfig(dataPath):
+def Reconfig(dataPath):  
     plt.rcParams['pdf.fonttype'] = 42
     plt.rcParams['ps.fonttype'] = 42
     plt.rcParams['figure.figsize'] = (width, height)
+    
     shards = [8]
     reconfig_height = [2,4,6,8]
-    labels = ['2 blocks', '4 blocks', '6 blocks', '8 blocks']
-    # colors = ['#82c6d5', '#f2e2a9', '#fffff3']
-    colors = ['tab:brown', 'tab:red', 'tab:green', 'tab:blue']
-    linestyles = ['x-', '.-', 's-', '*-']
-    markersizes = [7,12,6,8]
+    labels = ['S = 8']
+    colors = ['tab:blue', 'tab:red', 'tab:green', 'tab:brown']
+    linestyles = ['.-', 's-', '*-', 'x-']
+    markersizes = [8,6,8,8]
+
+    fig, ax1 = plt.subplots()  # 创建原始的figure和axis
+    ax2 = ax1.twinx()  # 创建第二个y轴
     
-    for i in range(len(reconfig_height)):
-        path = os.path.join(getStorePath(), dataPath+'height'+str(reconfig_height[i])+'/')
-        tps,_,_ = getData(shards, path)
-        plt.plot(shards, tps, linestyles[i], label=labels[i], color=colors[i], markersize=markersizes[i])
-    plt.xticks(shards, fontsize=16)
-    plt.yticks(fontsize=16)
-    plt.xlabel('Number of shards', fontsize=18)
-    plt.ylabel('Prop. of TXs rollback', fontsize=18)
-    plt.legend(fontsize=16, loc='center',bbox_to_anchor=(0.2,0.2))
+    for i in range(len(shards)):
+        tpss = []
+        delays = []
+        for j in range(len(reconfig_height)):
+            path = os.path.join(getStorePath(), dataPath+'height'+str(reconfig_height[j])+'/')
+            cur_shards = [shards[i]]
+            tps, delay, _ = getData(cur_shards, path)
+            tpss.append(tps)
+            delays.append(delay)
+            
+        ax1.plot(reconfig_height, tpss, linestyles[1], label=labels[i]+" Throughput", color=colors[i], markersize=markersizes[1]) 
+        ax2.plot(reconfig_height, delays, linestyles[2], label=labels[i] + " Latency", color=colors[i], markersize=markersizes[2]) 
+    
+    ax1.set_xticks(reconfig_height)
+    ax1.tick_params(axis='both', labelsize=16)
+    ax1.set_xlabel('Height to reconfig', fontsize=18)
+    ax1.set_ylabel('Throughput (TX/s)', fontsize=18)
+    
+    ax2.set_ylabel('Delay', fontsize=18)
+    ax2.tick_params(axis='y', labelsize=16)
+
+    # 合并两个轴的图例
+    lines, labels = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax2.legend(lines + lines2, labels + labels2, fontsize=14, loc='center',bbox_to_anchor=(0.6,0.45))
+    
     plt.tight_layout()
-    # plt.savefig('figs/reconfig.pdf')
+    
     storePath = os.path.join(getStorePath(), 'figs/reconfig.png')
+    plt.savefig(storePath)
+    plt.show()
+
+def ConfirmHeight(dataPath):
+    plt.rcParams['pdf.fonttype'] = 42
+    plt.rcParams['ps.fonttype'] = 42
+    plt.rcParams['figure.figsize'] = (width, height)
+    
+    shards = [8,16,32]
+    ConfirmHeight = [0,2,4,6]
+    labels = ['S = 8', 'S = 16', 'S = 32']
+    colors = ['tab:blue', 'tab:red', 'tab:green']
+    linestyles = ['.-', 's-', '*-', 'x-']
+    markersizes = [8,6,8,8]
+
+    fig, ax1 = plt.subplots()  # 创建原始的figure和axis
+    # ax2 = ax1.twinx()  # 创建第二个y轴
+    
+    for i in range(len(shards)):
+        tpss = []
+        delays = []
+        for j in range(len(ConfirmHeight)):
+            path = os.path.join(getStorePath(), dataPath+'height'+str(ConfirmHeight[j])+'/')
+            cur_shards = [shards[i]]
+            tps, delay, _ = getData(cur_shards, path)
+            tpss.append(tps)
+            delays.append(delay)
+            
+        ax1.plot(ConfirmHeight, tpss, linestyles[i], label=labels[i], color=colors[i], markersize=markersizes[i])
+        # ax2.plot(ConfirmHeight, delays, linestyles[2], label=labels[i] + " Latency", color=colors[i], markersize=markersizes[2])
+    
+    ax1.set_xticks(ConfirmHeight)
+    ax1.tick_params(axis='both', labelsize=16)
+    ax1.set_xlabel('Height to confirm', fontsize=18)
+    ax1.set_ylabel('Throughput (TX/s)', fontsize=18)
+    
+
+    ax1.legend(fontsize=14, loc='center',bbox_to_anchor=(0.5,0.55))
+    
+    plt.tight_layout()
+    
+    storePath = os.path.join(getStorePath(), 'figs/confirmHeight.png')
     plt.savefig(storePath)
     plt.show()
 
@@ -269,8 +335,9 @@ def main():
     # TPS('results/workload/')
     # Latency('results/workload/')
     # Workload4shard()
-    # RollBackRate('results/rollback/')
-    Reconfig('results/reconfig/')
+    RollBackRate('results/rollbackV2/')
+    # Reconfig('results/reconfig/')
+    # ConfirmHeight('results/confirmHeight/')
 
 if __name__ == "__main__":
     main()

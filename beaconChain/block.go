@@ -27,7 +27,7 @@ func (tbChain *BeaconChain) loop() {
 		case <-timer.C:
 			if tbChain.mode == 0 || tbChain.mode == 1 || tbChain.mode == 2 {
 				block := tbChain.GenerateBlock()
-				tbChain.PushBlock(block)
+				tbChain.toPushBlock(block)
 				timer.Reset(blockInterval)
 			} else {
 				err := fmt.Errorf("unknown mode of tbChain! mode=%d", tbChain.mode)
@@ -94,14 +94,18 @@ func (tbChain *BeaconChain) generateSimulationChainBlock() *TBBlock {
 	return block
 }
 
-/** 信标链生成新区块后，将区块（包含新的信标）发送给订阅者
+/** 信标链生成新区块后，将已确认的区块（包含新的信标）发送给订阅者
 * 实际情况下，应该是有监督节点监听信标链的新区块，并将其中的信标发送给订阅者。
 这里进行了简化，直接跳过监督节点，由信标链发送给订阅者
 * 订阅者包括客户端、委员会等需要获取信标辅助验证的角色
 */
-func (tbChain *BeaconChain) PushBlock(block *TBBlock) {
-	tbChain.PushBlock2Clients(block)
-	tbChain.PushBlock2Coms(block)
+func (tbChain *BeaconChain) toPushBlock(block *TBBlock) {
+	tbChain.tbBlocks[block.Height] = block
+	if block.Height > tbChain.height2Confirm {
+		confirmBlock := tbChain.tbBlocks[block.Height-tbChain.height2Confirm]
+		tbChain.PushBlock2Clients(confirmBlock)
+		tbChain.PushBlock2Coms(confirmBlock)
+	}
 }
 
 /** 信标链生成新区块后，将区块（包含新的信标）发送给客户端

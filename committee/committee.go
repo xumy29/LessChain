@@ -36,7 +36,7 @@ func NewCommittee(shardID uint64, clientCnt int, nodes []*core.Node, config *cor
 		shardID:       shardID,
 		config:        config,
 		worker:        worker,
-		reconfigCh:    make(chan []*core.Node, 1),
+		reconfigCh:    make(chan []*core.Node, 0),
 		Nodes:         nodes,
 		txPool:        pool,
 		injectNotDone: int32(clientCnt),
@@ -55,7 +55,9 @@ func (com *Committee) Start() {
 
 func (com *Committee) Close() {
 	// 避免退出时因reconfigCh阻塞导致worker无法退出
-	com.reconfigCh <- nil
+	if com.to_reconfig {
+		com.reconfigCh <- nil
+	}
 	com.worker.close()
 }
 
