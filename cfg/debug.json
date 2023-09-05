@@ -5,14 +5,20 @@
     "IsLogProgress": true,
     "LogProgressInterval": 20,
 
-    "ClientNum": 1,
+    "RoleType": 1,
 
-    "ShardNum": 32,
-    "ShardSize": 12,
+    "ClientNum": 1,
+    "ClientId": 0,
+
+    "ShardNum": 1,
+    "ShardId": 0,
+    "ShardSize": 4,
+    "NodeId": 0,
     "MultiSignRequiredNum": 1,
 
-    "MaxTxNum": 1280000,
-    "InjectSpeed": 8000,
+
+    "MaxTxNum": 60000,
+    "InjectSpeed": 1000,
     "RecommitInterval": 4,
     "MaxBlockTXSize": 1000,
 
@@ -21,7 +27,7 @@
 
     "TbchainBlockIntervalSecs": 10,
     "Height2Rollback": 2000,
-    "Height2Confirm": 6,
+    "Height2Confirm": 0,
 
     "BeaconChainMode": 2,
     "BeaconChainPort": 8545,

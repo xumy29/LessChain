@@ -8,8 +8,6 @@ import (
 	"go-w3chain/log"
 	"sync"
 	"time"
-
-	"github.com/ethereum/go-ethereum/common"
 )
 
 var (
@@ -27,8 +25,6 @@ type Client struct {
 	rollbackHeight int
 
 	messageHub core.MessageHub
-
-	addrTable map[common.Address]int
 
 	stopCh chan struct{}
 
@@ -100,8 +96,7 @@ func NewClient(id, rollbackHeight, shardNum int, exitMode int) *Client {
 	return c
 }
 
-func (c *Client) Start(injectSpeed, recommitIntervalSecs int, addrTable map[common.Address]int) {
-	c.addrTable = addrTable
+func (c *Client) Start(injectSpeed, recommitIntervalSecs int) {
 	c.wg.Add(1)
 	go c.SendTXs(injectSpeed)
 	// c.wg.Add(1)
@@ -145,7 +140,7 @@ func (c *Client) checkExpiredTXs() {
 
 }
 
-func (c *Client) Stop() {
+func (c *Client) Close() {
 	close(c.stopCh)
 	c.wg.Wait()
 	log.Info("client stop.", "clientID", c.cid)
@@ -161,7 +156,7 @@ func (c *Client) getTBFromTBChain(shardID uint32, height uint64) *beaconChain.Co
 	callback := func(res ...interface{}) {
 		tb = res[0].(*beaconChain.ConfirmedTB)
 	}
-	c.messageHub.Send(core.MsgTypeGetTB, uint64(shardID), height, callback)
+	c.messageHub.Send(core.MsgTypeGetTB, shardID, height, callback)
 	return tb
 }
 
@@ -187,4 +182,8 @@ func (c *Client) LogQueues() {
 /* 客户端初始交易注入完成则结束 */
 func (c *Client) CanStopV2() bool {
 	return c.injectCnt == len(c.txs)
+}
+
+func (c *Client) GetCid() int {
+	return c.cid
 }

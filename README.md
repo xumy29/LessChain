@@ -1,5 +1,5 @@
 # 写在前面
-这份代码是ICBC2023的中稿论文 "W3Chain: A Layer2 Blockchain Defeating the Scalability Trilemma" 的仿真代码。在此基础上，对其进行了一些扩展。
+这份代码是TPDS2023的投稿论文 "" 的多机版实现。
 
 # 配置运行
 + **数据集**： 以太坊第14920000个区块到第14960000个区块的数据（200w+条交易），存在本地未上传。
@@ -17,25 +17,36 @@
 
     "ClientNum": 1,
 
-    "ShardNum": 2,
-    "ShardSize": 4,
+    "ShardNum": 4,
+    "ShardSize": 6,
+    "MultiSignRequiredNum": 1,
 
-    "MaxTxNum": 5000,
-    "InjectSpeed": 100,
-    "RecommitInterval": 5,
-    "MaxBlockTXSize": 100,
+    "MaxTxNum": 60000,
+    "InjectSpeed": 1000,
+    "RecommitInterval": 4,
+    "MaxBlockTXSize": 1000,
 
     "Height2Reconfig": 2000,
+    "ReconfigTime": 4,
 
     "TbchainBlockIntervalSecs": 10,
-    "TBChainHeight2Rollback": 2,
+    "Height2Rollback": 2000,
+    "Height2Confirm": 0,
 
-    "DatasetDir": "D:/project/blockChain/ethereum_data/14920000_14960000/ExternalTransactionItem.csv"
+    "BeaconChainMode": 2,
+    "BeaconChainPort": 8545,
+    "BeaconChainID": 1337,
+
+    "RoleType": 1,
+    "ExitMode": 1,
+
+    "DatasetDir": "data/len3_data.csv"
 }
 ```
 
-
-PS: RecommitInterval 即出块间隔，必须大于等于5s，否则会被强制设为5s。可在worker.go中更改此限制。
+多机版本中主要包含信标链、客户端、分片、委员会等角色，其中后三者的roleType分别为1、2、3。
+ExitMode为0表示所有交易执行完系统结束运行，ExitMode为1表示所有交易注入完则系统结束运行。
+RecommitInterval 即出块间隔，必须大于等于3s，否则会被强制设为3s。可在worker.go中更改此限制。
 
 
 + **编译运行**(run模式)

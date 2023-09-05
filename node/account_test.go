@@ -1,6 +1,7 @@
-package core
+package node
 
 import (
+	"go-w3chain/core"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -28,7 +29,7 @@ func TestVerifySinature(t *testing.T) {
 }
 
 func TestVRF(t *testing.T) {
-	seed, err := RlpHash("random seed")
+	seed, err := core.RlpHash("random seed")
 	if err != nil {
 		t.Error("rlpHash fail")
 	}

@@ -10,7 +10,6 @@ import (
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/result"
-	"go-w3chain/shard"
 	"go-w3chain/utils"
 	"io"
 	"math/big"
@@ -21,8 +20,6 @@ import (
 
 var (
 	alltxs []*core.Transaction
-
-	addrTable map[common.Address]int // 账户地址 映射到 shardID
 
 	tx2ClientTable map[uint64]int // txid 映射到客户端ID
 
@@ -78,6 +75,41 @@ func LoadETHData(filepath string, maxTxNum int) {
 	}
 	log.Debug("Load data completed", "total number", len(alltxs), "first tx", alltxs[0])
 	result.SetTotalTXNum(len(alltxs))
+
+}
+
+/**
+ * 根据交易发送地址和接收地址设置交易的发送分片和接收分片
+ */
+func SetTxShardId(shardNum int) {
+	for _, tx := range alltxs {
+		sid := utils.Addr2Shard(tx.Sender.Hex(), shardNum) // id = 0,1,..
+		tx.Sender_sid = uint32(sid)
+		to_sid := utils.Addr2Shard(tx.Recipient.Hex(), shardNum) // id = 0,1,..
+		tx.Recipient_sid = uint32(to_sid)
+	}
+}
+
+/**
+ * 取所有sender在对应分片的交易，提前设置sender的状态（金额）
+ */
+func SetShardInitialAccountState(shard core.Shard) {
+	addrs := make(map[common.Address]struct{}, 0)
+	shardId := shard.GetShardID()
+
+	for _, tx := range alltxs {
+		if tx.Sender_sid == shardId {
+			addrs[*tx.Sender] = struct{}{}
+		}
+	}
+
+	/* 将所有sender在对应分片中的初始金额设为一个极大值，确保之后注入的交易顺利执行 */
+	maxValue := new(big.Int)
+	maxValue.SetString("10000000000", 10)
+
+	shard.SetInitialAccountState(addrs, maxValue)
+
+	log.Info("SetShardsInitialState successed", "shardID", shardId)
 }
 
 /**
@@ -91,71 +123,17 @@ func SetTX2ClientTable(clientNum int) {
 }
 
 /**
-* 注入交易到客户端，一次性全部注入
+* 注入交易到指定客户端，一次性全部注入
  */
-func InjectTX2Client(clients []*client.Client) {
-	clientNum := len(clients)
-	txlist4EachClient := make([][]*core.Transaction, clientNum)
-	for i, _ := range txlist4EachClient {
-		txlist4EachClient[i] = make([]*core.Transaction, 0, len(alltxs)*2/clientNum)
-	}
+func InjectTX2Client(client *client.Client) {
+	txlist := make([]*core.Transaction, 0)
 	for _, tx := range alltxs {
 		cid := tx2ClientTable[tx.ID]
-		txlist4EachClient[cid] = append(txlist4EachClient[cid], tx)
-	}
-	for i, _ := range clients {
-		// log.Debug("InjectTX2Client", "clientID", i, "txNum", len(txlist4EachClient[i]))
-		clients[i].Addtxs(txlist4EachClient[i])
-	}
-}
-
-/**
- * 实现账户状态分片，目前基于 id 尾数
- */
-func SetAddrTable(shardNum int) {
-	addrTable = make(map[common.Address]int)
-	for _, tx := range alltxs {
-		sid := utils.Addr2Shard(tx.Sender.Hex(), shardNum) // id = 0,1,..
-		addrTable[*tx.Sender] = sid
-		tx.Sender_sid = uint32(sid)
-		to_sid := utils.Addr2Shard(tx.Recipient.Hex(), shardNum) // id = 0,1,..
-		addrTable[*tx.Recipient] = to_sid
-		tx.Recipient_sid = uint32(to_sid)
-	}
-}
-
-func GetAddrTable() map[common.Address]int {
-	return addrTable
-}
-
-/**
- * 取所有交易的sender，在其对应分片中提前设置状态（金额）
- */
-func SetShardsInitialState(shards []*shard.Shard) {
-	shardNum := len(shards)
-
-	/* 各分片拥有的初始sender地址列表 */
-	shardAddrs := make([]map[common.Address]struct{}, shardNum)
-	for i := 0; i < shardNum; i++ {
-		shardAddrs[i] = make(map[common.Address]struct{})
-	}
-
-	for _, tx := range alltxs {
-		sid, exist := addrTable[*tx.Sender]
-		if exist {
-			shardAddrs[sid][*tx.Sender] = struct{}{}
-		} else {
-			log.Warn("this addr does not exist in addrTable (addr -> shard)", *tx.Sender)
+		if cid == client.GetCid() {
+			txlist = append(txlist, tx)
 		}
 	}
-
-	/* 将所有sender在对应分片中的初始金额设为一个极大值，确保之后注入的交易顺利执行 */
-	maxValue := new(big.Int)
-	maxValue.SetString("10000000000", 10)
-	for i, shard := range shards { // id = 0,1,..
-		shard.SetInitialState(shardAddrs[i], maxValue)
-	}
-	log.Info("Each shard setShardsInitialState successed")
+	client.Addtxs(txlist)
 }
 
 func PrintTXs(num int) {
@@ -175,6 +153,5 @@ func GetAlltxs() []*core.Transaction {
 
 func ClearAll() {
 	alltxs = nil
-	addrTable = nil
 	tx2ClientTable = nil
 }

@@ -112,10 +112,10 @@ func (tbChain *BeaconChain) addEthChainGenesisTB(tb *eth_chain.ContractTB) {
 			tbs[shardID] = *tb
 		}
 
-		eth_chain.SetChainID(tbChain.chainID)
+		eth_chain.SetChainID(tbChain.cfg.ChainId)
 		tbChain.deployContract(tbs)
 
-		go eth_chain.SubscribeEvents(tbChain.chainPort, contractAddr, eventChannel)
+		go eth_chain.SubscribeEvents(tbChain.cfg.Port, contractAddr, eventChannel)
 
 	}
 }
@@ -124,7 +124,7 @@ func (tbChain *BeaconChain) deployContract(genesisTBs []eth_chain.ContractTB) {
 	// 创建合约，各分片创世区块作为构造函数的参数
 	var err error
 	for i := 0; i < tbChain.shardNum; i++ {
-		client, err := eth_chain.Connect(tbChain.chainPort)
+		client, err := eth_chain.Connect(tbChain.cfg.Port)
 		if err != nil {
 			log.Error("could not connect to eth chain!", "err", err)
 			panic(err)
@@ -134,7 +134,7 @@ func (tbChain *BeaconChain) deployContract(genesisTBs []eth_chain.ContractTB) {
 
 	contractAddr, contractABI, _, err = eth_chain.DeployContract(clients[0],
 		tbChain.mode, genesisTBs,
-		tbChain.required_sig_cnt,
+		uint32(tbChain.cfg.MultiSignRequiredNum),
 		uint32(tbChain.shardNum),
 		tbChain.addrs)
 	if err != nil {

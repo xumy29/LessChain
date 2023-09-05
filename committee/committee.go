@@ -4,6 +4,7 @@ import (
 	"go-w3chain/beaconChain"
 	"go-w3chain/core"
 	"go-w3chain/log"
+	"go-w3chain/node"
 	"go-w3chain/result"
 	"go-w3chain/utils"
 	"math/big"
@@ -14,43 +15,54 @@ import (
 )
 
 type Committee struct {
-	shardID    uint64
+	comID      uint32
 	config     *core.CommitteeConfig
-	worker     *worker
+	worker     *Worker
 	messageHub core.MessageHub
 	/* 接收重组结果的管道 */
-	reconfigCh chan []*core.Node
-	Nodes      []*core.Node
+	reconfigCh chan []*node.Node
+	Nodes      []*node.Node
 	txPool     *TxPool
 	/* 计数器，初始等于客户端个数，每一个客户端发送注入完成信号时计数器减一 */
 	injectNotDone      int32
 	tbchain_height     uint64
 	tbchain_block_hash common.Hash
 	to_reconfig        bool // 收到特定高度的信标链区块后设为true，准备重组
+
+	shardSendStateChan chan *core.ShardSendState
 }
 
-func NewCommittee(shardID uint64, clientCnt int, nodes []*core.Node, config *core.CommitteeConfig) *Committee {
-	worker := newWorker(config, shardID)
-	pool := NewTxPool(int(shardID))
+func isLeader(nodeId int) bool {
+	return nodeId == 0
+}
+
+func NewCommittee(comID uint32, clientCnt int, _node *node.Node, config *core.CommitteeConfig) *Committee {
 	com := &Committee{
-		shardID:       shardID,
-		config:        config,
-		worker:        worker,
-		reconfigCh:    make(chan []*core.Node, 0),
-		Nodes:         nodes,
-		txPool:        pool,
-		injectNotDone: int32(clientCnt),
-		to_reconfig:   false,
+		comID:              comID,
+		config:             config,
+		reconfigCh:         make(chan []*node.Node, 0),
+		Nodes:              []*node.Node{_node},
+		injectNotDone:      int32(clientCnt),
+		to_reconfig:        false,
+		shardSendStateChan: make(chan *core.ShardSendState),
 	}
-	log.Info("NewCommittee", "shardID", shardID, "nodeIDs", utils.GetFieldValueforList(nodes, "NodeID"))
-	worker.setCommittee(com)
-	pool.setCommittee(com)
+	log.Info("NewCommittee", "comID", comID, "nodeID", _node.NodeID)
 
 	return com
 }
 
-func (com *Committee) Start() {
-	com.worker.start()
+func (com *Committee) Start(nodeId int) {
+	if isLeader(nodeId) { // 只有委员会的leader节点会运行worker，即出块
+		pool := NewTxPool(com.comID)
+		com.txPool = pool
+		pool.setCommittee(com)
+
+		worker := newWorker(com.config, com.comID)
+		com.worker = worker
+		worker.setCommittee(com)
+
+		com.worker.start()
+	}
 }
 
 func (com *Committee) Close() {
@@ -58,7 +70,9 @@ func (com *Committee) Close() {
 	if com.to_reconfig {
 		com.reconfigCh <- nil
 	}
-	com.worker.close()
+	if com.worker != nil {
+		com.worker.close()
+	}
 }
 
 func (com *Committee) SetInjectTXDone() {
@@ -90,7 +104,7 @@ func (com *Committee) NewBlockGenerated(block *core.Block) {
 		com.Reconfig(reconfigRes)
 
 		log.Debug("committee reconfiguration done!",
-			"shardID", com.shardID,
+			"comID", com.comID,
 			"previous nodeIDs", previousNodes,
 			"now nodeIDs", utils.GetFieldValueforList(com.Nodes, "NodeID"),
 		)
@@ -98,7 +112,7 @@ func (com *Committee) NewBlockGenerated(block *core.Block) {
 	}
 }
 
-func (com *Committee) Reconfig(nodes []*core.Node) {
+func (com *Committee) Reconfig(nodes []*node.Node) {
 	com.Nodes = nodes
 
 	// 发起交易调用合约，更新委员会节点地址列表
@@ -168,7 +182,7 @@ func (com *Committee) AdjustRecordedAddrs(addrs []common.Address, vrfs [][]byte,
 		Vrfs:       vrfs,
 		SeedHeight: seedHeight,
 	}
-	com.messageHub.Send(core.MsgTypeCommitteeAdjustAddrs, com.shardID, data, nil)
+	com.messageHub.Send(core.MsgTypeCommitteeAdjustAddrs, com.comID, data, nil)
 }
 
 type AdjustAddrs struct {
@@ -194,7 +208,7 @@ func (com *Committee) send2Client(receipts map[uint64]*result.TXReceipt, txs []*
 		}
 	}
 	for cid := range msg2Client {
-		com.messageHub.Send(core.MsgTypeCommitteeReply2Client, uint64(cid), msg2Client[cid], nil)
+		com.messageHub.Send(core.MsgTypeCommitteeReply2Client, uint32(cid), msg2Client[cid], nil)
 	}
 }
 
@@ -204,21 +218,27 @@ func (com *Committee) send2Client(receipts map[uint64]*result.TXReceipt, txs []*
 但目前只是把整个状态树的指针传过来，实际上委员会和分片访问和修改的是同一个状态树
 */
 func (com *Committee) getStatusFromShard() (*state.StateDB, *big.Int) {
-	var states *state.StateDB
-	var parentHeight *big.Int
-	callback := func(ret ...interface{}) {
-		states = ret[0].(*state.StateDB)
-		parentHeight = ret[1].(*big.Int)
+	request := &core.ComGetState{
+		From_comID:     com.comID,
+		Target_shardID: com.comID,
+		AddrList:       nil, // todo: inplement it
 	}
-	com.messageHub.Send(core.MsgTypeComGetStateFromShard, com.shardID, nil, callback)
-	return states, parentHeight
+	com.messageHub.Send(core.MsgTypeComGetStateFromShard, com.comID, request, nil)
+
+	response := <-com.shardSendStateChan
+
+	return response.StateDB, response.Height
+}
+
+func (com *Committee) HandleShardSendState(response *core.ShardSendState) {
+	com.shardSendStateChan <- response
 }
 
 /**
  * 将新区块发送给对应分片
  */
 func (com *Committee) AddBlock2Shard(block *core.Block) {
-	com.messageHub.Send(core.MsgTypeAddBlock2Shard, com.shardID, block, nil)
+	com.messageHub.Send(core.MsgTypeAddBlock2Shard, com.comID, block, nil)
 }
 
 /**
@@ -229,10 +249,10 @@ func (com *Committee) AddTB(tb *beaconChain.SignedTB) {
 }
 
 func (com *Committee) SendReconfigMsg() {
-	com.messageHub.Send(core.MsgTypeReady4Reconfig, com.shardID, com.tbchain_height, nil)
+	com.messageHub.Send(core.MsgTypeReady4Reconfig, com.comID, com.tbchain_height, nil)
 }
 
-func (com *Committee) SetReconfigRes(res []*core.Node) {
+func (com *Committee) SetReconfigRes(res []*node.Node) {
 	com.reconfigCh <- res
 }
 
@@ -243,6 +263,6 @@ func (com *Committee) SetReconfigRes(res []*core.Node) {
 
 */
 
-func (com *Committee) GetShardID() uint64 {
-	return com.shardID
+func (com *Committee) GetCommitteeID() uint32 {
+	return com.comID
 }

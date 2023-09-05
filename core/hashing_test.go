@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-type TimeBeacon struct {
+type TimeBeaconValid struct {
 	Height  uint64 `json:"height" gencodec:"required"`
 	ShardID uint32 `json:"shardID" gencodec:"required"`
 }
@@ -30,7 +30,7 @@ func TestRlpHashInvalid(t *testing.T) {
 
 func TestRlpHash(t *testing.T) {
 	for i := 1; i < 5; i++ {
-		tb := &TimeBeacon{
+		tb := &TimeBeaconValid{
 			Height:  uint64(i),
 			ShardID: 100,
 		}

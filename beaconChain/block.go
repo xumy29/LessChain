@@ -19,7 +19,7 @@ type TBBlock struct {
 func (tbChain *BeaconChain) loop() {
 	defer tbChain.wg.Done()
 	log.Info("TBChain work loop start.")
-	blockInterval := time.Duration(tbChain.blockIntervalSecs) * time.Second
+	blockInterval := time.Duration(tbChain.cfg.BlockInterval) * time.Second
 	timer := time.NewTimer(blockInterval)
 	defer timer.Stop()
 	for {
@@ -101,8 +101,8 @@ func (tbChain *BeaconChain) generateSimulationChainBlock() *TBBlock {
 */
 func (tbChain *BeaconChain) toPushBlock(block *TBBlock) {
 	tbChain.tbBlocks[block.Height] = block
-	if block.Height > tbChain.height2Confirm {
-		confirmBlock := tbChain.tbBlocks[block.Height-tbChain.height2Confirm]
+	if block.Height > tbChain.cfg.Height2Confirm {
+		confirmBlock := tbChain.tbBlocks[block.Height-tbChain.cfg.Height2Confirm]
 		tbChain.PushBlock2Clients(confirmBlock)
 		tbChain.PushBlock2Coms(confirmBlock)
 	}

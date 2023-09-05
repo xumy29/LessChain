@@ -40,7 +40,7 @@ func (c *Client) InjectTXs(cid int, inject_speed int) {
 		if c.CanStopV2() && !msgsent {
 			/* 通知分片交易注入完成 */
 			for i := 0; i < c.shard_num; i++ {
-				c.messageHub.Send(core.MsgTypeSetInjectDone2Committee, uint64(i), struct{}{}, nil)
+				c.messageHub.Send(core.MsgTypeSetInjectDone2Committee, uint32(i), struct{}{}, nil)
 			}
 			msgsent = true
 			if c.exitMode == 1 {
@@ -79,7 +79,7 @@ func (c *Client) sendRollbackTxs(maxTxNum2Pack int) int {
 	}
 	/* 注入到各分片 */
 	for i := 0; i < c.shard_num; i++ {
-		c.messageHub.Send(core.MsgTypeClientInjectTX2Committee, uint64(i), shardtxs[i], nil)
+		c.messageHub.Send(core.MsgTypeClientInjectTX2Committee, uint32(i), shardtxs[i], nil)
 	}
 	// 移除已发送的reply交易
 	c.cross_tx_expired = c.cross_tx_expired[rollbackTxSentCnt:]
@@ -109,7 +109,7 @@ func (c *Client) sendCross2Txs(maxTxNum2Pack int) int {
 	}
 	/* 注入到各分片 */
 	for i := 0; i < c.shard_num; i++ {
-		c.messageHub.Send(core.MsgTypeClientInjectTX2Committee, uint64(i), shardtxs[i], nil)
+		c.messageHub.Send(core.MsgTypeClientInjectTX2Committee, uint32(i), shardtxs[i], nil)
 	}
 	// 移除已发送的reply交易
 	c.cross2_txs = c.cross2_txs[cross2TxSentCnt:]
@@ -151,7 +151,7 @@ func (c *Client) sendPendingTxs(cnt, maxTxNum2Pack int, resBroadcastMap map[uint
 	}
 	/* 注入到各分片 */
 	for i := 0; i < c.shard_num; i++ {
-		c.messageHub.Send(core.MsgTypeClientInjectTX2Committee, uint64(i), shardtxs[i], nil)
+		c.messageHub.Send(core.MsgTypeClientInjectTX2Committee, uint32(i), shardtxs[i], nil)
 	}
 	/* 更新循环变量 */
 	cnt = upperBound

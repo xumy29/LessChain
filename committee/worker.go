@@ -21,7 +21,7 @@ const (
 	minRecommitInterval = 3 * time.Second
 )
 
-type worker struct {
+type Worker struct {
 	config *core.CommitteeConfig
 
 	// Channels
@@ -34,34 +34,33 @@ type worker struct {
 
 	wg sync.WaitGroup
 
-	shardID   uint64
+	comID     uint32
 	curHeight *big.Int
 
 	com *Committee
 }
 
-func newWorker(config *core.CommitteeConfig, shardID uint64) *worker {
-	worker := &worker{
+func newWorker(config *core.CommitteeConfig, comID uint32) *Worker {
+	worker := &Worker{
 		config:  config,
 		startCh: make(chan struct{}, 1), // at most 1 element
 		exitCh:  make(chan struct{}),
-		shardID: shardID,
+		comID:   comID,
 	}
 
 	// Sanitize recommit interval if the user-specified one is too short.
-	recommit := worker.config.Recommit
-	if recommit < minRecommitInterval {
-		log.Warn("Sanitizing miner recommit interval", "provided", recommit, "updated", minRecommitInterval)
-		recommit = minRecommitInterval
+	recommitTime := worker.config.RecommitTime
+	if recommitTime < minRecommitInterval {
+		log.Error("recommit interval too short", "provided interval", recommitTime, "min interval supported", minRecommitInterval)
 	}
 
 	worker.wg.Add(1)
-	go worker.newWorkLoop(recommit)
+	go worker.newWorkLoop(recommitTime)
 
 	return worker
 }
 
-func (w *worker) setCommittee(com *Committee) {
+func (w *Worker) setCommittee(com *Committee) {
 	w.com = com
 }
 
@@ -70,34 +69,34 @@ func (w *worker) setCommittee(com *Committee) {
 //////////////////////////////////////////
 
 // start sets the running status as 1 and triggers new work submitting.
-func (w *worker) start() {
+func (w *Worker) start() {
 	// log.Info("worker start")
 	atomic.StoreInt32(&w.running, 1)
 	w.startCh <- struct{}{}
 }
 
 // stop sets the running status as 0.
-func (w *worker) stop() {
+func (w *Worker) stop() {
 	atomic.StoreInt32(&w.running, 0)
 }
 
 // isRunning returns an indicator whether worker is running or not.
-func (w *worker) isRunning() bool {
+func (w *Worker) isRunning() bool {
 	return atomic.LoadInt32(&w.running) == 1
 }
 
 // close terminates all background threads maintained by the worker.
 // Note the worker does not support being closed multiple times.
-func (w *worker) close() {
-	log.Debug("closing worker of this committee..", "shardID", w.shardID)
+func (w *Worker) close() {
+	log.Debug("closing worker of this committee..", "comID", w.comID)
 	w.stop()
 	close(w.exitCh)
 	w.wg.Wait()
-	log.Debug("worker of this committee has been close!", "shardID", w.shardID)
+	log.Debug("worker of this committee has been close!", "comID", w.comID)
 }
 
 // newWorkLoop is a standalone goroutine to submit new sealing work upon received events.
-func (w *worker) newWorkLoop(recommit time.Duration) {
+func (w *Worker) newWorkLoop(recommit time.Duration) {
 	defer w.wg.Done()
 	var (
 		timestamp int64
@@ -130,23 +129,23 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		select {
 		case <-w.exitCh:
 			// log.Info("close worker..")
-			// log.Debug("worker exitch", "shardID", w.chain.GetChainID())
+			// log.Debug("worker exitch", "comID", w.chain.GetChainID())
 			return
 
 		case <-w.startCh:
-			// log.Debug("worker startch", "shardID", w.chain.GetChainID())
+			// log.Debug("worker startch", "comID", w.chain.GetChainID())
 			timestamp = time.Now().Unix()
 			commit()
 
 		case <-timer.C:
-			// log.Debug("worker timer.c", "shardID", w.chain.GetChainID())
+			// log.Debug("worker timer.c", "comID", w.chain.GetChainID())
 			if w.isRunning() {
 				timestamp = time.Now().Unix()
 				commit()
 			}
 
 			// default:
-			// 	log.Debug("worker default", "shardID", w.chain.GetChainID())
+			// 	log.Debug("worker default", "comID", w.chain.GetChainID())
 			// 	time.Sleep(1000 * time.Millisecond)
 		}
 	}
@@ -168,11 +167,11 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 /** 矿工出块以后，生成对应的区块信标，并广播到委员会中
  * 由委员会对象代表委员会中的节点，直接调用委员会的多签名方法
  */
-func (w *worker) broadcastTbInCommittee(block *core.Block) {
+func (w *Worker) broadcastTbInCommittee(block *core.Block) {
 	final_header := block.Header()
 	tb := &beaconChain.TimeBeacon{
 		Height:     final_header.Number.Uint64(),
-		ShardID:    uint32(w.shardID),
+		ShardID:    uint32(w.comID),
 		BlockHash:  block.Hash().Hex(),
 		TxHash:     final_header.TxHash.Hex(),
 		StatusHash: final_header.Root.Hex(),
@@ -184,7 +183,7 @@ func (w *worker) broadcastTbInCommittee(block *core.Block) {
 }
 
 /* 生成交易收据, 发送给客户端 */
-func (w *worker) sendTXReceipt2Client(txs []*core.Transaction) {
+func (w *Worker) sendTXReceipt2Client(txs []*core.Transaction) {
 	table := make(map[uint64]*result.TXReceipt)
 	for _, tx := range txs {
 		if tx.TXStatus == result.DefaultStatus {
@@ -194,7 +193,7 @@ func (w *worker) sendTXReceipt2Client(txs []*core.Transaction) {
 				TxID:             tx.ID,
 				ConfirmTimeStamp: tx.ConfirmTimestamp,
 				TxStatus:         tx.TXStatus,
-				ShardID:          int(w.shardID),
+				ShardID:          int(w.comID),
 				BlockHeight:      w.curHeight.Uint64(),
 			}
 		}
@@ -207,19 +206,19 @@ func (w *worker) sendTXReceipt2Client(txs []*core.Transaction) {
  * 通知committee 有新区块产生
  * 当committee触发重组时，该方法会被阻塞，进而导致worker被阻塞，直到重组完成
  */
-func (w *worker) InformNewBlock(block *core.Block) {
+func (w *Worker) InformNewBlock(block *core.Block) {
 	w.com.NewBlockGenerated(block)
 }
 
 /* 生成区块，执行区块中的交易，确认状态转移，发送区块到分片，发送收据到客户端 */
-func (w *worker) commit(timestamp int64) (*core.Block, error) {
+func (w *Worker) commit(timestamp int64) (*core.Block, error) {
 	stateDB, parentHeight := w.com.getStatusFromShard()
 	w.curHeight = parentHeight.Add(parentHeight, common.Big1)
 	header := &core.Header{
 		Difficulty: math.BigPow(11, 11),
 		Number:     w.curHeight,
 		Time:       uint64(timestamp),
-		ShardID:    uint64(w.shardID),
+		ShardID:    uint64(w.comID),
 	}
 
 	txs := w.com.txPool.Pending(w.config.MaxBlockSize)
@@ -235,8 +234,8 @@ func (w *worker) commit(timestamp int64) (*core.Block, error) {
 	/* 生成交易收据, 并发送到客户端 */
 	w.sendTXReceipt2Client(txs)
 
-	log.Debug("create block", "shardID", w.shardID, "block Height", header.Number, "# tx", len(txs), "txpoolLen", w.com.txPool.PendingLen()+w.com.TXpool().PendingRollbackLen())
-	// log.Trace("create block", "shardID", w.shardID, "block Height", header.Number, "#TX", len(txs))
+	log.Debug("create block", "comID", w.comID, "block Height", header.Number, "# tx", len(txs), "txpoolLen", w.com.txPool.PendingLen()+w.com.TXpool().PendingRollbackLen())
+	// log.Trace("create block", "comID", w.comID, "block Height", header.Number, "#TX", len(txs))
 
 	return block, nil
 
@@ -247,7 +246,7 @@ func (w *worker) commit(timestamp int64) (*core.Block, error) {
  * 根据交易列表得到交易树根，并写到区块头中
  * 根据区块头和交易列表构造区块
  */
-func (w *worker) Finalize(header *core.Header, txs []*core.Transaction, stateDB *state.StateDB) (*core.Block, error) {
+func (w *Worker) Finalize(header *core.Header, txs []*core.Transaction, stateDB *state.StateDB) (*core.Block, error) {
 	state := stateDB
 	hashroot, err := state.Commit(false)
 	if err != nil {
@@ -262,14 +261,14 @@ func (w *worker) Finalize(header *core.Header, txs []*core.Transaction, stateDB 
 /*
 * 执行打包的交易，更新stateObjects
  */
-func (w *worker) commitTransactions(txs []*core.Transaction, stateDB *state.StateDB) {
+func (w *Worker) commitTransactions(txs []*core.Transaction, stateDB *state.StateDB) {
 	now := time.Now().Unix()
 	for _, tx := range txs {
 		w.commitTransaction(tx, stateDB, now)
 	}
 }
 
-func (w *worker) commitTransaction(tx *core.Transaction, stateDB *state.StateDB, now int64) {
+func (w *Worker) commitTransaction(tx *core.Transaction, stateDB *state.StateDB, now int64) {
 	state := stateDB
 	tx.TXStatus = result.DefaultStatus
 	if tx.TXtype == core.IntraTXType {
@@ -302,12 +301,12 @@ func (w *worker) commitTransaction(tx *core.Transaction, stateDB *state.StateDB,
 		tx.TXStatus = result.RollbackSuccess
 		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "committee commit rollback tx", "time", now)
 	} else {
-		log.Error("Oops, something wrong! Cannot handle tx type", "cur shardid", w.shardID, "type", tx.TXtype, "tx", tx)
+		log.Error("Oops, something wrong! Cannot handle tx type", "cur comID", w.comID, "type", tx.TXtype, "tx", tx)
 	}
 	// tx.ConfirmTimestamp = uint64(now)
 }
 
-func (w *worker) Reconfig() {
-	log.Info("start reconfiguration...", "before that this committee belongs to shard", w.shardID)
+func (w *Worker) Reconfig() {
+	log.Info("start reconfiguration...", "before that this committee belongs to shard", w.comID)
 
 }

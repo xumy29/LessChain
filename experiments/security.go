@@ -22,7 +22,7 @@ func Func2() {
 	for _, shardNum := range shardNums {
 		data.ClearAll()
 		data.LoadETHData(cfg.DatasetDir, cfg.MaxTxNum)
-		data.SetAddrTable(shardNum)
+		data.SetTxShardId(shardNum)
 		// 失效分片ID
 		failShard := 0
 		alltxs := data.GetAlltxs()
@@ -69,7 +69,7 @@ func Func1() {
 	shardNums := make([]int, maxShardNum)
 	ratios := make([]float64, maxShardNum)
 	for shardNum := 1; shardNum <= maxShardNum; shardNum++ {
-		data.SetAddrTable(shardNum)
+		data.SetTxShardId(shardNum)
 		alltxs := data.GetAlltxs()
 
 		shardAffectTxCnt := make(map[uint32]int)

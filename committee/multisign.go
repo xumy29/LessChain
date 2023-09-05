@@ -2,7 +2,7 @@ package committee
 
 import (
 	"go-w3chain/beaconChain"
-	"go-w3chain/core"
+	"go-w3chain/node"
 	"go-w3chain/utils"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -39,7 +39,7 @@ func (com *Committee) multiSign(tb *beaconChain.TimeBeacon) *beaconChain.SignedT
 
 /** 根据最新确认的信标链区块哈希决定对信标进行多签名的验证者
  */
-func (com *Committee) GetValidators(hash common.Hash) ([]*core.W3Account, []*utils.VRFResult) {
+func (com *Committee) GetValidators(hash common.Hash) ([]*node.W3Account, []*utils.VRFResult) {
 	// 所有节点通过vrf生成随机数
 	vrfResults := make([]*utils.VRFResult, len(com.Nodes))
 	for i := 0; i < len(com.Nodes); i++ {
@@ -49,7 +49,7 @@ func (com *Committee) GetValidators(hash common.Hash) ([]*core.W3Account, []*uti
 
 	// 验证vrf结果，选出符合条件的vrf对应的账户
 	validator_num := com.config.MultiSignRequiredNum
-	validators := make([]*core.W3Account, 0)
+	validators := make([]*node.W3Account, 0)
 	vrfs := make([]*utils.VRFResult, 0)
 	for i := 0; i < len(com.Nodes); i++ {
 		valid := com.Nodes[i].GetAccount().VerifyVRFOutput(vrfResults[i], hash[:])

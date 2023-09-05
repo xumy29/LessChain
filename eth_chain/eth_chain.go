@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
-	"go-w3chain/core"
+	"go-w3chain/cfg"
 	"go-w3chain/log"
 	"go-w3chain/utils"
 	"math/big"
@@ -45,9 +45,9 @@ func Connect(port int) (*ethclient.Client, error) {
 func myPrivateKey(shardID int, mode int) (*ecdsa.PrivateKey, error) {
 	var account string
 	if mode == 1 {
-		account = core.GanacheChainAccounts[shardID]
+		account = cfg.GanacheChainAccounts[shardID]
 	} else if mode == 2 {
-		account = core.GethChainAccounts[shardID]
+		account = cfg.GethChainAccounts[shardID]
 	} else {
 		log.Error("unknown chain mode", "mode", mode)
 	}
@@ -144,7 +144,7 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 	var tmpShardID uint32 = 0
 	tmpShardID = tb.ShardID
 	// 有较多个分片时，一个账户负责多个分片的交易
-	tmpShardID = tmpShardID % uint32(len(core.GethChainAccounts))
+	tmpShardID = tmpShardID % uint32(len(cfg.GethChainAccounts))
 
 	// 构造调用数据
 	callData, err := abi.Pack("addTB", *tb, sigs, vrfs, seedHeight, signers)
@@ -251,7 +251,7 @@ func AdjustRecordedAddrs(client *ethclient.Client, contractAddr common.Address,
 	var tmpShardID uint32 = 0
 	tmpShardID = shardID
 	// 有较多个分片时，一个账户负责多个分片的交易
-	tmpShardID = tmpShardID % uint32(len(core.GethChainAccounts))
+	tmpShardID = tmpShardID % uint32(len(cfg.GethChainAccounts))
 
 	// 通过私钥构造签名者
 	privateKey, err := myPrivateKey(int(tmpShardID), mode)

@@ -52,8 +52,8 @@ def motivation_security():
     shardNums = np.array(range(1,9))
     powers_to_hinder = 1/3 / shardNums
     powers_to_control = 2/3 / shardNums
-    plt.plot(shardNums, powers_to_hinder, label="block_consensus")
-    plt.plot(shardNums, powers_to_control, label="control_consensus")
+    plt.plot(shardNums, powers_to_hinder, label="level1: hinder")
+    plt.plot(shardNums, powers_to_control, label="Level2: manipulate")
     plt.xticks(fontsize=16)
     plt.yticks(fontsize=16)
     plt.xlabel('# of shards', fontsize=18)
@@ -331,11 +331,11 @@ def ConfirmHeight(dataPath):
 
 
 def main():
-    # motivation_security()
+    motivation_security()
     # TPS('results/workload/')
     # Latency('results/workload/')
     # Workload4shard()
-    RollBackRate('results/rollbackV2/')
+    # RollBackRate('results/rollbackV2/')
     # Reconfig('results/reconfig/')
     # ConfirmHeight('results/confirmHeight/')
 

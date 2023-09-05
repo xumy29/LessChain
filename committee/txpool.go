@@ -14,8 +14,6 @@ import (
 
 type TxPool struct {
 	// chain blockChain
-	shardID int
-
 	pending []*core.Transaction
 	lock    sync.Mutex
 
@@ -24,10 +22,8 @@ type TxPool struct {
 	com             *Committee
 }
 
-func NewTxPool(shardID int) *TxPool {
-	pool := &TxPool{
-		shardID: shardID,
-	}
+func NewTxPool(shardID uint32) *TxPool {
+	pool := &TxPool{}
 	return pool
 }
 
@@ -45,13 +41,13 @@ func (pool *TxPool) Reset() *TxPool {
 		table[tx.ID] = &result.TXReceipt{
 			TxID:     tx.ID,
 			TxStatus: tx.TXStatus,
-			ShardID:  int(pool.shardID),
+			ShardID:  int(pool.com.comID),
 		}
 	}
 	result.SetTXReceiptV2(table)
 
 	// 生成新的交易池
-	newpool := NewTxPool(pool.shardID)
+	newpool := NewTxPool(pool.com.comID)
 	newpool.setCommittee(pool.com)
 	return newpool
 }
@@ -84,7 +80,7 @@ func (pool *TxPool) AddTxs(txs []*core.Transaction) {
 		pool.AddTxWithoutLock(tx, now)
 	}
 
-	log.Trace("TxPoolAddTXs", "shardID", pool.shardID, "txPoolPendingLen", pool.PendingLen(), "txPoolPendingRollbackLen", pool.PendingRollbackLen())
+	log.Trace("TxPoolAddTXs", "shardID", pool.com.comID, "txPoolPendingLen", pool.PendingLen(), "txPoolPendingRollbackLen", pool.PendingRollbackLen())
 }
 
 /* worker.commitTransaction 从队列取出交易 */

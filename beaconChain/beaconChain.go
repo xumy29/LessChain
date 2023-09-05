@@ -98,12 +98,8 @@ type ConfirmedTB struct {
 }
 
 type BeaconChain struct {
-	/* mode=0表示运行模拟信标链，mode=1表示运行ganache搭建的以太坊私链
-	mode=2表示运行geth搭建的以太坊私链
-	*/
-	mode      int
-	chainID   int
-	chainPort int
+	cfg  *core.BeaconChainConfig
+	mode int
 
 	shardNum   int
 	messageHub core.MessageHub
@@ -112,40 +108,33 @@ type BeaconChain struct {
 	tbs  map[int][]*ConfirmedTB
 	lock sync.Mutex
 	/* 已提交到信标链但还未被信标链打包 */
-	tbs_new           map[int][]*SignedTB
-	lock_new          sync.Mutex
-	blockIntervalSecs int
-	height            uint64
-	stopCh            chan struct{}
-	wg                sync.WaitGroup
+	tbs_new  map[int][]*SignedTB
+	lock_new sync.Mutex
+	height   uint64
+	stopCh   chan struct{}
+	wg       sync.WaitGroup
 
-	contract         *Contract
-	required_sig_cnt uint32
-	addrs            [][]common.Address
+	contract *Contract
+	addrs    [][]common.Address
 
-	height2Confirm uint64
-	tbBlocks       map[uint64]*TBBlock
+	tbBlocks map[uint64]*TBBlock
 }
 
 /** 新建一条信标链
  * required 表示一个信标需要收到的多签名最小数量
  */
-func NewTBChain(mode, chainID, chainPort, blockIntervalSecs, shardNum, required, _height2Confirm int) *BeaconChain {
+func NewTBChain(cfg *core.BeaconChainConfig, shardNum int) *BeaconChain {
 	tbChain := &BeaconChain{
-		mode:              mode,
-		chainID:           chainID,
-		chainPort:         chainPort,
-		shardNum:          shardNum,
-		tbs:               make(map[int][]*ConfirmedTB),
-		tbs_new:           make(map[int][]*SignedTB),
-		blockIntervalSecs: blockIntervalSecs,
-		height:            0,
-		stopCh:            make(chan struct{}),
-		contract:          NewContract(shardNum, required),
-		required_sig_cnt:  uint32(required),
-		addrs:             make([][]common.Address, shardNum),
-		height2Confirm:    uint64(_height2Confirm),
-		tbBlocks:          make(map[uint64]*TBBlock),
+		cfg:      cfg,
+		mode:     cfg.Mode,
+		shardNum: shardNum,
+		tbs:      make(map[int][]*ConfirmedTB),
+		tbs_new:  make(map[int][]*SignedTB),
+		height:   0,
+		stopCh:   make(chan struct{}),
+		contract: NewContract(shardNum, cfg.MultiSignRequiredNum),
+		addrs:    make([][]common.Address, shardNum),
+		tbBlocks: make(map[uint64]*TBBlock),
 	}
 	log.Info("NewTBChain")
 	tbChain.wg.Add(1)
