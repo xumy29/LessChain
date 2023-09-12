@@ -87,7 +87,7 @@ func DeployContract(client *ethclient.Client,
 ) (common.Address, *abi.ABI, *big.Int, error) {
 
 	// 编译 Solidity 合约并获取合约 ABI 和字节码
-	contractABI, err := abi.JSON(strings.NewReader(myContractABI()))
+	contractABI, err := abi.JSON(strings.NewReader(MyContractABI()))
 	if err != nil {
 		return common.Address{}, nil, big.NewInt(0), err
 	}

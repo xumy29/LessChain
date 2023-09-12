@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go-w3chain/utils"
 	"io/ioutil"
 	"math/big"
 	"os"
 
 	"go-w3chain/log"
 	"go-w3chain/params"
+	"go-w3chain/utils"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"

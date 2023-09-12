@@ -1,31 +1,39 @@
 package messageHub
 
 import (
-	"bufio"
 	"bytes"
+	"encoding/binary"
 	"encoding/gob"
+	"fmt"
 	"go-w3chain/core"
 	"go-w3chain/log"
+	"go-w3chain/result"
+	"io"
 	"net"
+	"sync"
 )
 
-func init() {
-	gob.Register(core.Msg{})
-}
-
-func listen(addr string) {
+func listen(addr string, wg *sync.WaitGroup, quit chan struct{}) {
+	defer wg.Done()
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Error("Error setting up listener", "err", err)
 	}
+	log.Info(fmt.Sprintf("start listening on %s", addr))
 	defer ln.Close()
 
 	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			log.Error("Error accepting connection", "err", err)
+		select {
+		case <-quit:
+			log.Debug("node(or client, booter) listen loop exit.")
+			return
+		default:
+			conn, err := ln.Accept()
+			if err != nil {
+				log.Error("Error accepting connection", "err", err)
+			}
+			go handleConnection(conn)
 		}
-		go handleConnection(conn)
 	}
 }
 
@@ -37,7 +45,7 @@ func unpackMsg(packedMsg []byte) *core.Msg {
 	var msg core.Msg
 	err := msgDec.Decode(&msg)
 	if err != nil {
-		log.Error("unpackMsgErr", "err", err, "msgBytes", msg)
+		log.Error("unpackMsgErr", "err", err, "msgBytes", packedMsg)
 	}
 
 	return &msg
@@ -46,23 +54,106 @@ func unpackMsg(packedMsg []byte) *core.Msg {
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	reader := bufio.NewReader(conn)
+	// reader := bufio.NewReader(conn)
 
 	for {
-		packedMsg, err := reader.ReadBytes('\n')
+		// 先接收消息长度，再读消息
+		lenBuf := make([]byte, 4)
+		_, err := io.ReadFull(conn, lenBuf)
+		if err != nil {
+			if err.Error() == "EOF" {
+				// 发送端主动关闭连接
+				return
+			}
+			log.Error("Error reading from connection", "err", err)
+		}
+		length := int(binary.BigEndian.Uint32(lenBuf))
+		packedMsg := make([]byte, length)
+		_, err = io.ReadFull(conn, packedMsg)
 		if err != nil {
 			log.Error("Error reading from connection", "err", err)
 		}
+
 		msg := unpackMsg(packedMsg)
 		switch msg.MsgType {
+		// booter
+		case "ShardSendGenesis":
+			exit := handleShardSendGenesis(msg.Data)
+			if exit {
+				return
+			}
+		case "BooterSendContract":
+			handleBooterSendContract(msg.Data)
+
+		case "ComGetHeight":
+			handleComGetHeight(msg.Data, conn)
+
 		case "ComGetState":
 			handleComGetState(msg.Data)
 		case "ShardSendState":
 			handleShardSendState(msg.Data)
+
+		case "ClientSendTx":
+			handleClientSendTx(msg.Data)
+		case "ComSendTxReceipt":
+			handleComSendTxReceipt(msg.Data)
+
+		case "ComSendBlock":
+			handleComSendBlock(msg.Data)
 		default:
 			log.Error("Unknown message type received", "msgType", msg.MsgType)
 		}
 	}
+}
+
+func handleClientSendTx(dataBytes []byte) {
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data []*core.Transaction
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err)
+	}
+
+	log.Info("Msg Received: ClientSendTx", "tx count", len(data))
+	committee_ref.HandleClientSendtx(data)
+}
+
+func handleComGetHeight(dataBytes []byte, conn net.Conn) {
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data core.ComGetHeight
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err, "dataBytes", data)
+	}
+
+	log.Info("Msg Received: ComGetHeight", "data", data)
+
+	// 直接通过这个连接回复请求方
+	height := shard_ref.HandleComGetHeight(&data)
+	var buf1 bytes.Buffer
+	encoder := gob.NewEncoder(&buf1)
+	err = encoder.Encode(height)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+	msgBytes := buf1.Bytes()
+
+	// 前缀加上长度，防止粘包
+	networkBuf := make([]byte, 4+len(msgBytes))
+	binary.BigEndian.PutUint32(networkBuf[:4], uint32(len(msgBytes)))
+	copy(networkBuf[4:], msgBytes)
+	// 发送回复
+	_, err = conn.Write(networkBuf)
+	if err != nil {
+		log.Error("WriteError", "err", err)
+	}
+
 }
 
 func handleComGetState(dataBytes []byte) {
@@ -76,6 +167,7 @@ func handleComGetState(dataBytes []byte) {
 		log.Error("decodeDataErr", "err", err, "dataBytes", data)
 	}
 
+	log.Info("Msg Received: ComGetState", "addr count", len(data.AddrList))
 	shard_ref.HandleComGetState(&data)
 }
 
@@ -90,5 +182,80 @@ func handleShardSendState(dataBytes []byte) {
 		log.Error("decodeDataErr", "err", err, "dataBytes", data)
 	}
 
+	log.Info("Msg Received: ShardSendState", "addr count", len(data.AccountData))
 	committee_ref.HandleShardSendState(&data)
+}
+
+func handleBooterSendContract(dataBytes []byte) {
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data core.BooterSendContract
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err, "dataBytes", data)
+	}
+
+	log.Info("Msg Received: BooterSendContract", "data", data)
+
+	// 注意是节点处理而不是分片或委员会处理
+	node_ref.HandleBooterSendContract(&data)
+}
+
+func handleComSendBlock(dataBytes []byte) {
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data core.ComSendBlock
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err, "dataBytes", data)
+	}
+
+	log.Info("Msg Received: ComSendBlock", "tx count", len(data.Transactions))
+
+	shard_ref.HandleComSendBlock(&data)
+}
+
+//////////////////////////////////////////////////
+////  client  ////
+//////////////////////////////////////////////////
+
+func handleComSendTxReceipt(dataBytes []byte) {
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data []*result.TXReceipt
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err, "dataBytes", data)
+	}
+
+	log.Info("Msg Received: ComSendTxReceipt", "tx count", len(data))
+
+	client_ref.HandleComSendTxReceipt(data)
+}
+
+//////////////////////////////////////////////////
+////  booter  ////
+//////////////////////////////////////////////////
+
+func handleShardSendGenesis(dataBytes []byte) (exit bool) {
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data core.ShardSendGenesis
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err, "dataBytes", data)
+	}
+
+	log.Info("Msg Received: ShardSendGenesis")
+
+	exit = booter_ref.HandleShardSendGenesis(&data)
+	return exit
 }

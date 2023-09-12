@@ -15,8 +15,7 @@ type Cfg struct {
 	IsLogProgress       bool   `json:"IsLogProgress"`
 	LogProgressInterval int    `json:"LogProgressInterval"`
 
-	/* 角色类型，1是客户端，2是节点 */
-	RoleType int `json:"RoleType"`
+	Role string // 不从配置文件中读，从命令行参数获取
 
 	ClientNum int `json:"ClientNum"`
 	ClientId  int `json:"ClientId"`

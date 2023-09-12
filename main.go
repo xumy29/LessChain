@@ -11,6 +11,7 @@ import (
 )
 
 var mode = pflag.StringP("mode", "m", "debug", "mode (run or debug)")
+var role = pflag.StringP("role", "r", "booter", "role type (booter, node or client)")
 
 /** go build -o brokerChain.exe
  * brokerChain.exe -m run >> nohup.out 2>&1
@@ -28,5 +29,5 @@ func main() {
 	}
 	fmt.Println("cfg file:", cfgfilename)
 
-	controller.Main(cfgfilename)
+	controller.Main(cfgfilename, *role)
 }

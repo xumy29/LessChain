@@ -1,15 +1,19 @@
 package shard
 
 import (
+	"go-w3chain/cfg"
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/node"
 	"go-w3chain/params"
+	"go-w3chain/result"
 	"math/big"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/ethdb"
 )
 
@@ -114,15 +118,6 @@ func (s *Shard) Close() {
 	// todo: fill it
 }
 
-func (s *Shard) HandleComGetState(request *core.ComGetState) {
-	response := &core.ShardSendState{
-		StateDB: s.blockchain.GetStateDB(),
-		Height:  s.blockchain.CurrentBlock().Number(),
-	}
-
-	s.messageHub.Send(core.MsgTypeShardSendStateToCom, request.From_comID, response, nil)
-}
-
 /**
  * 将创世区块的信标写到信标链
  * 该方法在分片被创建后，委员会启动前被调用
@@ -138,15 +133,149 @@ func (s *Shard) addGenesisTB() {
 		TxHash:     g_header.TxHash.Hex(),
 		StatusHash: g_header.Root.Hex(),
 	}
-	signedTb := &core.SignedTB{
-		TimeBeacon: *tb,
-		// 创世区块暂时不需要签名
-	}
+
 	addrs := make([]common.Address, 0)
 	for _, node := range s.nodes {
 		addrs = append(addrs, *node.GetAccount().GetAccountAddress())
 	}
-	s.messageHub.Send(core.MsgTypeCommitteeInitialAddrs, s.shardID, addrs, nil)
 
-	s.messageHub.Send(core.MsgTypeCommitteeAddTB, 0, signedTb, nil)
+	genesis := &core.ShardSendGenesis{
+		Addrs:           addrs,
+		Gtb:             tb,
+		Target_nodeAddr: cfg.BooterAddr,
+	}
+
+	s.messageHub.Send(core.MsgTypeShardSendGenesis, 0, genesis, nil)
+}
+
+/////////////////////////////////////////////////
+///// 原本属于committee中worker的函数
+/////////////////////////////////////////////////
+
+/*
+
+
+
+
+
+ */
+////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////
+// worker内部处理交易的函数
+//////////////////////////////////////////
+
+// /* 生成交易收据, 发送给客户端 */
+// func (w *Worker) sendTXReceipt2Client(txs []*core.Transaction) {
+// 	table := make(map[uint64]*result.TXReceipt)
+// 	for _, tx := range txs {
+// 		if tx.TXStatus == result.DefaultStatus {
+// 			log.Error("record tx status miss!", "tx", tx)
+// 		} else {
+// 			table[tx.ID] = &result.TXReceipt{
+// 				TxID:             tx.ID,
+// 				ConfirmTimeStamp: tx.ConfirmTimestamp,
+// 				TxStatus:         tx.TXStatus,
+// 				ShardID:          int(w.comID),
+// 				BlockHeight:      w.curHeight.Uint64(),
+// 			}
+// 		}
+// 	}
+// 	w.com.send2Client(table, txs)
+// 	// result.SetTXReceiptV2(table)
+// }
+
+// /**
+//  * 通知committee 有新区块产生
+//  * 当committee触发重组时，该方法会被阻塞，进而导致worker被阻塞，直到重组完成
+//  */
+// func (w *Worker) InformNewBlock(block *core.Block) {
+// 	w.com.NewBlockGenerated(block)
+// }
+
+// /* 生成区块，执行区块中的交易，确认状态转移，发送区块到分片，发送收据到客户端 */
+// func (w *Worker) commit(timestamp int64) (*core.Block, error) {
+// 	parentHeight := w.com.getStatusFromShard()
+// 	stateDB := &state.StateDB{}
+// 	log.Debug("com getStatusFromShard", "stateDB", stateDB, "parentHeight", parentHeight)
+
+// 	w.curHeight = parentHeight.Add(parentHeight, common.Big1)
+// 	header := &core.Header{
+// 		Difficulty: math.BigPow(11, 11),
+// 		Number:     w.curHeight,
+// 		Time:       uint64(timestamp),
+// 		ShardID:    uint64(w.comID),
+// 	}
+
+// 	txs := w.com.txPool.Pending(w.config.MaxBlockSize, parentHeight)
+
+// 	w.commitTransactions(txs, stateDB)
+// 	/* commit and insert to blockchain */
+// 	block, err := w.Finalize(header, txs, stateDB)
+// 	if err != nil {
+// 		return nil, errors.New("failed to commit transition state: " + err.Error())
+// 	}
+
+// 	w.com.AddBlock2Shard(block)
+// 	/* 生成交易收据, 并发送到客户端 */
+// 	w.sendTXReceipt2Client(txs)
+
+// 	log.Debug("create block", "comID", w.comID, "block Height", header.Number, "# tx", len(txs), "txpoolLen", w.com.txPool.PendingLen()+w.com.TXpool().PendingRollbackLen())
+// 	// log.Trace("create block", "comID", w.comID, "block Height", header.Number, "#TX", len(txs))
+
+// 	return block, nil
+
+// }
+
+// /**
+//  * 将更新的stateObjects写到MPT树上，得到新树根，并写到区块头中。
+//  * 根据交易列表得到交易树根，并写到区块头中
+//  * 根据区块头和交易列表构造区块
+//  */
+// func (w *Worker) Finalize(header *core.Header, txs []*core.Transaction, stateDB *state.StateDB) (*core.Block, error) {
+// 	state := stateDB
+// 	hashroot, err := state.Commit(false)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	header.Root = hashroot
+// 	block := core.NewBlock(header, txs, trie.NewStackTrie(nil))
+// 	return block, nil
+
+// }
+
+/*
+* 执行打包的交易，更新stateObjects
+ */
+func (s *Shard) executeTransactions(txs []*core.Transaction) common.Hash {
+	stateDB := s.blockchain.GetStateDB()
+	now := time.Now().Unix()
+	for _, tx := range txs {
+		s.executeTransaction(tx, stateDB, now)
+	}
+
+	root := stateDB.IntermediateRoot(false)
+	stateDB.Commit(false)
+
+	return root
+}
+
+func (s *Shard) executeTransaction(tx *core.Transaction, stateDB *state.StateDB, now int64) {
+	state := stateDB
+	tx.TXStatus = result.DefaultStatus
+	if tx.TXtype == core.IntraTXType {
+		state.SetNonce(*tx.Sender, tx.SenderNonce+1)
+		state.SubBalance(*tx.Sender, tx.Value)
+		state.AddBalance(*tx.Recipient, tx.Value)
+	} else if tx.TXtype == core.CrossTXType1 {
+		state.SetNonce(*tx.Sender, tx.SenderNonce+1)
+		state.SubBalance(*tx.Sender, tx.Value)
+	} else if tx.TXtype == core.CrossTXType2 {
+		state.AddBalance(*tx.Recipient, tx.Value)
+	} else if tx.TXtype == core.RollbackTXType {
+		state.AddBalance(*tx.Sender, tx.Value)
+		state.SetNonce(*tx.Sender, tx.SenderNonce-1)
+	} else {
+		log.Error("Oops, something wrong! Cannot handle tx type", "cur shardID", s.shardID, "type", tx.TXtype, "tx", tx)
+	}
+	// tx.ConfirmTimestamp = uint64(now)
 }

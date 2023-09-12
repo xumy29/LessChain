@@ -8,8 +8,11 @@ import (
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/result"
+	"math/big"
 	"sync"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 type TxPool struct {
@@ -84,7 +87,7 @@ func (pool *TxPool) AddTxs(txs []*core.Transaction) {
 }
 
 /* worker.commitTransaction 从队列取出交易 */
-func (pool *TxPool) Pending(maxBlockSize int) []*core.Transaction {
+func (pool *TxPool) Pending(maxBlockSize int, parentBlockHeight *big.Int) ([]*core.Transaction, []common.Address) {
 	/* 需要对lock和r_lock都加锁的场景，都按照先lock再r_lock的顺序，避免死锁 */
 	pool.lock.Lock()
 	defer pool.lock.Unlock()
@@ -111,7 +114,6 @@ func (pool *TxPool) Pending(maxBlockSize int) []*core.Transaction {
 	maxBlockSize -= i
 	i = 0
 	pendinglen := len(pool.pending)
-	_, parentBlockHeight := pool.com.getStatusFromShard()
 	for {
 		if i == maxBlockSize || i >= pendinglen {
 			break
@@ -133,7 +135,34 @@ func (pool *TxPool) Pending(maxBlockSize int) []*core.Transaction {
 	}
 	/* update pool tx num */
 	pool.pending = pool.pending[i:]
-	return txs
+
+	// 获取与交易相关的账户状态
+	addrs := getTxRelatedAddrs(txs)
+
+	return txs, addrs
+}
+
+func getTxRelatedAddrs(txs []*core.Transaction) []common.Address {
+	addrs := make(map[common.Address]struct{})
+	for _, tx := range txs {
+		switch tx.TXtype {
+		case core.CrossTXType1, core.RollbackTXType:
+			addrs[*tx.Sender] = struct{}{}
+		case core.CrossTXType2:
+			addrs[*tx.Recipient] = struct{}{}
+		case core.IntraTXType:
+			addrs[*tx.Sender] = struct{}{}
+			addrs[*tx.Recipient] = struct{}{}
+		default:
+			log.Error("Unknown Txtype", "type", tx.TXtype)
+		}
+	}
+	addrList := make([]common.Address, 0)
+	for addr, _ := range addrs {
+		addrList = append(addrList, addr)
+	}
+
+	return addrList
 }
 
 func (pool *TxPool) Empty() bool {

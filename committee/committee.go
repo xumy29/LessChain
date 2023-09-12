@@ -1,6 +1,7 @@
 package committee
 
 import (
+	"bytes"
 	"go-w3chain/beaconChain"
 	"go-w3chain/core"
 	"go-w3chain/log"
@@ -11,7 +12,8 @@ import (
 	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/trie"
+	"golang.org/x/crypto/sha3"
 )
 
 type Committee struct {
@@ -44,7 +46,7 @@ func NewCommittee(comID uint32, clientCnt int, _node *node.Node, config *core.Co
 		Nodes:              []*node.Node{_node},
 		injectNotDone:      int32(clientCnt),
 		to_reconfig:        false,
-		shardSendStateChan: make(chan *core.ShardSendState),
+		shardSendStateChan: make(chan *core.ShardSendState, 0),
 	}
 	log.Info("NewCommittee", "comID", comID, "nodeID", _node.NodeID)
 
@@ -128,10 +130,6 @@ func (com *Committee) Reconfig(nodes []*node.Node) {
 	// com.txPool = com.txPool.Reset()
 }
 
-func (com *Committee) InjectTXs(txs []*core.Transaction) {
-	com.txPool.AddTxs(txs)
-}
-
 func (com *Committee) TXpool() *TxPool {
 	return com.txPool
 }
@@ -191,6 +189,10 @@ type AdjustAddrs struct {
 	SeedHeight uint64
 }
 
+func (com *Committee) HandleClientSendtx(txs []*core.Transaction) {
+	com.txPool.AddTxs(txs)
+}
+
 /**
  * 向客户端发送交易收据
  * 目前未实现通过网络传输，都是基于messageHub转发
@@ -212,22 +214,59 @@ func (com *Committee) send2Client(receipts map[uint64]*result.TXReceipt, txs []*
 	}
 }
 
-/**
-* 从对应的分片获取交易和状态
-* 按照论文中的设计，此处的状态应该是指交易相关账户的状态以及 merkle proof，
-但目前只是把整个状态树的指针传过来，实际上委员会和分片访问和修改的是同一个状态树
-*/
-func (com *Committee) getStatusFromShard() (*state.StateDB, *big.Int) {
+func (com *Committee) getBlockHeight() *big.Int {
+	var blockHeight *big.Int
+	callback := func(res ...interface{}) {
+		blockHeight = res[0].(*big.Int)
+	}
+
+	data := &core.ComGetHeight{
+		From_comID:     com.comID,
+		Target_shardID: com.comID,
+	}
+	com.messageHub.Send(core.MsgTypeComGetHeightFromShard, com.comID, data, callback)
+
+	return blockHeight
+}
+
+func getHash(val []byte) []byte {
+	hasher := sha3.NewLegacyKeccak256()
+	hasher.Write(val)
+	return hasher.Sum(nil)
+}
+
+/* 从对应的分片获取账户状态和证明
+ */
+func (com *Committee) getStatusFromShard(addrList []common.Address) *core.ShardSendState {
 	request := &core.ComGetState{
 		From_comID:     com.comID,
 		Target_shardID: com.comID,
-		AddrList:       nil, // todo: inplement it
+		AddrList:       addrList, // TODO: implement it
 	}
 	com.messageHub.Send(core.MsgTypeComGetStateFromShard, com.comID, request, nil)
 
 	response := <-com.shardSendStateChan
 
-	return response.StateDB, response.Height
+	// Validate Merkle proofs for each address
+	rootHash := response.StatusTrieHash
+
+	for address, accountData := range response.AccountData {
+		proofDB := &proofReader{proof: response.AccountsProofs[address]}
+
+		computedValue, err := trie.VerifyProof(rootHash, getHash(address.Bytes()), proofDB)
+		if err != nil {
+			log.Error("Failed to verify Merkle proof", "err", err, "address", address)
+			return nil
+		}
+		if !bytes.Equal(computedValue, accountData) {
+			log.Error("Merkle proof verification failed for address", "address", address)
+			return nil
+		}
+	}
+
+	log.Info("getStatusFromShard and verify merkle proof succeed.")
+
+	return response
 }
 
 func (com *Committee) HandleShardSendState(response *core.ShardSendState) {
@@ -238,7 +277,11 @@ func (com *Committee) HandleShardSendState(response *core.ShardSendState) {
  * 将新区块发送给对应分片
  */
 func (com *Committee) AddBlock2Shard(block *core.Block) {
-	com.messageHub.Send(core.MsgTypeAddBlock2Shard, com.comID, block, nil)
+	comSendBlock := &core.ComSendBlock{
+		Transactions: block.Body().Transactions,
+		Header:       block.Header(),
+	}
+	com.messageHub.Send(core.MsgTypeSendBlock2Shard, com.comID, comSendBlock, nil)
 }
 
 /**

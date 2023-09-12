@@ -28,25 +28,22 @@ var (
 /**
  * 加载数据集, maxNum=-1则全加载
  */
-func LoadETHData(filepath string, maxTxNum int) {
+func LoadETHData(filepath string, maxTxNum int) []*core.Transaction {
 	f, err := os.Open(filepath)
 	if err != nil {
 		log.Error("Open dataset error!", ":", err)
-		return
 	}
 	reader := csv.NewReader(f)
 	colname, err := reader.Read()
 	// log.Debug("show label ", "colname:", colname)
 	if err != nil {
 		log.Error("Get reader handle error!", "err:", err, "colname:", colname)
-		return
 	}
 	txid := uint64(0)
 	for {
 		row, err := reader.Read()
 		if err != nil && err != io.EOF {
 			log.Error("Read transaction error!", ":", err)
-			return
 		}
 		if err == io.EOF {
 			break
@@ -76,6 +73,7 @@ func LoadETHData(filepath string, maxTxNum int) {
 	log.Debug("Load data completed", "total number", len(alltxs), "first tx", alltxs[0])
 	result.SetTotalTXNum(len(alltxs))
 
+	return alltxs
 }
 
 /**

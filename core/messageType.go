@@ -1,7 +1,17 @@
 package core
 
 const (
-	MsgTypeClientInjectTX2Committee uint32 = iota
+	MsgTypeNone uint32 = iota
+
+	MsgTypeComGetHeightFromShard
+
+	MsgTypeComGetStateFromShard
+	MsgTypeShardSendStateToCom
+
+	MsgTypeShardSendGenesis
+	MsgTypeBooterSendContract
+
+	MsgTypeClientInjectTX2Committee
 	MsgTypeCommitteeReply2Client
 	MsgTypeSetInjectDone2Committee
 	MsgTypeCommitteeAddTB
@@ -9,10 +19,7 @@ const (
 	MsgTypeCommitteeAdjustAddrs
 	MsgTypeGetTB
 
-	MsgTypeComGetStateFromShard
-	MsgTypeShardSendStateToCom
-
-	MsgTypeAddBlock2Shard
+	MsgTypeSendBlock2Shard
 	MsgTypeReady4Reconfig
 	MsgTypeTBChainPushTB2Clients
 	MsgTypeTBChainPushTB2Coms

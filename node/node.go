@@ -3,10 +3,14 @@ package node
 import (
 	"fmt"
 	"go-w3chain/core"
+	"go-w3chain/eth_chain"
 	"go-w3chain/log"
 	"path/filepath"
+	"strings"
 	"sync"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
 )
@@ -39,6 +43,9 @@ type Node struct {
 	commID int
 	/* 节点上一次运行vrf得到的结果 */
 	VrfValue []byte
+
+	contractAddr common.Address
+	contractAbi  *abi.ABI
 }
 
 func NewNode(conf *core.NodeAddrConfig, parentdataDir string, shardID int, nodeID int) *Node {
@@ -97,6 +104,15 @@ func (n *Node) GetAddr() string {
 
 func (n *Node) GetAccount() *W3Account {
 	return n.w3Account
+}
+
+func (n *Node) HandleBooterSendContract(data *core.BooterSendContract) {
+	n.contractAddr = data.Addr
+	contractABI, err := abi.JSON(strings.NewReader(eth_chain.MyContractABI()))
+	if err != nil {
+		log.Error("get contracy abi fail", "err", err)
+	}
+	n.contractAbi = &contractABI
 }
 
 /*

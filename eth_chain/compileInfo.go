@@ -7,7 +7,7 @@ import (
 	"runtime"
 )
 
-func myContractABI() string {
+func MyContractABI() string {
 	// 获取当前正在执行的文件的路径
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {

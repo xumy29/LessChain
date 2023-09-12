@@ -6,18 +6,15 @@ import (
 	"go-w3chain/beaconChain"
 	"go-w3chain/core"
 	"go-w3chain/log"
+	"go-w3chain/result"
+	"net"
 	"sync"
 	"time"
 )
 
-var (
-	defaultIP   string
-	defaultPort int
-)
-
 type Client struct {
-	ip   string
-	port int
+	host string
+	port string
 
 	exitMode int
 
@@ -72,10 +69,14 @@ type Client struct {
 	wg sync.WaitGroup
 }
 
-func NewClient(id, rollbackHeight, shardNum int, exitMode int) *Client {
+func NewClient(addr string, id, rollbackHeight, shardNum int, exitMode int) *Client {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		log.Error("invalid node address!", "addr", addr)
+	}
 	c := &Client{
-		ip:                        defaultIP,
-		port:                      defaultPort,
+		host:                      host,
+		port:                      port,
 		exitMode:                  exitMode,
 		cid:                       id,
 		rollbackHeight:            rollbackHeight,
@@ -105,6 +106,10 @@ func (c *Client) Start(injectSpeed, recommitIntervalSecs int) {
 
 func (c *Client) SetMessageHub(hub core.MessageHub) {
 	c.messageHub = hub
+}
+
+func (c *Client) HandleComSendTxReceipt(receipts []*result.TXReceipt) {
+	c.AddTXReceipts(receipts)
 }
 
 /* 检查是否有超时的跨片交易 */
@@ -158,6 +163,10 @@ func (c *Client) getTBFromTBChain(shardID uint32, height uint64) *beaconChain.Co
 	}
 	c.messageHub.Send(core.MsgTypeGetTB, shardID, height, callback)
 	return tb
+}
+
+func (c *Client) GetAddr() string {
+	return fmt.Sprintf("%s:%s", c.host, c.port)
 }
 
 /* 验证一笔交易的merkle proof，tb 是该交易对应分片和高度的区块信标

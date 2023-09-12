@@ -39,7 +39,7 @@ func (tbChain *BeaconChain) AddTimeBeacon2EthChain(signedtb *SignedTB) {
 		StatusHash: tb.StatusHash,
 	}
 	if tb.Height == 0 {
-		tbChain.addEthChainGenesisTB(contractTB)
+		tbChain.AddEthChainGenesisTB(contractTB)
 	} else {
 		err := eth_chain.AddTB(clients[contractTB.ShardID], contractAddr,
 			contractABI, tbChain.mode, contractTB, signedtb.Sigs, signedtb.Vrfs,
@@ -103,7 +103,7 @@ func (tbChain *BeaconChain) generateEthChainBlock() *TBBlock {
 	return block
 }
 
-func (tbChain *BeaconChain) addEthChainGenesisTB(tb *eth_chain.ContractTB) {
+func (tbChain *BeaconChain) AddEthChainGenesisTB(tb *eth_chain.ContractTB) (common.Address, *abi.ABI) {
 	genesisTBs[tb.ShardID] = tb
 	if len(genesisTBs) == tbChain.shardNum {
 		// 转化为数组形式
@@ -116,8 +116,9 @@ func (tbChain *BeaconChain) addEthChainGenesisTB(tb *eth_chain.ContractTB) {
 		tbChain.deployContract(tbs)
 
 		go eth_chain.SubscribeEvents(tbChain.cfg.Port, contractAddr, eventChannel)
-
+		return contractAddr, contractABI
 	}
+	return common.Address{}, nil
 }
 
 func (tbChain *BeaconChain) deployContract(genesisTBs []eth_chain.ContractTB) {

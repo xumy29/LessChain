@@ -1,11 +1,9 @@
 {
     "LogLevel": 4,
-    "LogFile": "newest_result.log",
+    "LogFile": "",
     "IsProgressBar": true,
     "IsLogProgress": true,
     "LogProgressInterval": 20,
-
-    "RoleType": 1,
 
     "ClientNum": 1,
     "ClientId": 0,
@@ -17,10 +15,10 @@
     "MultiSignRequiredNum": 1,
 
 
-    "MaxTxNum": 60000,
-    "InjectSpeed": 1000,
+    "MaxTxNum": 10,
+    "InjectSpeed": 1,
     "RecommitInterval": 4,
-    "MaxBlockTXSize": 1000,
+    "MaxBlockTXSize": 1,
 
     "Height2Reconfig": 2000,
     "ReconfigTime": 4,

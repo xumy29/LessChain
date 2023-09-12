@@ -16,6 +16,7 @@ var tbChain *beaconChain.BeaconChain
 
 func startShard(shard *shard.Shard) {
 	shard.Start()
+
 }
 
 func startCommittee(com *committee.Committee, nodeId int) {

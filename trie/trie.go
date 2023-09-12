@@ -1,211 +1,598 @@
+// Copyright 2014 The go-ethereum Authors
+// This file is part of the go-ethereum library.
+//
+// The go-ethereum library is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The go-ethereum library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
+
+// Package trie implements Merkle Patricia Tries.
 package trie
 
 import (
-	"strconv"
+	"bytes"
+	"errors"
+	"fmt"
+	"sync"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
+var (
+	// emptyRoot is the known root hash of an empty trie.
+	emptyRoot = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
 
+	// emptyState is the known hash of an empty state trie entry.
+	emptyState = crypto.Keccak256Hash(nil)
+)
+
+// LeafCallback is a callback type invoked when a trie operation reaches a leaf
+// Node.
+//
+// The paths is a path tuple identifying a particular trie Node either in a single
+// trie (account) or a layered trie (account -> storage). Each path in the tuple
+// is in the raw format(32 bytes).
+//
+// The hexpath is a composite hexary path identifying the trie Node. All the key
+// bytes are converted to the hexary nibbles and composited with the parent path
+// if the trie Node is in a layered trie.
+//
+// It's used by state sync and commit to allow handling external references
+// between account and storage tries. And also it's used in the state healing
+// for extracting the raw states(leaf nodes) with corresponding paths.
+type LeafCallback func(paths [][]byte, hexpath []byte, leaf []byte, parent common.Hash) error
+
+// Trie is a Merkle Patricia Trie.
+// The zero value is an empty trie with no database.
+// Use New to create a trie that sits on top of a database.
+//
+// Trie is not safe for concurrent use.
 type Trie struct {
+	db   *Database
 	root Node
+	// Keep track of the number leafs which have been inserted since the last
+	// hashing operation. This number will not directly map to the number of
+	// actually unhashed nodes
+	unhashed int
 }
 
-func NewTrie() *Trie {
-	return &Trie{}
+// newFlag returns the cache flag value for a newly created Node.
+func (t *Trie) newFlag() nodeFlag {
+	return nodeFlag{dirty: true}
 }
 
-func (t *Trie) Hash() []byte {
-	if IsEmptyNode(t.root) {
-		return EmptyNodeHash
+// New creates a trie with an existing root Node from db.
+//
+// If root is the zero hash or the sha3 hash of an empty string, the
+// trie is initially empty and does not require a database. Otherwise,
+// New will panic if db is nil and returns a MissingNodeError if root does
+// not exist in the database. Accessing the trie loads nodes from db on demand.
+func New(root common.Hash, db *Database) (*Trie, error) {
+	if db == nil {
+		panic("trie.New called without a database")
 	}
-	return t.root.Hash()
+	trie := &Trie{
+		db: db,
+	}
+	if root != (common.Hash{}) && root != emptyRoot {
+		rootnode, err := trie.resolveHash(root[:], nil)
+		if err != nil {
+			return nil, err
+		}
+		trie.root = rootnode
+	}
+	return trie, nil
 }
 
-func (t *Trie) Get(key []byte) ([]byte, bool) {
-	node := t.root
-	nibbles := FromBytes(key)
-	for {
-		if IsEmptyNode(node) {
-			return nil, false
+// NodeIterator returns an iterator that returns nodes of the trie. Iteration starts at
+// the key after the given start key.
+func (t *Trie) NodeIterator(start []byte) NodeIterator {
+	return newNodeIterator(t, start)
+}
+
+// Get returns the value for key stored in the trie.
+// The value bytes must not be modified by the caller.
+func (t *Trie) Get(key []byte) []byte {
+	res, err := t.TryGet(key)
+	if err != nil {
+		log.Error(fmt.Sprintf("Unhandled trie error: %v", err))
+	}
+	return res
+}
+
+// TryGet returns the value for key stored in the trie.
+// The value bytes must not be modified by the caller.
+// If a Node was not found in the database, a MissingNodeError is returned.
+func (t *Trie) TryGet(key []byte) ([]byte, error) {
+	value, newroot, didResolve, err := t.tryGet(t.root, keybytesToHex(key), 0)
+	if err == nil && didResolve {
+		t.root = newroot
+	}
+	return value, err
+}
+
+func (t *Trie) tryGet(origNode Node, key []byte, pos int) (value []byte, newnode Node, didResolve bool, err error) {
+	switch n := (origNode).(type) {
+	case nil:
+		return nil, nil, false, nil
+	case ValueNode:
+		return n, n, false, nil
+	case *ShortNode:
+		if len(key)-pos < len(n.Key) || !bytes.Equal(n.Key, key[pos:pos+len(n.Key)]) {
+			// key not found in trie
+			return nil, n, false, nil
 		}
-
-		if leaf, ok := node.(*LeafNode); ok {
-			matched := PrefixMatchedLen(leaf.Path, nibbles)
-			if matched != len(leaf.Path) || matched != len(nibbles) {
-				return nil, false
-			}
-			return leaf.Value, true
+		value, newnode, didResolve, err = t.tryGet(n.Val, key, pos+len(n.Key))
+		if err == nil && didResolve {
+			n = n.copy()
+			n.Val = newnode
 		}
-
-		if branch, ok := node.(*BranchNode); ok {
-			if len(nibbles) == 0 {
-				return branch.Value, branch.HasValue()
-			}
-
-			b, remaining := nibbles[0], nibbles[1:]
-			nibbles = remaining
-			node = branch.Branches[b]
-			continue
+		return value, n, didResolve, err
+	case *FullNode:
+		value, newnode, didResolve, err = t.tryGet(n.Children[key[pos]], key, pos+1)
+		if err == nil && didResolve {
+			n = n.copy()
+			n.Children[key[pos]] = newnode
 		}
-
-		if ext, ok := node.(*ExtensionNode); ok {
-			matched := PrefixMatchedLen(ext.Path, nibbles)
-			// E 01020304
-			//   010203
-			if matched < len(ext.Path) {
-				return nil, false
-			}
-
-			nibbles = nibbles[matched:]
-			node = ext.Next
-			continue
+		return value, n, didResolve, err
+	case HashNode:
+		child, err := t.resolveHash(n, key[:pos])
+		if err != nil {
+			return nil, n, true, err
 		}
-
-		panic("not found")
+		value, newnode, _, err := t.tryGet(child, key, pos)
+		return value, newnode, true, err
+	default:
+		panic(fmt.Sprintf("%T: invalid Node: %v", origNode, origNode))
 	}
 }
 
-// Put adds a key value pair to the trie
-// In general, the rule is:
-// - When stopped at an EmptyNode, replace it with a new LeafNode with the remaining path.
-// - When stopped at a LeafNode, convert it to an ExtensionNode and add a new branch and a new LeafNode.
-// - When stopped at an ExtensionNode, convert it to another ExtensionNode with shorter path and create a new BranchNode points to the ExtensionNode.
-func (t *Trie) Put(key []byte, value []byte) {
-	// need to use pointer, so that I can update root in place without
-	// keeping trace of the parent node
-	node := &t.root
-	nibbles := FromBytes(key)
-	for {
-		if IsEmptyNode(*node) {
-			leaf := NewLeafNodeFromNibbles(nibbles, value)
-			*node = leaf
-			return
+// TryGetNode attempts to retrieve a trie Node by compact-encoded path. It is not
+// possible to use keybyte-encoding as the path might contain odd nibbles.
+func (t *Trie) TryGetNode(path []byte) ([]byte, int, error) {
+	item, newroot, resolved, err := t.tryGetNode(t.root, compactToHex(path), 0)
+	if err != nil {
+		return nil, resolved, err
+	}
+	if resolved > 0 {
+		t.root = newroot
+	}
+	if item == nil {
+		return nil, resolved, nil
+	}
+	return item, resolved, err
+}
+
+func (t *Trie) tryGetNode(origNode Node, path []byte, pos int) (item []byte, newnode Node, resolved int, err error) {
+	// If non-existent path requested, abort
+	if origNode == nil {
+		return nil, nil, 0, nil
+	}
+	// If we reached the requested path, return the current Node
+	if pos >= len(path) {
+		// Although we most probably have the original Node expanded, encoding
+		// that into consensus form can be nasty (needs to cascade down) and
+		// time consuming. Instead, just pull the hash up from disk directly.
+		var hash HashNode
+		if Node, ok := origNode.(HashNode); ok {
+			hash = Node
+		} else {
+			hash, _ = origNode.cache()
+		}
+		if hash == nil {
+			return nil, origNode, 0, errors.New("non-consensus Node")
+		}
+		blob, err := t.db.Node(common.BytesToHash(hash))
+		return blob, origNode, 1, err
+	}
+	// Path still needs to be traversed, descend into children
+	switch n := (origNode).(type) {
+	case ValueNode:
+		// Path prematurely ended, abort
+		return nil, nil, 0, nil
+
+	case *ShortNode:
+		if len(path)-pos < len(n.Key) || !bytes.Equal(n.Key, path[pos:pos+len(n.Key)]) {
+			// Path branches off from short Node
+			return nil, n, 0, nil
+		}
+		item, newnode, resolved, err = t.tryGetNode(n.Val, path, pos+len(n.Key))
+		if err == nil && resolved > 0 {
+			n = n.copy()
+			n.Val = newnode
+		}
+		return item, n, resolved, err
+
+	case *FullNode:
+		item, newnode, resolved, err = t.tryGetNode(n.Children[path[pos]], path, pos+1)
+		if err == nil && resolved > 0 {
+			n = n.copy()
+			n.Children[path[pos]] = newnode
+		}
+		return item, n, resolved, err
+
+	case HashNode:
+		child, err := t.resolveHash(n, path[:pos])
+		if err != nil {
+			return nil, n, 1, err
+		}
+		item, newnode, resolved, err := t.tryGetNode(child, path, pos)
+		return item, newnode, resolved + 1, err
+
+	default:
+		panic(fmt.Sprintf("%T: invalid Node: %v", origNode, origNode))
+	}
+}
+
+// Update associates key with value in the trie. Subsequent calls to
+// Get will return value. If value has length zero, any existing value
+// is deleted from the trie and calls to Get will return nil.
+//
+// The value bytes must not be modified by the caller while they are
+// stored in the trie.
+func (t *Trie) Update(key, value []byte) {
+	if err := t.TryUpdate(key, value); err != nil {
+		log.Error(fmt.Sprintf("Unhandled trie error: %v", err))
+	}
+}
+
+func (t *Trie) TryUpdateAccount(key []byte, acc *types.StateAccount) error {
+	data, err := rlp.EncodeToBytes(acc)
+	if err != nil {
+		return fmt.Errorf("can't encode object at %x: %w", key[:], err)
+	}
+	return t.TryUpdate(key, data)
+}
+
+// TryUpdate associates key with value in the trie. Subsequent calls to
+// Get will return value. If value has length zero, any existing value
+// is deleted from the trie and calls to Get will return nil.
+//
+// The value bytes must not be modified by the caller while they are
+// stored in the trie.
+//
+// If a Node was not found in the database, a MissingNodeError is returned.
+func (t *Trie) TryUpdate(key, value []byte) error {
+	t.unhashed++
+	k := keybytesToHex(key)
+	if len(value) != 0 {
+		_, n, err := t.insert(t.root, nil, k, ValueNode(value))
+		if err != nil {
+			return err
+		}
+		t.root = n
+	} else {
+		_, n, err := t.delete(t.root, nil, k)
+		if err != nil {
+			return err
+		}
+		t.root = n
+	}
+	return nil
+}
+
+func (t *Trie) insert(n Node, prefix, key []byte, value Node) (bool, Node, error) {
+	if len(key) == 0 {
+		if v, ok := n.(ValueNode); ok {
+			return !bytes.Equal(v, value.(ValueNode)), value, nil
+		}
+		return true, value, nil
+	}
+	switch n := n.(type) {
+	case *ShortNode:
+		matchlen := prefixLen(key, n.Key)
+		// If the whole key matches, keep this short Node as is
+		// and only update the value.
+		if matchlen == len(n.Key) {
+			dirty, nn, err := t.insert(n.Val, append(prefix, key[:matchlen]...), key[matchlen:], value)
+			if !dirty || err != nil {
+				return false, n, err
+			}
+			return true, &ShortNode{n.Key, nn, t.newFlag()}, nil
+		}
+		// Otherwise branch out at the index where they differ.
+		branch := &FullNode{flags: t.newFlag()}
+		var err error
+		_, branch.Children[n.Key[matchlen]], err = t.insert(nil, append(prefix, n.Key[:matchlen+1]...), n.Key[matchlen+1:], n.Val)
+		if err != nil {
+			return false, nil, err
+		}
+		_, branch.Children[key[matchlen]], err = t.insert(nil, append(prefix, key[:matchlen+1]...), key[matchlen+1:], value)
+		if err != nil {
+			return false, nil, err
+		}
+		// Replace this ShortNode with the branch if it occurs at index 0.
+		if matchlen == 0 {
+			return true, branch, nil
+		}
+		// Otherwise, replace it with a short Node leading up to the branch.
+		return true, &ShortNode{key[:matchlen], branch, t.newFlag()}, nil
+
+	case *FullNode:
+		dirty, nn, err := t.insert(n.Children[key[0]], append(prefix, key[0]), key[1:], value)
+		if !dirty || err != nil {
+			return false, n, err
+		}
+		n = n.copy()
+		n.flags = t.newFlag()
+		n.Children[key[0]] = nn
+		return true, n, nil
+
+	case nil:
+		return true, &ShortNode{key, value, t.newFlag()}, nil
+
+	case HashNode:
+		// We've hit a part of the trie that isn't loaded yet. Load
+		// the Node and insert into it. This leaves all child nodes on
+		// the path to the value in the trie.
+		rn, err := t.resolveHash(n, prefix)
+		if err != nil {
+			return false, nil, err
+		}
+		dirty, nn, err := t.insert(rn, prefix, key, value)
+		if !dirty || err != nil {
+			return false, rn, err
+		}
+		return true, nn, nil
+
+	default:
+		panic(fmt.Sprintf("%T: invalid Node: %v", n, n))
+	}
+}
+
+// Delete removes any existing value for key from the trie.
+func (t *Trie) Delete(key []byte) {
+	if err := t.TryDelete(key); err != nil {
+		log.Error(fmt.Sprintf("Unhandled trie error: %v", err))
+	}
+}
+
+// TryDelete removes any existing value for key from the trie.
+// If a Node was not found in the database, a MissingNodeError is returned.
+func (t *Trie) TryDelete(key []byte) error {
+	t.unhashed++
+	k := keybytesToHex(key)
+	_, n, err := t.delete(t.root, nil, k)
+	if err != nil {
+		return err
+	}
+	t.root = n
+	return nil
+}
+
+// delete returns the new root of the trie with key deleted.
+// It reduces the trie to minimal form by simplifying
+// nodes on the way up after deleting recursively.
+func (t *Trie) delete(n Node, prefix, key []byte) (bool, Node, error) {
+	switch n := n.(type) {
+	case *ShortNode:
+		matchlen := prefixLen(key, n.Key)
+		if matchlen < len(n.Key) {
+			return false, n, nil // don't replace n on mismatch
+		}
+		if matchlen == len(key) {
+			return true, nil, nil // remove n entirely for whole matches
+		}
+		// The key is longer than n.Key. Remove the remaining suffix
+		// from the subtrie. Child can never be nil here since the
+		// subtrie must contain at least two other values with keys
+		// longer than n.Key.
+		dirty, child, err := t.delete(n.Val, append(prefix, key[:len(n.Key)]...), key[len(n.Key):])
+		if !dirty || err != nil {
+			return false, n, err
+		}
+		switch child := child.(type) {
+		case *ShortNode:
+			// Deleting from the subtrie reduced it to another
+			// short Node. Merge the nodes to avoid creating a
+			// ShortNode{..., ShortNode{...}}. Use concat (which
+			// always creates a new slice) instead of append to
+			// avoid modifying n.Key since it might be shared with
+			// other nodes.
+			return true, &ShortNode{concat(n.Key, child.Key...), child.Val, t.newFlag()}, nil
+		default:
+			return true, &ShortNode{n.Key, child, t.newFlag()}, nil
 		}
 
-		if leaf, ok := (*node).(*LeafNode); ok {
-			matched := PrefixMatchedLen(leaf.Path, nibbles)
-
-			// if all matched, update value even if the value are equal
-			if matched == len(nibbles) && matched == len(leaf.Path) {
-				newLeaf := NewLeafNodeFromNibbles(leaf.Path, value)
-				*node = newLeaf
-				return
-			}
-
-			branch := NewBranchNode()
-			// if matched some nibbles, check if matches either all remaining nibbles
-			// or all leaf nibbles
-			if matched == len(leaf.Path) {
-				branch.SetValue(leaf.Value)
-			}
-
-			if matched == len(nibbles) {
-				branch.SetValue(value)
-			}
-
-			// if there is matched nibbles, an extension node will be created
-			if matched > 0 {
-				// create an extension node for the shared nibbles
-				ext := NewExtensionNode(leaf.Path[:matched], branch)
-				*node = ext
-			} else {
-				// when there no matched nibble, there is no need to keep the extension node
-				*node = branch
-			}
-
-			if matched < len(leaf.Path) {
-				// have dismatched
-				// L 01020304 hello
-				// + 010203   world
-
-				// 01020304, 0, 4
-				branchNibble, leafNibbles := leaf.Path[matched], leaf.Path[matched+1:]
-				newLeaf := NewLeafNodeFromNibbles(leafNibbles, leaf.Value) // not :matched+1
-				branch.SetBranch(branchNibble, newLeaf)
-			}
-
-			if matched < len(nibbles) {
-				// L 01020304 hello
-				// + 010203040 world
-
-				// L 01020304 hello
-				// + 010203040506 world
-				branchNibble, leafNibbles := nibbles[matched], nibbles[matched+1:]
-				newLeaf := NewLeafNodeFromNibbles(leafNibbles, value)
-				branch.SetBranch(branchNibble, newLeaf)
-			}
-
-			return
+	case *FullNode:
+		dirty, nn, err := t.delete(n.Children[key[0]], append(prefix, key[0]), key[1:])
+		if !dirty || err != nil {
+			return false, n, err
 		}
+		n = n.copy()
+		n.flags = t.newFlag()
+		n.Children[key[0]] = nn
 
-		if branch, ok := (*node).(*BranchNode); ok {
-			if len(nibbles) == 0 {
-				branch.SetValue(value)
-				return
-			}
-
-			b, remaining := nibbles[0], nibbles[1:]
-			nibbles = remaining
-			node = &branch.Branches[b]
-			continue
+		// Because n is a full Node, it must've contained at least two children
+		// before the delete operation. If the new child value is non-nil, n still
+		// has at least two children after the deletion, and cannot be reduced to
+		// a short Node.
+		if nn != nil {
+			return true, n, nil
 		}
-
-		// E 01020304
-		// B 0 hello
-		// L 506 world
-		// + 010203 good
-		if ext, ok := (*node).(*ExtensionNode); ok {
-			matched := PrefixMatchedLen(ext.Path, nibbles)
-			if matched < len(ext.Path) {
-				// E 01020304
-				// + 010203 good
-				extNibbles, branchNibble, extRemainingnibbles := ext.Path[:matched], ext.Path[matched], ext.Path[matched+1:]
-				nodeBranchNibble, nodeLeafNibbles := nibbles[matched], nibbles[matched+1:]
-				branch := NewBranchNode()
-				if len(extRemainingnibbles) == 0 {
-					// E 0102030
-					// + 010203 good
-					branch.SetBranch(branchNibble, ext.Next)
+		// Reduction:
+		// Check how many non-nil entries are left after deleting and
+		// reduce the full Node to a short Node if only one entry is
+		// left. Since n must've contained at least two children
+		// before deletion (otherwise it would not be a full Node) n
+		// can never be reduced to nil.
+		//
+		// When the loop is done, pos contains the index of the single
+		// value that is left in n or -2 if n contains at least two
+		// values.
+		pos := -1
+		for i, cld := range &n.Children {
+			if cld != nil {
+				if pos == -1 {
+					pos = i
 				} else {
-					// E 01020304
-					// + 010203 good
-					newExt := NewExtensionNode(extRemainingnibbles, ext.Next)
-					branch.SetBranch(branchNibble, newExt)
+					pos = -2
+					break
 				}
-
-				remainingLeaf := NewLeafNodeFromNibbles(nodeLeafNibbles, value)
-				branch.SetBranch(nodeBranchNibble, remainingLeaf)
-
-				// if there is no shared extension nibbles any more, then we don't need the extension node
-				// any more
-				// E 01020304
-				// + 1234 good
-				if len(extNibbles) == 0 {
-					*node = branch
-				} else {
-					// otherwise create a new extension node
-					*node = NewExtensionNode(extNibbles, branch)
-				}
-				return
 			}
-
-			nibbles = nibbles[matched:]
-			node = &ext.Next
-			continue
 		}
+		if pos >= 0 {
+			if pos != 16 {
+				// If the remaining entry is a short Node, it replaces
+				// n and its key gets the missing nibble tacked to the
+				// front. This avoids creating an invalid
+				// ShortNode{..., ShortNode{...}}.  Since the entry
+				// might not be loaded yet, resolve it just for this
+				// check.
+				cnode, err := t.resolve(n.Children[pos], prefix)
+				if err != nil {
+					return false, nil, err
+				}
+				if cnode, ok := cnode.(*ShortNode); ok {
+					k := append([]byte{byte(pos)}, cnode.Key...)
+					return true, &ShortNode{k, cnode.Val, t.newFlag()}, nil
+				}
+			}
+			// Otherwise, n is replaced by a one-nibble short Node
+			// containing the child.
+			return true, &ShortNode{[]byte{byte(pos)}, n.Children[pos], t.newFlag()}, nil
+		}
+		// n still contains at least two values and cannot be reduced.
+		return true, n, nil
 
-		panic("unknown type")
+	case ValueNode:
+		return true, nil, nil
+
+	case nil:
+		return false, nil, nil
+
+	case HashNode:
+		// We've hit a part of the trie that isn't loaded yet. Load
+		// the Node and delete from it. This leaves all child nodes on
+		// the path to the value in the trie.
+		rn, err := t.resolveHash(n, prefix)
+		if err != nil {
+			return false, nil, err
+		}
+		dirty, nn, err := t.delete(rn, prefix, key)
+		if !dirty || err != nil {
+			return false, rn, err
+		}
+		return true, nn, nil
+
+	default:
+		panic(fmt.Sprintf("%T: invalid Node: %v (%v)", n, n, key))
 	}
-
 }
 
-// NewMerkleTree creates a new Merkle tree from a sequence of data
-func NewTrieWithData(data [][]byte) *Trie {
-	trie := NewTrie()
+func concat(s1 []byte, s2 ...byte) []byte {
+	r := make([]byte, len(s1)+len(s2))
+	copy(r, s1)
+	copy(r[len(s1):], s2)
+	return r
+}
 
-	for id, datum_bytes := range data {
-		str_id := strconv.Itoa(id)
-		trie.Put(datum_bytes, []byte(str_id))
+func (t *Trie) resolve(n Node, prefix []byte) (Node, error) {
+	if n, ok := n.(HashNode); ok {
+		return t.resolveHash(n, prefix)
 	}
+	return n, nil
+}
 
-	return trie
+func (t *Trie) resolveHash(n HashNode, prefix []byte) (Node, error) {
+	hash := common.BytesToHash(n)
+	if Node := t.db.node(hash); Node != nil {
+		return Node, nil
+	}
+	return nil, &MissingNodeError{NodeHash: hash, Path: prefix}
+}
+
+func (t *Trie) resolveBlob(n HashNode, prefix []byte) ([]byte, error) {
+	hash := common.BytesToHash(n)
+	blob, _ := t.db.Node(hash)
+	if len(blob) != 0 {
+		return blob, nil
+	}
+	return nil, &MissingNodeError{NodeHash: hash, Path: prefix}
+}
+
+// Hash returns the root hash of the trie. It does not write to the
+// database and can be used even if the trie doesn't have one.
+func (t *Trie) Hash() common.Hash {
+	hash, cached, _ := t.hashRoot()
+	t.root = cached
+	return common.BytesToHash(hash.(HashNode))
+}
+
+// Commit writes all nodes to the trie's memory database, tracking the internal
+// and external (for account tries) references.
+func (t *Trie) Commit(onleaf LeafCallback) (common.Hash, int, error) {
+	if t.db == nil {
+		panic("commit called on trie with nil database")
+	}
+	if t.root == nil {
+		return emptyRoot, 0, nil
+	}
+	// Derive the hash for all dirty nodes first. We hold the assumption
+	// in the following procedure that all nodes are hashed.
+	rootHash := t.Hash()
+	h := newCommitter()
+	defer returnCommitterToPool(h)
+
+	// Do a quick check if we really need to commit, before we spin
+	// up goroutines. This can happen e.g. if we load a trie for reading storage
+	// values, but don't write to it.
+	if _, dirty := t.root.cache(); !dirty {
+		return rootHash, 0, nil
+	}
+	var wg sync.WaitGroup
+	if onleaf != nil {
+		h.onleaf = onleaf
+		h.leafCh = make(chan *leaf, leafChanSize)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			h.commitLoop(t.db)
+		}()
+	}
+	newRoot, committed, err := h.Commit(t.root, t.db)
+	if onleaf != nil {
+		// The leafch is created in newCommitter if there was an onleaf callback
+		// provided. The commitLoop only _reads_ from it, and the commit
+		// operation was the sole writer. Therefore, it's safe to close this
+		// channel here.
+		close(h.leafCh)
+		wg.Wait()
+	}
+	if err != nil {
+		return common.Hash{}, 0, err
+	}
+	t.root = newRoot
+	return rootHash, committed, nil
+}
+
+// hashRoot calculates the root hash of the given trie
+func (t *Trie) hashRoot() (Node, Node, error) {
+	if t.root == nil {
+		return HashNode(emptyRoot.Bytes()), nil, nil
+	}
+	// If the number of changes is below 100, we let one thread handle it
+	h := newHasher(t.unhashed >= 100)
+	defer returnHasherToPool(h)
+	hashed, cached := h.hash(t.root, true)
+	t.unhashed = 0
+	return hashed, cached, nil
+}
+
+// Reset drops the referenced root Node and cleans all internal state.
+func (t *Trie) Reset() {
+	t.root = nil
+	t.unhashed = 0
 }

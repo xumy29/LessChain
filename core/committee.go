@@ -9,5 +9,4 @@ type Committee interface {
 	CanStopV2() bool
 
 	NewBlockGenerated(block *Block)
-	InjectTXs([]*Transaction)
 }
