@@ -13,14 +13,16 @@ const (
 
 	MsgTypeClientInjectTX2Committee
 	MsgTypeCommitteeReply2Client
-	MsgTypeSetInjectDone2Committee
-	MsgTypeCommitteeAddTB
+	MsgTypeSetInjectDone2Nodes
+	MsgTypeComAddTb2TBChain
 	MsgTypeCommitteeInitialAddrs
 	MsgTypeCommitteeAdjustAddrs
 	MsgTypeGetTB
 
 	MsgTypeSendBlock2Shard
 	MsgTypeReady4Reconfig
-	MsgTypeTBChainPushTB2Clients
+	MsgTypeTBChainPushTB2Client
 	MsgTypeTBChainPushTB2Coms
+
+	MsgTypeComGetLatestBlockHashFromEthChain
 )

@@ -103,15 +103,15 @@ func (tbChain *BeaconChain) toPushBlock(block *TBBlock) {
 	tbChain.tbBlocks[block.Height] = block
 	if block.Height > tbChain.cfg.Height2Confirm {
 		confirmBlock := tbChain.tbBlocks[block.Height-tbChain.cfg.Height2Confirm]
-		tbChain.PushBlock2Clients(confirmBlock)
+		tbChain.PushBlock2Client(confirmBlock)
 		tbChain.PushBlock2Coms(confirmBlock)
 	}
 }
 
 /** 信标链生成新区块后，将区块（包含新的信标）发送给客户端
  */
-func (tbChain *BeaconChain) PushBlock2Clients(block *TBBlock) {
-	tbChain.messageHub.Send(core.MsgTypeTBChainPushTB2Clients, 0, block, nil)
+func (tbChain *BeaconChain) PushBlock2Client(block *TBBlock) {
+	tbChain.messageHub.Send(core.MsgTypeTBChainPushTB2Client, 0, block, nil)
 }
 
 /** 信标链生成新区块后，将区块（包含新的信标）发送给委员会

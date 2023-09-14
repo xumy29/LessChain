@@ -4,9 +4,13 @@ import (
 	"fmt"
 	"go-w3chain/beaconChain"
 	"go-w3chain/core"
+	"go-w3chain/eth_chain"
 	"go-w3chain/log"
 	"go-w3chain/result"
 	"go-w3chain/utils"
+	"strings"
+
+	"github.com/ethereum/go-ethereum/accounts/abi"
 )
 
 /**
@@ -133,4 +137,15 @@ func (c *Client) processTXReceipts() {
 	}
 	c.recordTXReceipts(to_record)
 
+}
+
+func (c *Client) HandleBooterSendContract(data *core.BooterSendContract) {
+	c.contractAddr = data.Addr
+	contractABI, err := abi.JSON(strings.NewReader(eth_chain.MyContractABI()))
+	if err != nil {
+		log.Error("get contracy abi fail", "err", err)
+	}
+	c.contractAbi = &contractABI
+	// 启动 发动交易的线程
+	c.StartInjectTxs()
 }

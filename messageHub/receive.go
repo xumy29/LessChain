@@ -13,27 +13,26 @@ import (
 	"sync"
 )
 
-func listen(addr string, wg *sync.WaitGroup, quit chan struct{}) {
+func listen(addr string, wg *sync.WaitGroup) {
 	defer wg.Done()
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Error("Error setting up listener", "err", err)
 	}
 	log.Info(fmt.Sprintf("start listening on %s", addr))
+	listenConn = ln
 	defer ln.Close()
 
 	for {
-		select {
-		case <-quit:
-			log.Debug("node(or client, booter) listen loop exit.")
+		// // 超过时间限制没有收到新的连接则退出
+		// ln.(*net.TCPListener).SetDeadline(time.Now().Add(10 * time.Second))
+		conn, err := ln.Accept()
+		if err != nil {
+			log.Debug("Error accepting connection", "err", err)
 			return
-		default:
-			conn, err := ln.Accept()
-			if err != nil {
-				log.Error("Error accepting connection", "err", err)
-			}
-			go handleConnection(conn)
 		}
+		go handleConnection(conn, ln)
+
 	}
 }
 
@@ -51,7 +50,7 @@ func unpackMsg(packedMsg []byte) *core.Msg {
 	return &msg
 }
 
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn, ln net.Listener) {
 	defer conn.Close()
 
 	// reader := bufio.NewReader(conn)
@@ -80,6 +79,7 @@ func handleConnection(conn net.Conn) {
 		case "ShardSendGenesis":
 			exit := handleShardSendGenesis(msg.Data)
 			if exit {
+				ln.Close()
 				return
 			}
 		case "BooterSendContract":
@@ -95,6 +95,8 @@ func handleConnection(conn net.Conn) {
 
 		case "ClientSendTx":
 			handleClientSendTx(msg.Data)
+		case "ClientSetInjectDone":
+			handleClientSetInjectDone(msg.Data)
 		case "ComSendTxReceipt":
 			handleComSendTxReceipt(msg.Data)
 
@@ -119,6 +121,21 @@ func handleClientSendTx(dataBytes []byte) {
 
 	log.Info("Msg Received: ClientSendTx", "tx count", len(data))
 	committee_ref.HandleClientSendtx(data)
+}
+
+func handleClientSetInjectDone(dataBytes []byte) {
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data *core.ClientSetInjectDone
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err)
+	}
+
+	log.Info("Msg Received: ClientSetInjectDone", "clientID", data.Cid)
+	committee_ref.SetInjectTXDone(data.Cid)
 }
 
 func handleComGetHeight(dataBytes []byte, conn net.Conn) {
@@ -199,8 +216,15 @@ func handleBooterSendContract(dataBytes []byte) {
 
 	log.Info("Msg Received: BooterSendContract", "data", data)
 
-	// 注意是节点处理而不是分片或委员会处理
-	node_ref.HandleBooterSendContract(&data)
+	if node_ref != nil {
+		// 注意是节点处理而不是分片或委员会处理
+		node_ref.HandleBooterSendContract(&data)
+	}
+	if client_ref != nil {
+		client_ref.HandleBooterSendContract(&data)
+	}
+	tbChain_ref.HandleBooterSendContract(&data)
+
 }
 
 func handleComSendBlock(dataBytes []byte) {

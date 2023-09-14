@@ -117,6 +117,9 @@ type BeaconChain struct {
 	contract *Contract
 	addrs    [][]common.Address
 
+	contractAddr common.Address
+	contractAbi  *abi.ABI
+
 	tbBlocks map[uint64]*TBBlock
 }
 

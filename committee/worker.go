@@ -112,12 +112,12 @@ func (w *Worker) newWorkLoop(recommit time.Duration) {
 
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func() {
-		_, err := w.commit(timestamp)
+		block, err := w.commit(timestamp)
 		if err != nil {
 			log.Error("worker commit block failed", "err", err)
 		}
 
-		// w.broadcastTbInCommittee(block)
+		w.broadcastTbInCommittee(block)
 
 		// /* 通知committee 有新区块产生
 		//    当出完一个块需要重组时，worker会阻塞在这个函数内
@@ -138,8 +138,7 @@ func (w *Worker) newWorkLoop(recommit time.Duration) {
 
 		case <-w.startCh:
 			// log.Debug("worker startch", "comID", w.chain.GetChainID())
-			timestamp = time.Now().Unix()
-			commit()
+			timer.Reset(recommit)
 
 		case <-timer.C:
 			// log.Debug("worker timer.c", "comID", w.chain.GetChainID())
@@ -183,7 +182,7 @@ func (w *Worker) broadcastTbInCommittee(block *core.Block) {
 
 	signedTB := w.com.multiSign(tb)
 
-	w.com.AddTB(signedTB)
+	w.com.SendTB(signedTB)
 }
 
 /* 生成交易收据, 发送给客户端 */
@@ -280,7 +279,12 @@ func (w *Worker) commit(timestamp int64) (*core.Block, error) {
 		return nil, errors.New("failed to commit transition state: " + err.Error())
 	}
 
-	// ---todo: 完成以下部分网络通信
+	// log.Debug("WorkerAccountState")
+	// for _, tx := range txs {
+	// 	log.Debug(fmt.Sprintf("account: %x  value: %v", *tx.Sender, addr2State[*tx.Sender]))
+	// 	log.Debug(fmt.Sprintf("account: %x  value: %v", *tx.Recipient, addr2State[*tx.Recipient]))
+	// }
+
 	w.com.AddBlock2Shard(block)
 	/* 生成交易收据, 并发送到客户端 */
 	w.sendTXReceipt2Client(txs)

@@ -57,7 +57,7 @@ func runClient(allCfg *cfg.Cfg) {
 	messageHub := messageHub.NewMessageHub()
 
 	/* 设置各个分片、委员会和客户端、信标链的通信渠道 */
-	messageHub.Init(client, nil, nil, tbChain, allCfg.ShardNum, &wg)
+	messageHub.Init(client, nil, nil, tbChain, allCfg.ShardNum, allCfg.ClientNum, &wg)
 
 	startClient(client, allCfg.InjectSpeed, allCfg.RecommitIntervalSecs)
 	toStopClient(client, allCfg.RecommitIntervalSecs, allCfg.LogProgressInterval,
@@ -67,6 +67,11 @@ func runClient(allCfg *cfg.Cfg) {
 	messageHub.Close()
 
 	wg.Wait()
+
+	/* 打印交易执行结果 */
+	result.PrintTXReceipt()
+	thrput, avlatency, rollbackRate, overloads := result.GetThroughtPutAndLatencyV2()
+	log.Info("GetThroughtPutAndLatency", "thrput", thrput, "avlatency", avlatency, "rollbackRate", rollbackRate, "overloads", overloads)
 
 }
 
@@ -127,15 +132,13 @@ func runNode(allCfg *cfg.Cfg) {
 		MultiSignRequiredNum: allCfg.MultiSignRequiredNum,
 	}
 	tbChain = beaconchain.NewTBChain(beaconChainConfig, allCfg.ShardNum)
-	defer stopTBChain()
 
 	var wg sync.WaitGroup
 
 	/* 创建消息中心(用于委员会和信标链的交互等) */
 	messageHub := messageHub.NewMessageHub()
 	/* 设置各个分片、委员会和客户端、信标链的通信渠道 */
-	messageHub.Init(nil, node, nil, tbChain, allCfg.ShardNum, &wg)
-	defer messageHub.Close()
+	messageHub.Init(nil, node, nil, tbChain, allCfg.ShardNum, allCfg.ClientNum, &wg)
 
 	// 启动节点对应的分片实例和委员会实例
 	startShard(shard)
@@ -146,6 +149,8 @@ func runNode(allCfg *cfg.Cfg) {
 	toStopCommittee(node, allCfg.RecommitIntervalSecs, allCfg.LogProgressInterval,
 		allCfg.IsLogProgress, allCfg.ExitMode)
 
+	stopTBChain()
+	messageHub.Close()
 	wg.Wait()
 
 }
@@ -172,7 +177,7 @@ func runBooterNode(allCfg *cfg.Cfg) {
 	/* 创建消息中心(用于委员会和信标链的交互等) */
 	messageHub := messageHub.NewMessageHub()
 	/* 设置各个分片、委员会和客户端、信标链的通信渠道 */
-	messageHub.Init(nil, nil, booter, tbChain, allCfg.ShardNum, &wg)
+	messageHub.Init(nil, nil, booter, tbChain, allCfg.ShardNum, allCfg.ClientNum, &wg)
 	defer messageHub.Close()
 
 	wg.Wait()
@@ -211,11 +216,6 @@ func Main(cfgfilename string, role string) {
 	default:
 		log.Error("unknown roleType", "type", role)
 	}
-
-	/* 打印交易执行结果 */
-	result.PrintTXReceipt()
-	thrput, avlatency, rollbackRate, overloads := result.GetThroughtPutAndLatencyV2()
-	log.Info("GetThroughtPutAndLatency", "thrput", thrput, "avlatency", avlatency, "rollbackRate", rollbackRate, "overloads", overloads)
 
 	/* 结束 */
 	log.Info(" Run finished! Bye~")

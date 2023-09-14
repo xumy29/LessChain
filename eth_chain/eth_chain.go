@@ -20,14 +20,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-var (
-	chainID int
-)
-
-func SetChainID(id int) {
-	chainID = id
-}
-
 type ContractTB struct {
 	ShardID    uint32 `json:"shardID" gencodec:"required"`
 	Height     uint64 `json:"height" gencodec:"required"`
@@ -84,6 +76,7 @@ func DeployContract(client *ethclient.Client,
 	required_sig_cnt uint32,
 	shard_num uint32,
 	addrs [][]common.Address,
+	chainID int,
 ) (common.Address, *abi.ABI, *big.Int, error) {
 
 	// 编译 Solidity 合约并获取合约 ABI 和字节码
@@ -136,7 +129,8 @@ var (
 func AddTB(client *ethclient.Client, contractAddr common.Address,
 	abi *abi.ABI, mode int, tb *ContractTB,
 	sigs [][]byte, vrfs [][]byte, seedHeight uint64,
-	signers []common.Address) error {
+	signers []common.Address, chainID int,
+) error {
 
 	call_lock.Lock()
 	defer call_lock.Unlock()
@@ -149,19 +143,19 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 	// 构造调用数据
 	callData, err := abi.Pack("addTB", *tb, sigs, vrfs, seedHeight, signers)
 	if err != nil {
-		fmt.Println("abi.Pack err: ", err)
+		log.Error(fmt.Sprintf("abi.Pack err: %v", err))
 		return err
 	}
 
 	// 通过私钥构造签名者
 	privateKey, err := myPrivateKey(int(tmpShardID), mode)
 	if err != nil {
-		fmt.Println("get myPrivateKey err: ", err)
+		log.Error(fmt.Sprintf("get myPrivateKey err: %v", err))
 		return err
 	}
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(int64(chainID)))
 	if err != nil {
-		fmt.Println("bind.NewKeyedTransactorWithChainID err: ", err)
+		log.Error("bind.NewKeyedTransactorWithChainID err: %v", err)
 		return err
 	}
 
@@ -213,7 +207,7 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 		// 发送交易
 		err = client.SendTransaction(context.Background(), signedTx)
 		if err != nil {
-			log.Debug("client.SendTransaction err", "err", err, "txtype", "AddTB", "shardID", tb.ShardID, "height", tb.Height,
+			log.Error("client.SendTransaction err", "err", err, "txtype", "AddTB", "shardID", tb.ShardID, "height", tb.Height,
 				"gasPrice", lowestGasPrice, "nonce", nonce)
 			fmt.Println("client.SendTransaction err: ", err)
 
@@ -237,6 +231,7 @@ func AdjustRecordedAddrs(client *ethclient.Client, contractAddr common.Address,
 	abi *abi.ABI, mode int,
 	shardID uint32, addrs []common.Address,
 	vrfs [][]byte, seedHeight uint64,
+	chainID int,
 ) error {
 
 	call_lock.Lock()

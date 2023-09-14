@@ -26,16 +26,11 @@ type Committee struct {
 	Nodes      []*node.Node
 	txPool     *TxPool
 	/* 计数器，初始等于客户端个数，每一个客户端发送注入完成信号时计数器减一 */
-	injectNotDone      int32
-	tbchain_height     uint64
-	tbchain_block_hash common.Hash
-	to_reconfig        bool // 收到特定高度的信标链区块后设为true，准备重组
+	injectNotDone  int32
+	tbchain_height uint64
+	to_reconfig    bool // 收到特定高度的信标链区块后设为true，准备重组
 
 	shardSendStateChan chan *core.ShardSendState
-}
-
-func isLeader(nodeId int) bool {
-	return nodeId == 0
 }
 
 func NewCommittee(comID uint32, clientCnt int, _node *node.Node, config *core.CommitteeConfig) *Committee {
@@ -54,7 +49,7 @@ func NewCommittee(comID uint32, clientCnt int, _node *node.Node, config *core.Co
 }
 
 func (com *Committee) Start(nodeId int) {
-	if isLeader(nodeId) { // 只有委员会的leader节点会运行worker，即出块
+	if utils.IsComLeader(nodeId) { // 只有委员会的leader节点会运行worker，即出块
 		pool := NewTxPool(com.comID)
 		com.txPool = pool
 		pool.setCommittee(com)
@@ -62,9 +57,11 @@ func (com *Committee) Start(nodeId int) {
 		worker := newWorker(com.config, com.comID)
 		com.worker = worker
 		worker.setCommittee(com)
-
-		com.worker.start()
 	}
+}
+
+func (com *Committee) StartWorker() {
+	com.worker.start()
 }
 
 func (com *Committee) Close() {
@@ -77,7 +74,7 @@ func (com *Committee) Close() {
 	}
 }
 
-func (com *Committee) SetInjectTXDone() {
+func (com *Committee) SetInjectTXDone(cid uint32) {
 	atomic.AddInt32(&com.injectNotDone, -1)
 }
 
@@ -159,11 +156,6 @@ func (com *Committee) AddTBs(tbblock *beaconChain.TBBlock) {
 	// 		c.tbs[shardID][tb.Height] = tb
 	// 	}
 	// }
-	hash, err := core.RlpHash(tbblock)
-	if err != nil {
-		log.Error("RlpHash tbblock fail.", "err", err)
-	}
-	com.tbchain_block_hash = hash
 	com.tbchain_height = tbblock.Height
 
 	// 收到特定高度的信标链区块后准备重组
@@ -287,8 +279,8 @@ func (com *Committee) AddBlock2Shard(block *core.Block) {
 /**
  * 将新区块的信标发送到信标链
  */
-func (com *Committee) AddTB(tb *beaconChain.SignedTB) {
-	com.messageHub.Send(core.MsgTypeCommitteeAddTB, 0, tb, nil)
+func (com *Committee) SendTB(tb *beaconChain.SignedTB) {
+	com.messageHub.Send(core.MsgTypeComAddTb2TBChain, 0, tb, nil)
 }
 
 func (com *Committee) SendReconfigMsg() {
@@ -297,6 +289,22 @@ func (com *Committee) SendReconfigMsg() {
 
 func (com *Committee) SetReconfigRes(res []*node.Node) {
 	com.reconfigCh <- res
+}
+
+func (com *Committee) GetEthChainLatestBlockHash() (common.Hash, uint64) {
+	channel := make(chan struct{}, 1)
+	var blockHash common.Hash
+	var height uint64
+	callback := func(ret ...interface{}) {
+		blockHash = ret[0].(common.Hash)
+		height = ret[1].(uint64)
+		channel <- struct{}{}
+	}
+	com.messageHub.Send(core.MsgTypeComGetLatestBlockHashFromEthChain, com.comID, nil, callback)
+	// 阻塞
+	<-channel
+
+	return blockHash, height
 }
 
 /*

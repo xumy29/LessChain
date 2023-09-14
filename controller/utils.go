@@ -24,7 +24,7 @@ func startCommittee(com *committee.Committee, nodeId int) {
 }
 
 func startClient(c *client.Client, injectSpeed int, recommitIntervalSecs int) {
-	c.Start(injectSpeed, recommitIntervalSecs)
+	c.Start(injectSpeed)
 }
 
 /**

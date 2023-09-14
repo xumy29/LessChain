@@ -92,6 +92,8 @@ func SubscribeEvents(port int, contractAddr common.Address, eventChannel chan *E
 			continue
 		}
 
+		// height := response.Params.Result.BlockNumber
+		// log.Debug(fmt.Sprintf("suscribe ethchain height: %v", height))
 		data := response.Params.Result.Data
 		// fmt.Println("Data:", data)
 		event := handleMessage(data)

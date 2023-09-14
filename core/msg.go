@@ -43,3 +43,7 @@ type ComSendBlock struct {
 	Transactions []*Transaction
 	Header       *Header
 }
+
+type ClientSetInjectDone struct {
+	Cid uint32
+}

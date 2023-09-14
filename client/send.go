@@ -38,10 +38,8 @@ func (c *Client) InjectTXs(cid int, inject_speed int) {
 			break
 		}
 		if c.CanStopV2() && !msgsent {
-			/* 通知分片交易注入完成 */
-			for i := 0; i < c.shard_num; i++ {
-				c.messageHub.Send(core.MsgTypeSetInjectDone2Committee, uint32(i), struct{}{}, nil)
-			}
+			/* 通知各节点交易注入完成 */
+			c.messageHub.Send(core.MsgTypeSetInjectDone2Nodes, uint32(c.cid), struct{}{}, nil)
 			msgsent = true
 			if c.exitMode == 1 {
 				break

@@ -40,6 +40,7 @@ func LoadETHData(filepath string, maxTxNum int) []*core.Transaction {
 		log.Error("Get reader handle error!", "err:", err, "colname:", colname)
 	}
 	txid := uint64(0)
+
 	for {
 		row, err := reader.Read()
 		if err != nil && err != io.EOF {
@@ -98,6 +99,9 @@ func SetShardInitialAccountState(shard core.Shard) {
 	for _, tx := range alltxs {
 		if tx.Sender_sid == shardId {
 			addrs[*tx.Sender] = struct{}{}
+		}
+		if tx.Recipient_sid == shardId {
+			addrs[*tx.Recipient] = struct{}{}
 		}
 	}
 

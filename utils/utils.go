@@ -144,3 +144,11 @@ func Addr2Shard(addr string, shardNum int) int {
 func VrfValue2Shard(value []byte, shardNum uint32) uint32 {
 	return uint32(uint8(value[0])) % shardNum
 }
+
+func IsComLeader(nodeId int) bool {
+	return nodeId == 0
+}
+
+func IsShardLeader(nodeId int) bool {
+	return nodeId == 0
+}

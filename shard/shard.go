@@ -6,7 +6,7 @@ import (
 	"go-w3chain/log"
 	"go-w3chain/node"
 	"go-w3chain/params"
-	"go-w3chain/result"
+	"go-w3chain/utils"
 	"math/big"
 	"net"
 	"sync"
@@ -61,15 +61,11 @@ func NewShard(shardID uint32, _node *node.Node) *Shard {
 		txStatus:   make(map[uint64]uint64),
 	}
 
-	if isLeader(_node) {
+	if utils.IsShardLeader(_node.NodeID) {
 		shard.setLeader(_node)
 	}
 
 	return shard
-}
-
-func isLeader(node *node.Node) bool {
-	return node.NodeID == 0
 }
 
 func (shard *Shard) setLeader(node *node.Node) {
@@ -249,6 +245,8 @@ func (s *Shard) addGenesisTB() {
 func (s *Shard) executeTransactions(txs []*core.Transaction) common.Hash {
 	stateDB := s.blockchain.GetStateDB()
 	now := time.Now().Unix()
+
+	// log.Debug(fmt.Sprintf("shardTrieRoot: %x", stateDB.IntermediateRoot(false)))
 	for _, tx := range txs {
 		s.executeTransaction(tx, stateDB, now)
 	}
@@ -256,26 +254,31 @@ func (s *Shard) executeTransactions(txs []*core.Transaction) common.Hash {
 	root := stateDB.IntermediateRoot(false)
 	stateDB.Commit(false)
 
+	// log.Debug("ShardAccountState")
+	// for _, tx := range txs {
+	// 	log.Debug(fmt.Sprintf("account: %x  nonce : %v  value: %v", *tx.Sender, stateDB.GetNonce(*tx.Sender), stateDB.GetBalance(*tx.Sender)))
+	// 	log.Debug(fmt.Sprintf("account: %x  nonce : %v  value: %v", *tx.Recipient, stateDB.GetNonce(*tx.Recipient), stateDB.GetBalance(*tx.Recipient)))
+	// }
+
 	return root
 }
 
 func (s *Shard) executeTransaction(tx *core.Transaction, stateDB *state.StateDB, now int64) {
 	state := stateDB
-	tx.TXStatus = result.DefaultStatus
 	if tx.TXtype == core.IntraTXType {
-		state.SetNonce(*tx.Sender, tx.SenderNonce+1)
+		state.SetNonce(*tx.Sender, state.GetNonce(*tx.Sender)+1)
 		state.SubBalance(*tx.Sender, tx.Value)
 		state.AddBalance(*tx.Recipient, tx.Value)
 	} else if tx.TXtype == core.CrossTXType1 {
-		state.SetNonce(*tx.Sender, tx.SenderNonce+1)
+		state.SetNonce(*tx.Sender, state.GetNonce(*tx.Sender)+1)
 		state.SubBalance(*tx.Sender, tx.Value)
 	} else if tx.TXtype == core.CrossTXType2 {
 		state.AddBalance(*tx.Recipient, tx.Value)
 	} else if tx.TXtype == core.RollbackTXType {
+		state.SetNonce(*tx.Sender, state.GetNonce(*tx.Sender)-1)
 		state.AddBalance(*tx.Sender, tx.Value)
 		state.SetNonce(*tx.Sender, tx.SenderNonce-1)
 	} else {
 		log.Error("Oops, something wrong! Cannot handle tx type", "cur shardID", s.shardID, "type", tx.TXtype, "tx", tx)
 	}
-	// tx.ConfirmTimestamp = uint64(now)
 }

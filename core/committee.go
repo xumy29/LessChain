@@ -4,9 +4,11 @@ type Committee interface {
 	Start(nodeId int)
 	Close()
 
-	SetInjectTXDone()
+	SetInjectTXDone(uint32)
 	CanStopV1() bool
 	CanStopV2() bool
 
 	NewBlockGenerated(block *Block)
+
+	StartWorker()
 }

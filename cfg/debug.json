@@ -15,7 +15,7 @@
     "MultiSignRequiredNum": 1,
 
 
-    "MaxTxNum": 10,
+    "MaxTxNum": 20,
     "InjectSpeed": 1,
     "RecommitInterval": 4,
     "MaxBlockTXSize": 1,

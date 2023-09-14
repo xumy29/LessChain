@@ -100,5 +100,7 @@ func (s *Shard) HandleComSendBlock(block *core.ComSendBlock) {
 		// 需要考虑到一种可能出错的情况，即分片发送给委员会root之后，由于新创建账户而修改了root
 		// 这种情况会在委员会连续向分片获取不同账户列表的状态时发生，应尽量避免
 		log.Error(fmt.Sprintf("trie root not the same. trieRoot in shard: %x  trieRoot from committee: %x", trieRoot, block.Header.Root))
+	} else {
+		log.Debug(fmt.Sprintf("shard execute txs done and verify trie root pass. current trie root: %x", trieRoot))
 	}
 }

@@ -1,13 +1,9 @@
 package eth_chain
 
 import (
-	"context"
-	"testing"
-
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/stretchr/testify/assert"
 )
 
 var (
@@ -16,18 +12,18 @@ var (
 	contractABI  *abi.ABI
 )
 
-func TestConnect(t *testing.T) {
-	var err error
-	client, err = Connect(7545)
-	assert.Equal(t, true, err == nil)
+// func TestConnect(t *testing.T) {
+// 	var err error
+// 	client, err = Connect(7545)
+// 	assert.Equal(t, true, err == nil)
 
-	id, err := client.NetworkID(context.Background())
-	assert.Equal(t, true, err == nil)
-	assert.Equal(t, int64(5777), id.Int64())
+// 	id, err := client.NetworkID(context.Background())
+// 	assert.Equal(t, true, err == nil)
+// 	assert.Equal(t, int64(5777), id.Int64())
 
-	// 不知为何，ganache链ID是5777，但与它连接时需要给定链ID是1337，metamask连接时也是设定链ID为1337
-	SetChainID(1337)
-}
+// 	// 不知为何，ganache链ID是5777，但与它连接时需要给定链ID是1337，metamask连接时也是设定链ID为1337
+// 	SetChainID(1337)
+// }
 
 // func TestDeploy(t *testing.T) {
 // 	var err error

@@ -10,6 +10,9 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 type Client struct {
@@ -66,6 +69,11 @@ type Client struct {
 
 	tbchain_height uint64
 
+	contractAddr common.Address
+	contractAbi  *abi.ABI
+
+	injectSpeed int
+
 	wg sync.WaitGroup
 }
 
@@ -97,11 +105,13 @@ func NewClient(addr string, id, rollbackHeight, shardNum int, exitMode int) *Cli
 	return c
 }
 
-func (c *Client) Start(injectSpeed, recommitIntervalSecs int) {
+func (c *Client) Start(injectSpeed int) {
+	c.injectSpeed = injectSpeed
+}
+
+func (c *Client) StartInjectTxs() {
 	c.wg.Add(1)
-	go c.SendTXs(injectSpeed)
-	// c.wg.Add(1)
-	// go c.CheckExpiredTXs(recommitIntervalSecs)
+	go c.SendTXs(c.injectSpeed)
 }
 
 func (c *Client) SetMessageHub(hub core.MessageHub) {

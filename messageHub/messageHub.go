@@ -9,6 +9,7 @@ import (
 	"go-w3chain/log"
 	"go-w3chain/node"
 	"go-w3chain/shard"
+	"net"
 	"sync"
 )
 
@@ -21,9 +22,11 @@ var (
 	tbChain_ref   *beaconChain.BeaconChain
 
 	shardNum     int
+	clientNum    int
 	conns2Shard  *ConnectionsMap
 	conns2Com    *ConnectionsMap
 	conns2Client *ConnectionsMap
+	listenConn   net.Listener
 )
 
 func init() {
@@ -43,13 +46,14 @@ type GoodMessageHub struct {
 func NewMessageHub() *GoodMessageHub {
 	hub := &GoodMessageHub{
 		mid:      1,
-		exitChan: make(chan struct{}, 0),
+		exitChan: make(chan struct{}, 1),
 	}
 	return hub
 }
 
 func (hub *GoodMessageHub) Init(client *client.Client, node *node.Node, booter *node.Booter,
-	tbChain *beaconChain.BeaconChain, _shardNum int, wg *sync.WaitGroup) {
+	tbChain *beaconChain.BeaconChain, _shardNum int, _clientNum int, wg *sync.WaitGroup) {
+	clientNum = _clientNum
 	client_ref = client
 
 	node_ref = node
@@ -72,7 +76,7 @@ func (hub *GoodMessageHub) Init(client *client.Client, node *node.Node, booter *
 	if client_ref != nil {
 		client_ref.SetMessageHub(hub)
 		wg.Add(1)
-		go listen(client.GetAddr(), wg, hub.exitChan)
+		go listen(client.GetAddr(), wg)
 	}
 	// 目前所有角色都需要连接tbchain
 	if tbChain_ref == nil {
@@ -82,12 +86,12 @@ func (hub *GoodMessageHub) Init(client *client.Client, node *node.Node, booter *
 
 	if node_ref != nil {
 		wg.Add(1)
-		go listen(node_ref.GetAddr(), wg, hub.exitChan)
+		go listen(node_ref.GetAddr(), wg)
 	}
 	if booter_ref != nil {
 		booter_ref.SetMessageHub(hub)
 		wg.Add(1)
-		go listen(booter.GetAddr(), wg, hub.exitChan)
+		go listen(booter.GetAddr(), wg)
 	}
 
 }
@@ -103,7 +107,7 @@ func (hub GoodMessageHub) Close() {
 	for _, conn := range conns2Shard.connections {
 		conn.Close()
 	}
-	hub.exitChan <- struct{}{}
+	listenConn.Close()
 }
 
 /* 用于分片、委员会、客户端、信标链传送消息 */
@@ -125,12 +129,27 @@ func (hub *GoodMessageHub) Send(msgType uint32, id uint32, msg interface{}, call
 
 	case core.MsgTypeClientInjectTX2Committee:
 		clientInjectTx2Com(id, msg)
+	case core.MsgTypeSetInjectDone2Nodes:
+		clientSetInjectDone2Nodes(id)
 
 	case core.MsgTypeSendBlock2Shard:
 		comSendBlock2Shard(id, msg)
 
 	case core.MsgTypeCommitteeReply2Client:
 		comSendReply2Client(id, msg)
+
+	case core.MsgTypeComAddTb2TBChain:
+		comAddTb2TBChain(msg)
+
+	////////////////////
+	// 通过beaconChain模块中的ethclient与ethChain交互
+	///////////////////
+	case core.MsgTypeComGetLatestBlockHashFromEthChain:
+		comGetLatestBlock(id, callback)
+
+	case core.MsgTypeTBChainPushTB2Client:
+		tbChainPushBlock2Client(msg)
+
 		// client
 		// case core.MsgTypeClientInjectTX2Committee:
 		// 	clientInjectTx2Com(id, msg)
@@ -139,11 +158,11 @@ func (hub *GoodMessageHub) Send(msgType uint32, id uint32, msg interface{}, call
 		// 	receipts := msg.([]*result.TXReceipt)
 		// 	client.AddTXReceipts(receipts)
 		// 	// client -> committee
-		// case core.MsgTypeSetInjectDone2Committee:
+		// case core.MsgTypeSetInjectDone2Nodes:
 		// 	com := committees_ref[id]
 		// 	com.SetInjectTXDone()
 		// 	// shard、committee -> tbchain
-		// case core.MsgTypeCommitteeAddTB:
+		// case core.MsgTypeComAddTb2TBChain:
 		// 	tb := msg.(*beaconChain.SignedTB)
 		// 	tbChain_ref.AddTimeBeacon(tb)
 		// case core.MsgTypeCommitteeInitialAddrs:
@@ -172,7 +191,7 @@ func (hub *GoodMessageHub) Send(msgType uint32, id uint32, msg interface{}, call
 		// case core.MsgTypeReady4Reconfig:
 		// 	seedHeight := msg.(uint64)
 		// 	toReconfig(seedHeight)
-		// case core.MsgTypeTBChainPushTB2Clients:
+		// case core.MsgTypeTBChainPushTB2Client:
 		// 	block := msg.(*beaconChain.TBBlock)
 		// 	for _, c := range clients_ref {
 		// 		c.AddTBs(block)

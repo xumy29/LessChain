@@ -13,7 +13,7 @@ import (
  */
 func (com *Committee) multiSign(tb *beaconChain.TimeBeacon) *beaconChain.SignedTB {
 	// 0. 获取信标链最新区块哈希和高度，哈希作为vrf的随机种子
-	seed, height := beaconChain.GetEthChainLatestBlockHash(tb.ShardID)
+	seed, height := com.GetEthChainLatestBlockHash()
 	// 1. 获取验证者列表和对应的vrf证明
 	validators, vrfResults := com.GetValidators(seed)
 	vrfs := make([][]byte, len(vrfResults))
@@ -73,5 +73,6 @@ func (com *Committee) GetValidators(hash common.Hash) ([]*node.W3Account, []*uti
 */
 func vrfResultIsGood(val []byte) bool {
 	// 注意，如果是直接用签名方式生成vrf，则最后一个字节只会是0或1
-	return val[0] > 50
+	// return val[0] > 50
+	return val[0] >= 0
 }

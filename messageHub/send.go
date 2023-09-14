@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/gob"
+	"go-w3chain/beaconChain"
 	"go-w3chain/cfg"
 	"go-w3chain/core"
 	"go-w3chain/log"
@@ -155,6 +156,37 @@ func clientInjectTx2Com(comID uint32, msg interface{}) {
 	log.Info("Msg Sent: ClientSendTx", "targetComID", comID, "tx count", len(data))
 }
 
+func clientSetInjectDone2Nodes(cid uint32) {
+	data := &core.ClientSetInjectDone{Cid: cid}
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+
+	// 序列化后的消息
+	msg_bytes := packMsg("ClientSetInjectDone", buf.Bytes())
+
+	// todo: 修改成向所有节点发送
+	// 向每个分片的leader节点发送合约地址等信息
+	var i uint32
+	for i = 0; i < uint32(shardNum); i++ {
+		conn, ok := conns2Shard.Get(i)
+		if !ok {
+			conn = dial(cfg.NodeTable[i][0])
+			conns2Shard.Add(i, conn)
+		}
+		_, err := conn.Write(msg_bytes)
+		if err != nil {
+			panic(err)
+		}
+		conn.Close()
+	}
+
+	log.Info("Msg Sent: ClientSetInjectDone", "clientID", cid)
+}
+
 func comGetStateFromShard(shardID uint32, msg interface{}) {
 	data := msg.(*core.ComGetState)
 	var buf bytes.Buffer
@@ -251,6 +283,27 @@ func comSendReply2Client(clientID uint32, msg interface{}) {
 	log.Info("Msg Sent: ComSendTxReceipt", "toClientID", clientID, "tx count", len(data))
 }
 
+// 调用beaconChain包，再通过ethClient与ethchain交互
+// 或者beaconChain监听到的ethchain事件，发送给客户端、委员会
+
+func comAddTb2TBChain(msg interface{}) {
+	data := msg.(*beaconChain.SignedTB)
+	tbChain_ref.AddTimeBeacon(data)
+}
+
+func comGetLatestBlock(comID uint32, callback func(...interface{})) {
+	hash, height := tbChain_ref.GetEthChainLatestBlockHash(comID)
+	callback(hash, height)
+}
+
+func tbChainPushBlock2Client(msg interface{}) {
+	if client_ref == nil {
+		return
+	}
+	data := msg.(*beaconChain.TBBlock)
+	client_ref.AddTBs(data)
+}
+
 //////////////////////////////////////////////////
 ////  booter  ////
 //////////////////////////////////////////////////
@@ -267,6 +320,7 @@ func booterSendContract(msg interface{}) {
 	// 序列化后的消息
 	msg_bytes := packMsg("BooterSendContract", buf.Bytes())
 
+	// todo: 修改成向所有节点发送
 	// 向每个分片的leader节点发送合约地址等信息
 	var i uint32
 	for i = 0; i < uint32(shardNum); i++ {
@@ -281,6 +335,21 @@ func booterSendContract(msg interface{}) {
 		}
 		conn.Close()
 	}
+
+	// 向客户端发送合约地址等信息
+	for i = 0; i < uint32(clientNum); i++ {
+		conn, ok := conns2Client.Get(i)
+		if !ok {
+			conn = dial(cfg.ClientTable[i])
+			conns2Client.Add(i, conn)
+		}
+		_, err := conn.Write(msg_bytes)
+		if err != nil {
+			panic(err)
+		}
+		conn.Close()
+	}
+
 	log.Info("Msg Sent: BooterSendContract", "data", data)
 
 }

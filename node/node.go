@@ -5,6 +5,7 @@ import (
 	"go-w3chain/core"
 	"go-w3chain/eth_chain"
 	"go-w3chain/log"
+	"go-w3chain/utils"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -113,6 +114,10 @@ func (n *Node) HandleBooterSendContract(data *core.BooterSendContract) {
 		log.Error("get contracy abi fail", "err", err)
 	}
 	n.contractAbi = &contractABI
+	// 启动 worker
+	if utils.IsComLeader(n.NodeID) {
+		n.com.StartWorker()
+	}
 }
 
 /*
