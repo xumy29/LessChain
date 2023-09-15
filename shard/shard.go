@@ -1,6 +1,7 @@
 package shard
 
 import (
+	"fmt"
 	"go-w3chain/cfg"
 	"go-w3chain/core"
 	"go-w3chain/log"
@@ -14,7 +15,10 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/trie"
 )
 
 type Shard struct {
@@ -256,8 +260,9 @@ func (s *Shard) executeTransactions(txs []*core.Transaction) common.Hash {
 
 	// log.Debug("ShardAccountState")
 	// for _, tx := range txs {
-	// 	log.Debug(fmt.Sprintf("account: %x  nonce : %v  value: %v", *tx.Sender, stateDB.GetNonce(*tx.Sender), stateDB.GetBalance(*tx.Sender)))
-	// 	log.Debug(fmt.Sprintf("account: %x  nonce : %v  value: %v", *tx.Recipient, stateDB.GetNonce(*tx.Recipient), stateDB.GetBalance(*tx.Recipient)))
+	// 	log.Debug(fmt.Sprintf("txType: %v", core.TxTypeStr(tx.TXtype)))
+	// 	log.Debug(fmt.Sprintf("accountHash: %x  data : %v  value: %v", getHash((*tx.Sender)[:]), stateDB.GetNonce(*tx.Sender), stateDB.GetBalance(*tx.Sender)))
+	// 	log.Debug(fmt.Sprintf("accountHash: %x  data : %v  value: %v", getHash((*tx.Recipient)[:]), stateDB.GetNonce(*tx.Recipient), stateDB.GetBalance(*tx.Recipient)))
 	// }
 
 	return root
@@ -280,5 +285,32 @@ func (s *Shard) executeTransaction(tx *core.Transaction, stateDB *state.StateDB,
 		state.SetNonce(*tx.Sender, tx.SenderNonce-1)
 	} else {
 		log.Error("Oops, something wrong! Cannot handle tx type", "cur shardID", s.shardID, "type", tx.TXtype, "tx", tx)
+	}
+}
+
+func IterateOverTrie(stateDB *state.StateDB) {
+	database := stateDB.Database().TrieDB()
+
+	root := stateDB.IntermediateRoot(false)
+	log.Debug("stateTrie rootHash", "data", root)
+	// 将更改写入到数据库中
+	stateDB.Commit(false)
+	// stateDB中用的是secureTrie，所以要创建secureTrie实例，而不是Trie
+	stateTrie, err := trie.NewSecure(root, database)
+	if err != nil {
+		log.Error("trie.NewSecure error", "err", err, "trieRoot", root)
+	}
+
+	it := stateTrie.NodeIterator([]byte{})
+	for it.Next(true) {
+		if it.Leaf() {
+			var acc types.StateAccount
+			if err := rlp.DecodeBytes(it.LeafBlob(), &acc); err != nil {
+				log.Error(fmt.Sprintf("decode err: %v", err))
+			}
+			addrHash := it.LeafKey()
+			// balance := new(big.Int).Set(acc.Balance)
+			log.Debug(fmt.Sprintf("Address: %x account data: %v", addrHash, acc))
+		}
 	}
 }

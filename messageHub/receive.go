@@ -89,19 +89,19 @@ func handleConnection(conn net.Conn, ln net.Listener) {
 			handleComGetHeight(msg.Data, conn)
 
 		case "ComGetState":
-			handleComGetState(msg.Data)
+			go handleComGetState(msg.Data)
 		case "ShardSendState":
-			handleShardSendState(msg.Data)
+			go handleShardSendState(msg.Data)
 
 		case "ClientSendTx":
-			handleClientSendTx(msg.Data)
+			go handleClientSendTx(msg.Data)
 		case "ClientSetInjectDone":
 			handleClientSetInjectDone(msg.Data)
 		case "ComSendTxReceipt":
-			handleComSendTxReceipt(msg.Data)
+			go handleComSendTxReceipt(msg.Data)
 
 		case "ComSendBlock":
-			handleComSendBlock(msg.Data)
+			go handleComSendBlock(msg.Data)
 		default:
 			log.Error("Unknown message type received", "msgType", msg.MsgType)
 		}

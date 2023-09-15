@@ -22,6 +22,21 @@ const (
 	RollbackTXType
 )
 
+func TxTypeStr(txType uint64) string {
+	switch txType {
+	case IntraTXType:
+		return "IntraTXType"
+	case CrossTXType1:
+		return "CrossTXType1"
+	case CrossTXType2:
+		return "CrossTXType2"
+	case RollbackTXType:
+		return "RollbackType"
+	default:
+		return "UnknownType"
+	}
+}
+
 type Transaction struct {
 	TXtype uint64 `json:"type"`
 	ID     uint64

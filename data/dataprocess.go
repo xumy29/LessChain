@@ -41,6 +41,8 @@ func LoadETHData(filepath string, maxTxNum int) []*core.Transaction {
 	}
 	txid := uint64(0)
 
+	addrs := make(map[common.Address]struct{})
+
 	for {
 		row, err := reader.Read()
 		if err != nil && err != io.EOF {
@@ -55,6 +57,8 @@ func LoadETHData(filepath string, maxTxNum int) []*core.Transaction {
 		// }
 		sender := common.HexToAddress(row[0][2:])
 		recipient := common.HexToAddress(row[1][2:])
+		addrs[sender] = struct{}{}
+		addrs[recipient] = struct{}{}
 		value := new(big.Int)
 		// value.SetString(row[6], 10)
 		value.SetString("1", 10)
@@ -71,7 +75,7 @@ func LoadETHData(filepath string, maxTxNum int) []*core.Transaction {
 			break
 		}
 	}
-	log.Debug("Load data completed", "total number", len(alltxs), "first tx", alltxs[0])
+	log.Debug("Load data completed", "total number", len(alltxs), "addr number", len(addrs), "first tx", alltxs[0])
 	result.SetTotalTXNum(len(alltxs))
 
 	return alltxs
@@ -90,7 +94,7 @@ func SetTxShardId(shardNum int) {
 }
 
 /**
- * 取所有sender在对应分片的交易，提前设置sender的状态（金额）
+ * 提前设置分片中的账户状态（金额）
  */
 func SetShardInitialAccountState(shard core.Shard) {
 	addrs := make(map[common.Address]struct{}, 0)
@@ -111,7 +115,7 @@ func SetShardInitialAccountState(shard core.Shard) {
 
 	shard.SetInitialAccountState(addrs, maxValue)
 
-	log.Info("SetShardsInitialState successed", "shardID", shardId)
+	log.Info("SetShardsInitialState successed", "shardID", shardId, "# of initial addr", len(addrs))
 }
 
 /**

@@ -125,18 +125,18 @@ func (hub *GoodMessageHub) Send(msgType uint32, id uint32, msg interface{}, call
 	case core.MsgTypeComGetStateFromShard:
 		comGetStateFromShard(id, msg)
 	case core.MsgTypeShardSendStateToCom:
-		shardSendStateToCom(id, msg)
+		go shardSendStateToCom(id, msg)
 
 	case core.MsgTypeClientInjectTX2Committee:
-		clientInjectTx2Com(id, msg)
+		go clientInjectTx2Com(id, msg)
 	case core.MsgTypeSetInjectDone2Nodes:
 		clientSetInjectDone2Nodes(id)
 
 	case core.MsgTypeSendBlock2Shard:
-		comSendBlock2Shard(id, msg)
+		go comSendBlock2Shard(id, msg)
 
 	case core.MsgTypeCommitteeReply2Client:
-		comSendReply2Client(id, msg)
+		go comSendReply2Client(id, msg)
 
 	case core.MsgTypeComAddTb2TBChain:
 		comAddTb2TBChain(msg)

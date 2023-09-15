@@ -184,9 +184,12 @@ func runBooterNode(allCfg *cfg.Cfg) {
 
 }
 
-func Main(cfgfilename string, role string) {
+func Main(cfgfilename string, role string, shardNum, shardID int32) {
 	cfg := cfg.DefaultCfg(cfgfilename)
+	// 命令行参数覆写配置文件的参数
 	cfg.Role = role
+	cfg.ShardNum = int(shardNum)
+	cfg.ShardId = int(shardID)
 
 	/* 设置日志存储路径 */
 	if cfg.LogFile == "" {

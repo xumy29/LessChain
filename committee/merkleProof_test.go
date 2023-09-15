@@ -154,6 +154,8 @@ func TestRebuildTrieFromOneProof(t *testing.T) {
 	// 将更改写入到数据库中
 	stateDB.Commit(false)
 
+	// shard.IterateOverTrie(stateDB)
+
 	log.Debug(fmt.Sprintf("address new value: %v", stateDB.GetBalance(address)))
 
 }
