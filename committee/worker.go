@@ -231,6 +231,7 @@ func analyseStates(states *core.ShardSendState) (map[common.Address]*types.State
 		for _, proof := range proofs {
 			encodedNode := proof
 			hash := getHash(encodedNode)
+			// log.Debug(fmt.Sprintf("proof hash: %x", hash))
 			if _, ok := hash2Node[string(hash[:])]; ok { // 已经解析和存储过该node
 				continue
 			}
@@ -281,8 +282,9 @@ func (w *Worker) commit(timestamp int64) (*core.Block, error) {
 
 	// log.Debug("WorkerAccountState")
 	// for _, tx := range txs {
-	// 	log.Debug(fmt.Sprintf("account: %x  value: %v", *tx.Sender, addr2State[*tx.Sender]))
-	// 	log.Debug(fmt.Sprintf("account: %x  value: %v", *tx.Recipient, addr2State[*tx.Recipient]))
+	// 	log.Debug(fmt.Sprintf("tx type: %v", core.TxTypeStr(tx.TXtype)))
+	// 	log.Debug(fmt.Sprintf("accountHash: %x  value: %v", getHash((*tx.Sender)[:]), addr2State[*tx.Sender]))
+	// 	log.Debug(fmt.Sprintf("accountHash: %x  value: %v", getHash((*tx.Recipient)[:]), addr2State[*tx.Recipient]))
 	// }
 
 	w.com.AddBlock2Shard(block)
@@ -340,7 +342,7 @@ func rebuildHelper(
 	hash2Node map[string]myTrie.Node,
 	keyPrefix []byte,
 	updadedStates map[string]*types.StateAccount,
-) (newHash myTrie.HashNode) {
+) []byte {
 	// log.Debug(fmt.Sprintf("current hash: %x", hash))
 	node, ok := hash2Node[string(hash[:])]
 	if !ok {
@@ -356,16 +358,24 @@ func rebuildHelper(
 				if !ok {
 					log.Error(fmt.Sprintf("fullnode's not nil child is not of HashNode type?! why? hash: %x", childHash))
 				}
-				fullNode.Children[i] = rebuildHelper(childHash, hash2Node, getCurrentKey(keyPrefix, []byte{byte(i)}), updadedStates)
+				temp := rebuildHelper(childHash, hash2Node, getCurrentKey(keyPrefix, []byte{byte(i)}), updadedStates)
+				fullNode.Children[i] = myTrie.HashNode(temp)
 			}
 		}
-		return getHash(myTrie.NodeToBytes(fullNode))
+		newHash := getHash(myTrie.NodeToBytes(fullNode))
+		// log.Debug(fmt.Sprintf("node original hash: %x  new hash: %x", hash, newHash))
+		return newHash
 	case *myTrie.ShortNode:
 		shortNode := node.(*myTrie.ShortNode)
 		curKey := getCurrentKey(keyPrefix, shortNode.Key)
 		switch shortNode.Val.(type) {
 		case myTrie.HashNode:
-			shortNode.Val = rebuildHelper(shortNode.Val.(myTrie.HashNode), hash2Node, curKey, updadedStates)
+			temp := rebuildHelper(shortNode.Val.(myTrie.HashNode), hash2Node, curKey, updadedStates)
+			shortNode.Val = myTrie.HashNode(temp)
+			shortNode.Key = myTrie.HexToCompact(shortNode.Key)
+			newHash := getHash(myTrie.NodeToBytes(shortNode))
+			// log.Debug(fmt.Sprintf("node original hash: %x  new hash: %x", hash, newHash))
+			return newHash
 		case myTrie.ValueNode:
 			recoverAddressHash := myTrie.HexToKeybytes(curKey)
 			stateAccount, ok := updadedStates[string(recoverAddressHash)]
@@ -381,6 +391,8 @@ func rebuildHelper(
 			newHash := getHash(myTrie.NodeToBytes(shortNode))
 			// log.Debug(fmt.Sprintf("node original hash: %x  new hash: %x", hash, newHash))
 			return newHash
+		default:
+			log.Error("shortnode's val unknown type")
 		}
 	default:
 		log.Error("unknown node type")
