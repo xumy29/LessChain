@@ -88,7 +88,7 @@ func (tbChain *BeaconChain) generateSimulationChainBlock() *TBBlock {
 		Height: tbChain.height,
 	}
 
-	tbChain.tbs_new = make(map[int][]*SignedTB)
+	tbChain.tbs_new = make(map[int][]*core.SignedTB)
 
 	log.Debug("tbchain generate block", "info", block)
 	return block

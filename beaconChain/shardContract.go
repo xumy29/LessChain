@@ -1,6 +1,7 @@
 package beaconChain
 
 import (
+	"go-w3chain/core"
 	"go-w3chain/log"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -33,7 +34,7 @@ func checkAddressValidity(address common.Address) bool {
 	return true
 }
 
-func (contract *ShardContract) VerifyTimeBeacon(tb *SignedTB) bool {
+func (contract *ShardContract) VerifyTimeBeacon(tb *core.SignedTB) bool {
 	msgHash := tb.TimeBeacon.Hash()
 	sig_num := 0
 	for i := 0; i < len(tb.Signers); i++ {

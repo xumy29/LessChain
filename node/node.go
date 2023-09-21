@@ -99,10 +99,18 @@ func (node *Node) sendNodeInfo() {
 	node.messageHub.Send(core.MsgTypeNodeSendInfo2Leader, uint32(node.comID), info, nil)
 }
 
-func (node *Node) PbftPropose(block *core.Block) {
+func (node *Node) RunPbft(block *core.Block, exit chan struct{}) {
 	node.pbftNode.Propose(block)
 	// wait till consensus is complete
-	<-node.pbftNode.OneConsensusDone
+
+	select {
+	case <-node.pbftNode.OneConsensusDone:
+		return
+	case <-exit:
+		exit <- struct{}{}
+		return
+	}
+
 }
 
 func (node *Node) SetShard(shard core.Shard) {
@@ -147,6 +155,7 @@ func (n *Node) GetAccount() *W3Account {
 }
 
 func (n *Node) HandleNodeSendInfo(info *core.NodeSendInfo) {
+	n.shard.AddInitialAddr(info.Addr)
 	n.com.AddMember(info.NodeInfo)
 	if len(n.com.GetMembers()) == int(n.pbftNode.GetNodes_num()) {
 		n.shard.Start()

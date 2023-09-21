@@ -41,7 +41,7 @@ func (tbChain *BeaconChain) GetEthChainLatestBlockHash(comID uint32) (common.Has
 // 	return eth_chain.GetBlockHash(client, height)
 // }
 
-func (tbChain *BeaconChain) AddTimeBeacon2EthChain(signedtb *SignedTB) {
+func (tbChain *BeaconChain) AddTimeBeacon2EthChain(signedtb *core.SignedTB) {
 	tb := signedtb.TimeBeacon
 	// 转化为合约中的结构（目前两结构的成员变量是完全相同的）
 	contractTB := &eth_chain.ContractTB{
@@ -76,14 +76,14 @@ func (tbChain *BeaconChain) AdjustEthChainRecordedAddrs(addrs []common.Address, 
 }
 
 func (tbChain *BeaconChain) generateEthChainBlock() *TBBlock {
-	tbs_new := make(map[uint32][]*TimeBeacon)
+	tbs_new := make(map[uint32][]*core.TimeBeacon)
 	for {
 		if len(eventChannel) == 0 {
 			break
 		}
 
 		event := <-eventChannel
-		tb := &TimeBeacon{
+		tb := &core.TimeBeacon{
 			ShardID: event.ShardID,
 			Height:  event.Height,
 		}
@@ -112,7 +112,7 @@ func (tbChain *BeaconChain) generateEthChainBlock() *TBBlock {
 		Height: tbChain.height,
 	}
 
-	tbChain.tbs_new = make(map[int][]*SignedTB)
+	tbChain.tbs_new = make(map[int][]*core.SignedTB)
 
 	log.Debug("TBchainGenerateBlock", "info", block)
 	return block

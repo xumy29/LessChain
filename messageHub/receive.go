@@ -103,6 +103,11 @@ func handleConnection(conn net.Conn, ln net.Listener) {
 		case ComSendBlock:
 			go handleComSendBlock(msg.Data)
 
+		case LeaderInitMultiSign:
+			handleLeaderInitMultiSign(msg.Data)
+		case MultiSignReply:
+			handleMultiSignReply(msg.Data)
+
 		/////////////////////////
 		//// pbft /////
 		/////////////////////////
@@ -248,9 +253,41 @@ func handleComSendBlock(dataBytes []byte) {
 		log.Error("decodeDataErr", "err", err, "dataBytes", data)
 	}
 
-	log.Info("Msg Received: ComSendBlock", "tx count", len(data.Transactions))
+	log.Info("Msg Received: ComSendBlock", "tx count", len(data.Block.Transactions))
 
 	shard_ref.HandleComSendBlock(&data)
+}
+
+func handleLeaderInitMultiSign(dataBytes []byte) {
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data core.ComLeaderInitMultiSign
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err, "dataBytes", data)
+	}
+
+	log.Info("Msg Received: LeaderInitMultiSign")
+
+	committee_ref.HandleMultiSignRequest(&data)
+}
+
+func handleMultiSignReply(dataBytes []byte) {
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data core.MultiSignReply
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err, "dataBytes", data)
+	}
+
+	log.Info("Msg Received: MultiSignReply")
+
+	committee_ref.HandleMultiSignReply(&data)
 }
 
 //////////////////////////////////////////////////
@@ -310,7 +347,7 @@ func handlePbftMsg(dataBytes []byte, dataType string) {
 			log.Error("decodeDataErr", "err", err, "dataBytes", data)
 		}
 		log.Info(fmt.Sprintf("Msg Received: %s ComID: %v", dataType, pbftNode_ref.ComID))
-		pbftNode_ref.HandlePrePrepare(&data)
+		go pbftNode_ref.HandlePrePrepare(&data)
 	case CPrepare:
 		var data core.Prepare
 		err := dataDec.Decode(&data)
@@ -350,7 +387,7 @@ func handlePbftMsg(dataBytes []byte, dataType string) {
 			log.Error("decodeDataErr", "err", err, "dataBytes", data)
 		}
 		log.Info(fmt.Sprintf("Msg Received: %s ComID: %v from nodeID: %v", dataType, pbftNode_ref.ComID, data.SenderInfo.NodeID))
-		pbftNode_ref.HandleSendOldSeq(&data)
+		go pbftNode_ref.HandleSendOldSeq(&data)
 	}
 
 }

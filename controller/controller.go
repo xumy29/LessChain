@@ -141,7 +141,6 @@ func runNode(allCfg *cfg.Cfg) {
 	messageHub.Init(nil, node, nil, tbChain, allCfg.ShardNum, allCfg.ShardSize, allCfg.ClientNum, &wg)
 
 	// 启动节点
-
 	startNode(node)
 
 	/* 循环打印进度；判断各客户端和委员会能否停止, 若能则停止 */

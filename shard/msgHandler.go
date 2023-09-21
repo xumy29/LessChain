@@ -94,7 +94,9 @@ func (s *Shard) HandleComGetHeight(request *core.ComGetHeight) *big.Int {
 /* 分片收到区块后，执行其中的交易，并将得到的状态树根与区块中的状态树根比较
 若两者相等，说明委员会由merkle proof rebuild得到的树根是正确的
 */
-func (s *Shard) HandleComSendBlock(block *core.ComSendBlock) {
+func (s *Shard) HandleComSendBlock(data *core.ComSendBlock) {
+	block := data.Block
+	s.AddBlock(block)
 	trieRoot := s.executeTransactions(block.Transactions)
 	if trieRoot != block.Header.Root {
 		// 需要考虑到一种可能出错的情况，即分片发送给委员会root之后，由于新创建账户而修改了root

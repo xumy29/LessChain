@@ -26,7 +26,7 @@ func NewPbftLog(sid, nid uint32) *PbftLog {
 	if err != nil {
 		log.Panic(err)
 	}
-	writer2, err := os.OpenFile(dirpath+"/N"+strconv.Itoa(int(nid))+".log", os.O_WRONLY|os.O_CREATE, 0755)
+	writer2, err := os.OpenFile(dirpath+"/N"+strconv.Itoa(int(nid))+".log", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
 		log.Panic(err)
 	}

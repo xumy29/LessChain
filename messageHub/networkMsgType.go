@@ -15,6 +15,9 @@ const (
 
 	ComSendBlock string = "ComSendBlock"
 
+	LeaderInitMultiSign string = "LeaderInitMultiSign"
+	MultiSignReply      string = "MultiSignReply"
+
 	// pbft part
 	CPrePrepare        string = "CPrePrepare"
 	CPrepare           string = "CPrepare"

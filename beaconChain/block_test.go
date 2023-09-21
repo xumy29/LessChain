@@ -10,7 +10,7 @@ import (
 )
 
 func TestTBHash(t *testing.T) {
-	tb1 := TimeBeacon{
+	tb1 := core.TimeBeacon{
 		ShardID:    1,
 		Height:     100,
 		BlockHash:  "0x111111",
@@ -27,7 +27,7 @@ func TestTBHash(t *testing.T) {
 }
 
 func TestRlpBlock(t *testing.T) {
-	tb1 := TimeBeacon{
+	tb1 := core.TimeBeacon{
 		Height:  100,
 		ShardID: 1,
 		// Initialize other fields accordingly
@@ -39,7 +39,7 @@ func TestRlpBlock(t *testing.T) {
 		ConfirmHeight: 200,
 	}
 
-	tb2 := TimeBeacon{
+	tb2 := core.TimeBeacon{
 		Height:  200,
 		ShardID: 2,
 		// Initialize other fields accordingly

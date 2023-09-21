@@ -2,6 +2,7 @@ package messageHub
 
 import (
 	"encoding/gob"
+	"fmt"
 	"go-w3chain/beaconChain"
 	"go-w3chain/client"
 	"go-w3chain/committee"
@@ -103,10 +104,12 @@ func (hub *GoodMessageHub) Init(client *client.Client, node *node.Node, booter *
 
 func (hub GoodMessageHub) Close() {
 	// 关闭所有tcp连接，防止资源泄露
+	log.Debug(fmt.Sprintf("messageHub closing..."))
 	for _, conn := range conns2Node.connections {
 		conn.Close()
 	}
 	listenConn.Close()
+	log.Debug(fmt.Sprintf("messageHub is close."))
 }
 
 /* 用于分片、委员会、客户端、信标链传送消息 */
@@ -148,6 +151,11 @@ func (hub *GoodMessageHub) Send(msgType uint32, id uint32, msg interface{}, call
 
 	case core.MsgTypeTBChainPushTB2Client:
 		tbChainPushBlock2Client(msg)
+
+	case core.MsgTypeLeaderInitMultiSign:
+		comLeaderInitMultiSign(id, msg)
+	case core.MsgTypeSendMultiSignReply:
+		sendMultiSignReply(id, msg)
 
 	////////////////////
 	///// pbft  ////////

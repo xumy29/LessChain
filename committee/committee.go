@@ -15,11 +15,21 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 )
 
+type MultiSignData struct {
+	MultiSignDone chan struct{}
+	Vrfs          [][]byte
+	Sigs          [][]byte
+	Signers       []common.Address
+}
+
 type Committee struct {
 	comID      uint32
 	config     *core.CommitteeConfig
 	worker     *Worker
 	messageHub core.MessageHub
+
+	multiSignData *MultiSignData
+
 	/* 接收重组结果的管道 */
 	reconfigCh chan []*node.Node
 	Nodes      []*node.Node // 同属一个委员会的节点
@@ -38,6 +48,7 @@ func NewCommittee(comID uint32, clientCnt int, _node *node.Node, config *core.Co
 	com := &Committee{
 		comID:              comID,
 		config:             config,
+		multiSignData:      &MultiSignData{},
 		reconfigCh:         make(chan []*node.Node, 0),
 		Nodes:              []*node.Node{_node},
 		members:            []*core.NodeInfo{_node.GetPbftNode().NodeInfo},
@@ -72,6 +83,7 @@ func (com *Committee) Close() {
 	if com.to_reconfig {
 		com.reconfigCh <- nil
 	}
+
 	if com.worker != nil {
 		com.worker.close()
 	}
@@ -267,8 +279,7 @@ func (com *Committee) HandleShardSendState(response *core.ShardSendState) {
  */
 func (com *Committee) AddBlock2Shard(block *core.Block) {
 	comSendBlock := &core.ComSendBlock{
-		Transactions: block.Body().Transactions,
-		Header:       block.GetHeader(),
+		Block: block,
 	}
 	com.messageHub.Send(core.MsgTypeSendBlock2Shard, com.comID, comSendBlock, nil)
 }
@@ -276,7 +287,7 @@ func (com *Committee) AddBlock2Shard(block *core.Block) {
 /**
  * 将新区块的信标发送到信标链
  */
-func (com *Committee) SendTB(tb *beaconChain.SignedTB) {
+func (com *Committee) SendTB(tb *core.SignedTB) {
 	com.messageHub.Send(core.MsgTypeComAddTb2TBChain, 0, tb, nil)
 }
 

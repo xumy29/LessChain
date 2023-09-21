@@ -12,6 +12,7 @@ type Shard interface {
 	GetChainHeight() uint64
 
 	SetInitialAccountState(map[common.Address]struct{}, *big.Int)
+	AddInitialAddr(addr common.Address)
 	AddBlock(*Block)
 
 	SetMessageHub(MessageHub)

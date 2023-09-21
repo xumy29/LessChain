@@ -1,71 +1,95 @@
 package committee
 
 import (
-	"go-w3chain/beaconChain"
+	"fmt"
+	"go-w3chain/core"
+	"go-w3chain/log"
 	"go-w3chain/node"
-	"go-w3chain/utils"
 
 	"github.com/ethereum/go-ethereum/common"
 )
 
-/** 模拟委员会中的节点对信标进行多签名
- * 为了方便，由委员会直接控制所有节点，从中筛选出验证者，并调用节点的方案进行签名
- */
-func (com *Committee) multiSign(tb *beaconChain.TimeBeacon) *beaconChain.SignedTB {
+/** 委员会中的节点对信标进行多签名
+由委员会的leader发起
+*/
+func (com *Committee) initMultiSign(tb *core.TimeBeacon) *core.SignedTB {
 	// 0. 获取信标链最新区块哈希和高度，哈希作为vrf的随机种子
 	seed, height := com.GetEthChainLatestBlockHash()
-	// 1. 获取验证者列表和对应的vrf证明
-	validators, vrfResults := com.GetValidators(seed)
-	vrfs := make([][]byte, len(vrfResults))
 
-	// 2. 验证者分别对信标哈希进行签名
-	sigs := make([][]byte, len(validators))
-	signers := make([]common.Address, len(validators))
-	for i, acc := range validators {
-		signers[i] = *acc.GetAccountAddress()
-		sig := acc.SignHash(tb.Hash())
-		sigs[i] = sig
-		vrfs[i] = vrfResults[i].RandomValue
+	// 发送消息
+	r := &core.ComLeaderInitMultiSign{
+		Seed:       seed,
+		SeedHeight: height,
+		Tb:         tb,
 	}
 
-	return &beaconChain.SignedTB{
+	com.multiSignData.Signers = make([]common.Address, 0)
+	com.multiSignData.Sigs = make([][]byte, 0)
+	com.multiSignData.Vrfs = make([][]byte, 0)
+	com.multiSignData.MultiSignDone = make(chan struct{}, 1)
+	com.messageHub.Send(core.MsgTypeLeaderInitMultiSign, com.comID, r, nil)
+	// 等待多签名完成
+	select {
+	case <-com.multiSignData.MultiSignDone:
+		break
+	case <-com.worker.exitCh:
+		com.worker.exitCh <- struct{}{}
+		break
+	}
+
+	return &core.SignedTB{
 		TimeBeacon: *tb,
-		Signers:    signers,
-		Sigs:       sigs,
-		Vrfs:       vrfs,
+		Signers:    com.multiSignData.Signers,
+		Sigs:       com.multiSignData.Sigs,
+		Vrfs:       com.multiSignData.Vrfs,
 		SeedHeight: height,
 	}
 }
 
-/** 根据最新确认的信标链区块哈希决定对信标进行多签名的验证者
- */
-func (com *Committee) GetValidators(hash common.Hash) ([]*node.W3Account, []*utils.VRFResult) {
-	// 所有节点通过vrf生成随机数
-	vrfResults := make([]*utils.VRFResult, len(com.Nodes))
-	for i := 0; i < len(com.Nodes); i++ {
-		vrfResult := com.Nodes[i].GetAccount().GenerateVRFOutput(hash[:])
-		vrfResults[i] = vrfResult
+func (com *Committee) HandleMultiSignRequest(request *core.ComLeaderInitMultiSign) {
+	seed := request.Seed
+	tb := request.Tb
+
+	account := com.Node.GetAccount()
+
+	vrf := account.GenerateVRFOutput(seed[:])
+	if !vrfResultIsGood(vrf.RandomValue) {
+		return
 	}
 
-	// 验证vrf结果，选出符合条件的vrf对应的账户
-	validator_num := com.config.MultiSignRequiredNum
-	validators := make([]*node.W3Account, 0)
-	vrfs := make([]*utils.VRFResult, 0)
-	for i := 0; i < len(com.Nodes); i++ {
-		valid := com.Nodes[i].GetAccount().VerifyVRFOutput(vrfResults[i], hash[:])
-		if !valid {
-			continue
-		}
-		if vrfResultIsGood(vrfResults[i].RandomValue) {
-			validators = append(validators, com.Nodes[i].GetAccount())
-			vrfs = append(vrfs, vrfResults[i])
-			if len(validators) >= validator_num {
-				break
-			}
-		}
+	reply := &core.MultiSignReply{
+		Request:    request,
+		PubAddress: *account.GetAccountAddress(),
+		Sig:        account.SignHash(tb.Hash()),
+		VrfValue:   vrf.RandomValue,
+		NodeInfo:   com.Node.GetPbftNode().NodeInfo,
 	}
 
-	return validators, vrfs
+	com.messageHub.Send(core.MsgTypeSendMultiSignReply, com.comID, reply, nil)
+}
+
+func (com *Committee) HandleMultiSignReply(reply *core.MultiSignReply) {
+	if !node.VerifySignature(reply.Request.Seed[:], reply.VrfValue, reply.PubAddress) {
+		log.Debug(fmt.Sprintf("vrf verification not pass.. nodeID: %d", reply.NodeInfo.NodeID))
+		return
+	}
+	if !vrfResultIsGood(reply.VrfValue) {
+		log.Debug(fmt.Sprintf("vrf not good.. nodeID: %d", reply.NodeInfo.NodeID))
+		return
+	}
+	tbHash := reply.Request.Tb.Hash()
+	if !node.VerifySignature(tbHash, reply.Sig, reply.PubAddress) {
+		log.Debug(fmt.Sprintf("signature verification not pass.. nodeID: %d", reply.NodeInfo.NodeID))
+		return
+	}
+	com.multiSignData.Signers = append(com.multiSignData.Signers, reply.PubAddress)
+	com.multiSignData.Sigs = append(com.multiSignData.Sigs, reply.Sig)
+	com.multiSignData.Vrfs = append(com.multiSignData.Vrfs, reply.VrfValue)
+
+	if len(com.multiSignData.Sigs) == com.config.MultiSignRequiredNum { // 收到足够签名
+		com.multiSignData.MultiSignDone <- struct{}{}
+	}
+
 }
 
 /* 判断一个VRF生成的随机数是否满足条件

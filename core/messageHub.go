@@ -30,6 +30,9 @@ const (
 
 	MsgTypeComGetLatestBlockHashFromEthChain
 
+	MsgTypeLeaderInitMultiSign
+	MsgTypeSendMultiSignReply
+
 	//////////////////////
 	//// pbft module /////
 	//////////////////////

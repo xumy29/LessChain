@@ -182,7 +182,7 @@ func (c *Client) GetAddr() string {
 /* 验证一笔交易的merkle proof，tb 是该交易对应分片和高度的区块信标
 * 目前未实现具体逻辑，直接假设验证通过
  */
-func VerifyTxMKproof(proof []byte, tb *beaconChain.TimeBeacon) bool {
+func VerifyTxMKproof(proof []byte, tb *core.TimeBeacon) bool {
 	return true
 }
 

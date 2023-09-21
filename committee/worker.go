@@ -3,7 +3,6 @@ package committee
 import (
 	"errors"
 	"fmt"
-	"go-w3chain/beaconChain"
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/result"
@@ -49,7 +48,7 @@ func newWorker(config *core.CommitteeConfig, comID uint32) *Worker {
 	worker := &Worker{
 		config:  config,
 		startCh: make(chan struct{}, 1), // at most 1 element
-		exitCh:  make(chan struct{}),
+		exitCh:  make(chan struct{}, 1),
 		comID:   comID,
 	}
 
@@ -95,7 +94,7 @@ func (w *Worker) isRunning() bool {
 func (w *Worker) close() {
 	log.Debug("closing worker of this committee..", "comID", w.comID)
 	w.stop()
-	close(w.exitCh)
+	w.exitCh <- struct{}{}
 	w.wg.Wait()
 	log.Debug("worker of this committee has been close!", "comID", w.comID)
 }
@@ -173,7 +172,7 @@ func (w *Worker) newWorkLoop(recommit time.Duration) {
  */
 func (w *Worker) broadcastTbInCommittee(block *core.Block) {
 	final_header := block.GetHeader()
-	tb := &beaconChain.TimeBeacon{
+	tb := &core.TimeBeacon{
 		Height:     final_header.Number.Uint64(),
 		ShardID:    uint32(w.comID),
 		BlockHash:  block.GetHash().Hex(),
@@ -181,7 +180,7 @@ func (w *Worker) broadcastTbInCommittee(block *core.Block) {
 		StatusHash: final_header.Root.Hex(),
 	}
 
-	signedTB := w.com.multiSign(tb)
+	signedTB := w.com.initMultiSign(tb)
 
 	w.com.SendTB(signedTB)
 }
@@ -282,7 +281,7 @@ func (w *Worker) commit(timestamp int64) (*core.Block, error) {
 	}
 
 	// pbft consensus in committee
-	w.com.Node.PbftPropose(block)
+	w.com.Node.RunPbft(block, w.exitCh)
 
 	// log.Debug("WorkerAccountState")
 	// for _, tx := range txs {

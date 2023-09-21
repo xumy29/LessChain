@@ -8,90 +8,10 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
-	"golang.org/x/crypto/sha3"
 )
 
-type TimeBeacon struct {
-	ShardID    uint32 `json:"shardID" gencodec:"required"`
-	Height     uint64 `json:"height" gencodec:"required"`
-	BlockHash  string `json:"blockHash" gencodec:"required"`
-	TxHash     string `json:"txHash" gencodec:"required"`
-	StatusHash string `json:"statusHash" gencodec:"required"`
-}
-
-/* abiEncode 对应的是solidity的abi.encode，而不是abi.encodePacked，
-只在特殊情况下，encode和encodePacked两者编码结果才相同 */
-func (tb *TimeBeacon) AbiEncode() []byte {
-	uint32Ty, e1 := abi.NewType("uint32", "uint32", nil)
-	uint64Ty, e2 := abi.NewType("uint64", "uint64", nil)
-	stringTy, e3 := abi.NewType("string", "string", nil)
-	if e1 != nil || e2 != nil || e3 != nil {
-		log.Error("abi.newtype err")
-	}
-
-	arguments := abi.Arguments{
-		{
-			Type: uint32Ty,
-		},
-		{
-			Type: uint64Ty,
-		},
-		{
-			Type: stringTy,
-		},
-		{
-			Type: stringTy,
-		},
-		{
-			Type: stringTy,
-		},
-	}
-
-	bytes, err := arguments.Pack(
-		tb.ShardID,
-		tb.Height,
-		tb.BlockHash,
-		tb.TxHash,
-		tb.StatusHash,
-	)
-	if err != nil {
-		log.Error("arguments.pack", "err", err)
-	}
-
-	return bytes
-}
-
-/* 先 ABI 编码，再 Keccak256 哈希*/
-func (tb *TimeBeacon) Hash() []byte {
-	encoded := tb.AbiEncode()
-
-	hash := sha3.NewLegacyKeccak256()
-	hash.Write(encoded)
-
-	res := hash.Sum(nil)
-	// log.Debug("TimeBeacon AbiEncode", "shardID", tb.ShardID, "height", tb.Height, "got hash", res)
-	return res
-}
-
-// /* Hash returns the keccak256 hash of its RLP encoding. */
-// func (tb *TimeBeacon) Hash() common.Hash {
-// 	hash, err := core.RlpHash(tb)
-// 	if err != nil {
-// 		log.Error("time beacon hash fail.", "err", err)
-// 	}
-// 	return hash
-// }
-
-type SignedTB struct {
-	TimeBeacon
-	Sigs       [][]byte
-	Vrfs       [][]byte
-	SeedHeight uint64
-	Signers    []common.Address
-}
-
 type ConfirmedTB struct {
-	TimeBeacon
+	core.TimeBeacon
 	ConfirmTime uint64
 	/* 信标链上包含该信标的区块的高度，注意不是分片自身的区块高度 */
 	ConfirmHeight uint64
@@ -108,7 +28,7 @@ type BeaconChain struct {
 	tbs  map[int][]*ConfirmedTB
 	lock sync.Mutex
 	/* 已提交到信标链但还未被信标链打包 */
-	tbs_new  map[int][]*SignedTB
+	tbs_new  map[int][]*core.SignedTB
 	lock_new sync.Mutex
 	height   uint64
 	stopCh   chan struct{}
@@ -132,7 +52,7 @@ func NewTBChain(cfg *core.BeaconChainConfig, shardNum int) *BeaconChain {
 		mode:     cfg.Mode,
 		shardNum: shardNum,
 		tbs:      make(map[int][]*ConfirmedTB),
-		tbs_new:  make(map[int][]*SignedTB),
+		tbs_new:  make(map[int][]*core.SignedTB),
 		height:   0,
 		stopCh:   make(chan struct{}),
 		contract: NewContract(shardNum, cfg.MultiSignRequiredNum),
@@ -155,7 +75,7 @@ func (tbChain *BeaconChain) SetMessageHub(hub core.MessageHub) {
 	tbChain.messageHub = hub
 }
 
-func (tbChain *BeaconChain) AddTimeBeacon(tb *SignedTB) {
+func (tbChain *BeaconChain) AddTimeBeacon(tb *core.SignedTB) {
 	if tbChain.mode == 0 {
 		tbChain.AddTimeBeacon2SimulationChain(tb)
 	} else if tbChain.mode == 1 || tbChain.mode == 2 {
@@ -178,7 +98,7 @@ func (tbChain *BeaconChain) SetAddrs(addrs []common.Address, vrfs [][]byte, seed
  * tb会被暂时存下，等待信标链打包时处理
  * 信标链打包时，会调用合约验证tb的多签名合法性，验证通过才会打包该交易，即确认该信标
  */
-func (tbChain *BeaconChain) AddTimeBeacon2SimulationChain(tb *SignedTB) {
+func (tbChain *BeaconChain) AddTimeBeacon2SimulationChain(tb *core.SignedTB) {
 	if tb.Height == 0 {
 		tbChain.AddGenesisTB(tb)
 		return
@@ -194,7 +114,7 @@ func (tbChain *BeaconChain) AddTimeBeacon2SimulationChain(tb *SignedTB) {
 	log.Debug("AddTimeBeacon", "info", tb)
 }
 
-func (tbChain *BeaconChain) AddGenesisTB(signedTb *SignedTB) {
+func (tbChain *BeaconChain) AddGenesisTB(signedTb *core.SignedTB) {
 	tbChain.lock.Lock()
 	defer tbChain.lock.Unlock()
 	tb := signedTb.TimeBeacon
@@ -219,25 +139,4 @@ func (tbChain *BeaconChain) GetTimeBeacon(shardID int, height uint64) *Confirmed
 		return nil
 	}
 	return tbs_shard[height]
-}
-
-func (tb *TimeBeacon) AbiEncodeV2() []byte {
-	structTy, _ := abi.NewType("tuple", "struct ty", []abi.ArgumentMarshaling{
-		{Name: "shardID", Type: "uint32"},
-		{Name: "height", Type: "uint64"},
-		{Name: "blockHash", Type: "string"},
-		{Name: "txHash", Type: "string"},
-		{Name: "StatusHash", Type: "string"},
-	})
-
-	args := abi.Arguments{
-		{Type: structTy},
-	}
-
-	bytes, err := args.Pack(tb)
-	if err != nil {
-		log.Error("arguments.pack", "err", err)
-	}
-
-	return bytes
 }

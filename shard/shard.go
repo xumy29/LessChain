@@ -21,10 +21,11 @@ import (
 )
 
 type Shard struct {
-	shardID uint32
-	chainDB ethdb.Database // Block chain database
-	leader  *node.Node
-	nodes   []*node.Node
+	shardID         uint32
+	chainDB         ethdb.Database // Block chain database
+	leader          *node.Node
+	nodes           []*node.Node
+	initialAddrList []common.Address // 分片初始时各节点的公钥地址，同时也是初始时对应委员会各节点的地址
 	// txPool     *core.TxPool
 	blockchain *core.BlockChain
 
@@ -34,6 +35,10 @@ type Shard struct {
 	txStatus map[uint64]uint64
 
 	messageHub core.MessageHub
+}
+
+func (s *Shard) AddInitialAddr(addr common.Address) {
+	s.initialAddrList = append(s.initialAddrList, addr)
 }
 
 func NewShard(shardID uint32, _node *node.Node) *Shard {
@@ -56,12 +61,13 @@ func NewShard(shardID uint32, _node *node.Node) *Shard {
 		"nodeID", _node.NodeID)
 
 	shard := &Shard{
-		nodes:      []*node.Node{_node},
-		shardID:    shardID,
-		chainDB:    chainDB,
-		blockchain: bc,
-		connMap:    make(map[string]net.Conn),
-		txStatus:   make(map[uint64]uint64),
+		nodes:           []*node.Node{_node},
+		initialAddrList: []common.Address{*_node.GetAccount().GetAccountAddress()},
+		shardID:         shardID,
+		chainDB:         chainDB,
+		blockchain:      bc,
+		connMap:         make(map[string]net.Conn),
+		txStatus:        make(map[uint64]uint64),
 	}
 
 	if utils.IsShardLeader(_node.NodeID) {
@@ -133,8 +139,8 @@ func (s *Shard) addGenesisTB() {
 	}
 
 	addrs := make([]common.Address, 0)
-	for _, node := range s.nodes {
-		addrs = append(addrs, *node.GetAccount().GetAccountAddress())
+	for _, addr := range s.initialAddrList {
+		addrs = append(addrs, addr)
 	}
 
 	genesis := &core.ShardSendGenesis{

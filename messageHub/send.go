@@ -267,7 +267,7 @@ func comSendBlock2Shard(shardID uint32, msg interface{}) {
 	writer.Write(msg_bytes)
 	writer.Flush()
 
-	log.Info("Msg Sent: ComSendBlock", "toShardID", shardID, "tx count", len(data.Transactions))
+	log.Info("Msg Sent: ComSendBlock", "toShardID", shardID, "tx count", len(data.Block.Transactions))
 }
 
 func comSendReply2Client(clientID uint32, msg interface{}) {
@@ -299,7 +299,7 @@ func comSendReply2Client(clientID uint32, msg interface{}) {
 // 或者beaconChain监听到的ethchain事件，发送给客户端、委员会
 
 func comAddTb2TBChain(msg interface{}) {
-	data := msg.(*beaconChain.SignedTB)
+	data := msg.(*core.SignedTB)
 	tbChain_ref.AddTimeBeacon(data)
 }
 
@@ -314,6 +314,63 @@ func tbChainPushBlock2Client(msg interface{}) {
 	}
 	data := msg.(*beaconChain.TBBlock)
 	client_ref.AddTBs(data)
+}
+
+func comLeaderInitMultiSign(comID uint32, msg interface{}) {
+	data := msg.(*core.ComLeaderInitMultiSign)
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+
+	// 序列化后的消息
+	msg_bytes := packMsg(LeaderInitMultiSign, buf.Bytes())
+
+	// 向委员会中的所有节点发送（包括自己）
+	var i uint32
+	for i = 0; i < uint32(shardSize); i++ {
+		addr := cfg.ComNodeTable[comID][i]
+		conn, ok := conns2Node.Get(addr)
+		if !ok {
+			conn = dial(addr)
+			conns2Node.Add(addr, conn)
+		}
+		_, err := conn.Write(msg_bytes)
+		if err != nil {
+			log.Debug(fmt.Sprintf("write err: %v", err))
+		}
+	}
+	log.Info("Msg Sent: comLeaderInitMultiSign", "comID", comID)
+}
+
+func sendMultiSignReply(comID uint32, msg interface{}) {
+	data := msg.(*core.MultiSignReply)
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+
+	// 序列化后的消息
+	msg_bytes := packMsg(MultiSignReply, buf.Bytes())
+
+	// 向委员会的leader节点发送
+
+	addr := cfg.ComNodeTable[comID][0]
+	conn, ok := conns2Node.Get(addr)
+	if !ok {
+		conn = dial(addr)
+		conns2Node.Add(addr, conn)
+	}
+	_, err = conn.Write(msg_bytes)
+	if err != nil {
+		panic(err)
+	}
+
+	log.Info("Msg Sent: multiSignReply", "comID", comID)
 }
 
 //////////////////////////////////////////////////
@@ -340,7 +397,6 @@ func booterSendContract(msg interface{}) {
 		conn, ok := conns2Node.Get(addr)
 		if !ok {
 			conn = dial(addr)
-			conns2Node.Add(addr, conn)
 		}
 		_, err := conn.Write(msg_bytes)
 		if err != nil {
@@ -355,7 +411,6 @@ func booterSendContract(msg interface{}) {
 		conn, ok := conns2Node.Get(addr)
 		if !ok {
 			conn = dial(addr)
-			conns2Node.Add(addr, conn)
 		}
 		_, err := conn.Write(msg_bytes)
 		if err != nil {

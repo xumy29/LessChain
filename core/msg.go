@@ -46,12 +46,25 @@ type BooterSendContract struct {
 }
 
 type ComSendBlock struct {
-	Transactions []*Transaction
-	Header       *Header
+	Block *Block
 }
 
 type ClientSetInjectDone struct {
 	Cid uint32
+}
+
+type ComLeaderInitMultiSign struct {
+	Seed       common.Hash
+	SeedHeight uint64
+	Tb         *TimeBeacon
+}
+
+type MultiSignReply struct {
+	Request    *ComLeaderInitMultiSign
+	VrfValue   []byte
+	Sig        []byte
+	PubAddress common.Address
+	NodeInfo   *NodeInfo
 }
 
 //////////////////////////////
