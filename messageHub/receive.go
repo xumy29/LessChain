@@ -76,32 +76,42 @@ func handleConnection(conn net.Conn, ln net.Listener) {
 		msg := unpackMsg(packedMsg)
 		switch msg.MsgType {
 		// booter
-		case "ShardSendGenesis":
+		case ShardSendGenesis:
 			exit := handleShardSendGenesis(msg.Data)
 			if exit {
 				ln.Close()
 				return
 			}
-		case "BooterSendContract":
+		case BooterSendContract:
 			handleBooterSendContract(msg.Data)
 
-		case "ComGetHeight":
+		case ComGetHeight:
 			handleComGetHeight(msg.Data, conn)
 
-		case "ComGetState":
+		case ComGetState:
 			go handleComGetState(msg.Data)
-		case "ShardSendState":
+		case ShardSendState:
 			go handleShardSendState(msg.Data)
 
-		case "ClientSendTx":
+		case ClientSendTx:
 			go handleClientSendTx(msg.Data)
-		case "ClientSetInjectDone":
+		case ClientSetInjectDone:
 			handleClientSetInjectDone(msg.Data)
-		case "ComSendTxReceipt":
+		case ComSendTxReceipt:
 			go handleComSendTxReceipt(msg.Data)
 
-		case "ComSendBlock":
+		case ComSendBlock:
 			go handleComSendBlock(msg.Data)
+
+		/////////////////////////
+		//// pbft /////
+		/////////////////////////
+		case CPrePrepare, CPrepare, CCommit, CReply, CRequestOldrequest, CSendOldrequest:
+			go handlePbftMsg(msg.Data, msg.MsgType)
+
+		case NodeSendInfo:
+			handleNodeSendInfo(msg.Data)
+
 		default:
 			log.Error("Unknown message type received", "msgType", msg.MsgType)
 		}
@@ -282,4 +292,81 @@ func handleShardSendGenesis(dataBytes []byte) (exit bool) {
 
 	exit = booter_ref.HandleShardSendGenesis(&data)
 	return exit
+}
+
+//////////////////////////////////////////////////
+////  pbft module  ////
+//////////////////////////////////////////////////
+func handlePbftMsg(dataBytes []byte, dataType string) {
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	switch dataType {
+	case CPrePrepare:
+		var data core.PrePrepare
+		err := dataDec.Decode(&data)
+		if err != nil {
+			log.Error("decodeDataErr", "err", err, "dataBytes", data)
+		}
+		log.Info(fmt.Sprintf("Msg Received: %s ComID: %v", dataType, pbftNode_ref.ComID))
+		pbftNode_ref.HandlePrePrepare(&data)
+	case CPrepare:
+		var data core.Prepare
+		err := dataDec.Decode(&data)
+		if err != nil {
+			log.Error("decodeDataErr", "err", err, "dataBytes", data)
+		}
+		log.Info(fmt.Sprintf("Msg Received: %s ComID: %v from nodeID: %v", dataType, pbftNode_ref.ComID, data.SenderInfo.NodeID))
+		pbftNode_ref.HandlePrepare(&data)
+	case CCommit:
+		var data core.Commit
+		err := dataDec.Decode(&data)
+		if err != nil {
+			log.Error("decodeDataErr", "err", err, "dataBytes", data)
+		}
+		log.Info(fmt.Sprintf("Msg Received: %s ComID: %v from nodeID: %v", dataType, pbftNode_ref.ComID, data.SenderInfo.NodeID))
+		pbftNode_ref.HandleCommit(&data)
+	case CReply:
+		var data core.Reply
+		err := dataDec.Decode(&data)
+		if err != nil {
+			log.Error("decodeDataErr", "err", err, "dataBytes", data)
+		}
+		log.Info(fmt.Sprintf("Msg Received: %s ComID: %v from nodeID: %v", dataType, pbftNode_ref.ComID, data.SenderInfo.NodeID))
+		pbftNode_ref.HandleReply(&data)
+	case CRequestOldrequest:
+		var data core.RequestOldMessage
+		err := dataDec.Decode(&data)
+		if err != nil {
+			log.Error("decodeDataErr", "err", err, "dataBytes", data)
+		}
+		log.Info(fmt.Sprintf("Msg Received: %s ComID: %v from nodeID: %v", dataType, pbftNode_ref.ComID, data.SenderInfo.NodeID))
+		pbftNode_ref.HandleRequestOldSeq(&data)
+	case CSendOldrequest:
+		var data core.SendOldMessage
+		err := dataDec.Decode(&data)
+		if err != nil {
+			log.Error("decodeDataErr", "err", err, "dataBytes", data)
+		}
+		log.Info(fmt.Sprintf("Msg Received: %s ComID: %v from nodeID: %v", dataType, pbftNode_ref.ComID, data.SenderInfo.NodeID))
+		pbftNode_ref.HandleSendOldSeq(&data)
+	}
+
+}
+
+func handleNodeSendInfo(dataBytes []byte) {
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data core.NodeSendInfo
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err, "dataBytes", data)
+	}
+
+	log.Info("Msg Received: NodeSendInfo")
+
+	node_ref.HandleNodeSendInfo(&data)
 }

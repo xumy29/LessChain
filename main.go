@@ -13,7 +13,8 @@ import (
 var mode = pflag.StringP("mode", "m", "debug", "mode (run or debug)")
 var role = pflag.StringP("role", "r", "booter", "role type (booter, node or client)")
 var shardNum = pflag.Int32P("shardNum", "S", 1, "number of shards(and committees)")
-var shardId = pflag.Int32P("shardId", "s", 0, "shard id)")
+var shardId = pflag.Int32P("shardId", "s", 0, "shard id")
+var nodeId = pflag.Int32P("nodeId", "n", 0, "node id")
 
 /** go build -o brokerChain.exe
  * brokerChain.exe -m run >> nohup.out 2>&1
@@ -31,5 +32,5 @@ func main() {
 	}
 	fmt.Println("cfg file:", cfgfilename)
 
-	controller.Main(cfgfilename, *role, *shardNum, *shardId)
+	controller.Main(cfgfilename, *role, *shardNum, *shardId, *nodeId)
 }

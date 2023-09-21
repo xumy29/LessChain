@@ -7,6 +7,7 @@ import (
 	"go-w3chain/data"
 	"go-w3chain/log"
 	"go-w3chain/node"
+	"go-w3chain/utils"
 	"math/big"
 	"testing"
 
@@ -27,7 +28,7 @@ var (
 	emptyRoot = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
 )
 
-// func getHash(val []byte) []byte {
+// func utils.GetHash(val []byte) []byte {
 // 	hasher := sha3.NewLegacyKeccak256()
 // 	hasher.Write(val)
 // 	return hasher.Sum(nil)
@@ -87,13 +88,13 @@ func TestRebuildTrieFromOneProof(t *testing.T) {
 	if err != nil {
 		log.Error("rlp encode err", "err", err)
 	}
-	// hash := getHash(encodedBytes)
+	// hash := utils.GetHash(encodedBytes)
 	// log.Debug("rlpEncode accountState", "encodedBytes", encodedBytes, "hash", hash)
-	log.Debug(fmt.Sprintf("txs[0].Sender  address: %x  hashOfaddress: %x  rlpEncodedOfStateAccount: %x", address, getHash(address[:]), encodedBytes))
+	log.Debug(fmt.Sprintf("txs[0].Sender  address: %x  hashOfaddress: %x  rlpEncodedOfStateAccount: %x", address, utils.GetHash(address[:]), encodedBytes))
 	log.Debug(fmt.Sprintf("txs[0].Sender  stateAccount: %v", accountState))
 	// 获得账户的证明
 	memDB := memorydb.New()
-	if err := sTrie.Prove(getHash(address.Bytes()), 0, memDB); err != nil {
+	if err := sTrie.Prove(utils.GetHash(address.Bytes()), 0, memDB); err != nil {
 		log.Error("Failed to prove for address", "address", address.Hex(), "err", err)
 	}
 
@@ -106,7 +107,7 @@ func TestRebuildTrieFromOneProof(t *testing.T) {
 		proof = append(proof, it.Value())
 		log.Debug(fmt.Sprintf("proof hash: %x  proof value (encode of node): %x", it.Key(), it.Value()))
 		encodedNode := it.Value()
-		hash := getHash(encodedNode)
+		hash := utils.GetHash(encodedNode)
 		node := myTrie.MustDecodeNode(hash, encodedNode)
 		hash2Node[string(hash[:])] = node
 		switch node.(type) {
@@ -138,7 +139,7 @@ func TestRebuildTrieFromOneProof(t *testing.T) {
 
 	// 更新账户的值
 	accountState.Balance = accountState.Balance.Add(accountState.Balance, big.NewInt(50000))
-	accountUpdateMap[string(getHash(address[:]))] = accountState
+	accountUpdateMap[string(utils.GetHash(address[:]))] = accountState
 
 	// for k, v := range accountUpdateMap {
 	// 	log.Debug(fmt.Sprintf("accountUpdatedMap key: %x  value: %v", k, v))
@@ -184,7 +185,7 @@ func TestRebuildTrieFromProofs(t *testing.T) {
 	for _, address := range addrs {
 		// 获得账户的证明
 		memDB := memorydb.New()
-		if err := sTrie.Prove(getHash(address.Bytes()), 0, memDB); err != nil {
+		if err := sTrie.Prove(utils.GetHash(address.Bytes()), 0, memDB); err != nil {
 			log.Error("Failed to prove for address", "address", address.Hex(), "err", err)
 		}
 
@@ -197,7 +198,7 @@ func TestRebuildTrieFromProofs(t *testing.T) {
 			proof = append(proof, it.Value())
 			log.Debug(fmt.Sprintf("proof hash: %x  proof value (encode of node): %x", it.Key(), it.Value()))
 			encodedNode := it.Value()
-			hash := getHash(encodedNode)
+			hash := utils.GetHash(encodedNode)
 			if _, ok := hash2Node[string(hash[:])]; ok { // 已经解析和存储过该node
 				continue
 			}
@@ -241,7 +242,7 @@ func TestRebuildTrieFromProofs(t *testing.T) {
 		addr := tx.Sender
 		accountState := addr2State[*addr]
 		accountState.Balance = accountState.Balance.Add(accountState.Balance, big.NewInt(50000))
-		accountUpdateMap[string(getHash(addr[:]))] = accountState
+		accountUpdateMap[string(utils.GetHash(addr[:]))] = accountState
 	}
 
 	// for k, v := range accountUpdateMap {
@@ -290,7 +291,7 @@ func TestMerkle(t *testing.T) {
 	if err != nil {
 		log.Error("rlp encode err", "err", err)
 	}
-	hash := getHash(encodedBytes)
+	hash := utils.GetHash(encodedBytes)
 	log.Debug("rlpEncode accountState", "encodedBytes", encodedBytes, "hash", hash)
 
 	// 确认下地址是否已被写到树中
@@ -299,7 +300,7 @@ func TestMerkle(t *testing.T) {
 
 	// 获得账户的证明
 	memDB := memorydb.New()
-	if err := sTrie.Prove(getHash(address.Bytes()), 0, memDB); err != nil {
+	if err := sTrie.Prove(utils.GetHash(address.Bytes()), 0, memDB); err != nil {
 		log.Error("Failed to prove for address", "address", address.Hex(), "err", err)
 	}
 
@@ -318,7 +319,7 @@ func TestMerkle(t *testing.T) {
 	// 所以proof中不需要包含key
 	proofDB := &proofReader{proof: proof}
 
-	computedValue, err := trie.VerifyProof(rootHash, getHash(address.Bytes()), proofDB)
+	computedValue, err := trie.VerifyProof(rootHash, utils.GetHash(address.Bytes()), proofDB)
 	if err != nil {
 		log.Error("Failed to verify Merkle proof", "err", err, "address", address)
 	}

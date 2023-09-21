@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"math/big"
 
+	"go-w3chain/cfg"
 	"go-w3chain/log"
-	"go-w3chain/params"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -36,8 +36,8 @@ func WriteTd(db ethdb.KeyValueWriter, hash common.Hash, number uint64, td *big.I
 
 // WriteBlock serializes a block into the database, header and body separately.
 func WriteBlock(db ethdb.KeyValueWriter, block *Block) {
-	WriteBody(db, block.Hash(), block.NumberU64(), block.Body())
-	WriteHeader(db, block.Header())
+	WriteBody(db, block.GetHash(), block.NumberU64(), block.Body())
+	WriteHeader(db, block.GetHeader())
 }
 
 // WriteBody stores a block body into the database.
@@ -115,7 +115,7 @@ func WriteHeadHeaderHash(db ethdb.KeyValueWriter, hash common.Hash) {
 }
 
 // WriteChainConfig writes the chain config settings to the database.
-func WriteChainConfig(db ethdb.KeyValueWriter, hash common.Hash, cfg *params.ChainConfig) {
+func WriteChainConfig(db ethdb.KeyValueWriter, hash common.Hash, cfg *cfg.ChainConfig) {
 	if cfg == nil {
 		return
 	}
@@ -196,12 +196,12 @@ func ReadHeadHeaderHash(db ethdb.KeyValueReader) common.Hash {
 }
 
 // ReadChainConfig retrieves the consensus settings based on the given genesis hash.
-func ReadChainConfig(db ethdb.KeyValueReader, hash common.Hash) *params.ChainConfig {
+func ReadChainConfig(db ethdb.KeyValueReader, hash common.Hash) *cfg.ChainConfig {
 	data, _ := db.Get(configKey(hash))
 	if len(data) == 0 {
 		return nil
 	}
-	var config params.ChainConfig
+	var config cfg.ChainConfig
 	if err := json.Unmarshal(data, &config); err != nil {
 		log.Error("Invalid chain config JSON", "hash", hash, "err", err)
 		return nil
@@ -264,7 +264,7 @@ func ReadBodyRLP(db ethdb.Reader, hash common.Hash, number uint64) rlp.RawValue 
 // header data is copied, changes to header and to the field values
 // will not affect the block.
 func NewBlockWithHeader(header *Header) *Block {
-	return &Block{header: CopyHeader(header)}
+	return &Block{Header: CopyHeader(header)}
 }
 
 // isCanon is an internal utility method, to check whether the given number/hash

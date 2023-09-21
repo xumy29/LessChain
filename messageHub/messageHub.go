@@ -8,6 +8,7 @@ import (
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/node"
+	"go-w3chain/pbft"
 	"go-w3chain/shard"
 	"net"
 	"sync"
@@ -18,21 +19,19 @@ var (
 	committee_ref *committee.Committee
 	client_ref    *client.Client
 	node_ref      *node.Node
+	pbftNode_ref  *pbft.PbftConsensusNode
 	booter_ref    *node.Booter
 	tbChain_ref   *beaconChain.BeaconChain
 
-	shardNum     int
-	clientNum    int
-	conns2Shard  *ConnectionsMap
-	conns2Com    *ConnectionsMap
-	conns2Client *ConnectionsMap
-	listenConn   net.Listener
+	shardNum   int
+	shardSize  int
+	clientNum  int
+	conns2Node *ConnectionsMap
+	listenConn net.Listener
 )
 
 func init() {
-	conns2Shard = NewConnectionsMap()
-	conns2Com = NewConnectionsMap()
-	conns2Client = NewConnectionsMap()
+	conns2Node = NewConnectionsMap()
 	gob.Register(core.Msg{})
 	gob.Register(core.BooterSendContract{})
 
@@ -52,7 +51,7 @@ func NewMessageHub() *GoodMessageHub {
 }
 
 func (hub *GoodMessageHub) Init(client *client.Client, node *node.Node, booter *node.Booter,
-	tbChain *beaconChain.BeaconChain, _shardNum int, _clientNum int, wg *sync.WaitGroup) {
+	tbChain *beaconChain.BeaconChain, _shardNum int, _shardSize, _clientNum int, wg *sync.WaitGroup) {
 	clientNum = _clientNum
 	client_ref = client
 
@@ -60,11 +59,13 @@ func (hub *GoodMessageHub) Init(client *client.Client, node *node.Node, booter *
 	if node_ref != nil {
 		shard_ref = node.GetShard().(*shard.Shard)
 		committee_ref = node.GetCommittee().(*committee.Committee)
+		pbftNode_ref = node.GetPbftNode()
 	}
 
 	booter_ref = booter
 	tbChain_ref = tbChain
 	shardNum = _shardNum
+	shardSize = _shardSize
 	log.Info("messageHubInit", "shardNum", shardNum)
 
 	if committee_ref != nil {
@@ -72,6 +73,9 @@ func (hub *GoodMessageHub) Init(client *client.Client, node *node.Node, booter *
 	}
 	if shard_ref != nil {
 		shard_ref.SetMessageHub(hub)
+	}
+	if pbftNode_ref != nil {
+		pbftNode_ref.SetMessageHub(hub)
 	}
 	if client_ref != nil {
 		client_ref.SetMessageHub(hub)
@@ -85,6 +89,7 @@ func (hub *GoodMessageHub) Init(client *client.Client, node *node.Node, booter *
 	tbChain_ref.SetMessageHub(hub)
 
 	if node_ref != nil {
+		node_ref.SetMessageHub(hub)
 		wg.Add(1)
 		go listen(node_ref.GetAddr(), wg)
 	}
@@ -98,13 +103,7 @@ func (hub *GoodMessageHub) Init(client *client.Client, node *node.Node, booter *
 
 func (hub GoodMessageHub) Close() {
 	// 关闭所有tcp连接，防止资源泄露
-	for _, conn := range conns2Client.connections {
-		conn.Close()
-	}
-	for _, conn := range conns2Com.connections {
-		conn.Close()
-	}
-	for _, conn := range conns2Shard.connections {
+	for _, conn := range conns2Node.connections {
 		conn.Close()
 	}
 	listenConn.Close()
@@ -149,6 +148,25 @@ func (hub *GoodMessageHub) Send(msgType uint32, id uint32, msg interface{}, call
 
 	case core.MsgTypeTBChainPushTB2Client:
 		tbChainPushBlock2Client(msg)
+
+	////////////////////
+	///// pbft  ////////
+	////////////////////
+	case core.MsgTypePbftPrePrepare:
+		sendPbftMsg(id, msg, CPrePrepare)
+	case core.MsgTypePbftPrepare:
+		sendPbftMsg(id, msg, CPrepare)
+	case core.MsgTypePbftCommit:
+		sendPbftMsg(id, msg, CCommit)
+	case core.MsgTypePbftReply:
+		sendPbftMsg(id, msg, CReply)
+	case core.MsgTypePbftRequestOldMessage:
+		sendPbftMsg(id, msg, CRequestOldrequest)
+	case core.MsgTypePbftSendOldMessage:
+		sendPbftMsg(id, msg, CSendOldrequest)
+
+	case core.MsgTypeNodeSendInfo2Leader:
+		sendNodeInfo(id, msg)
 
 		// client
 		// case core.MsgTypeClientInjectTX2Committee:

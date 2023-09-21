@@ -8,8 +8,8 @@ import (
 	"math/big"
 	"os"
 
+	"go-w3chain/cfg"
 	"go-w3chain/log"
-	"go-w3chain/params"
 	"go-w3chain/utils"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -27,7 +27,7 @@ var DefaultAlloc = &GenesisAlloc{
 }
 
 type Genesis struct {
-	Config *params.ChainConfig `json:"config"` // chainID ans so on
+	Config *cfg.ChainConfig `json:"config"` // chainID ans so on
 
 	Nonce      uint64         `json:"nonce"`
 	Timestamp  uint64         `json:"timestamp"`
@@ -185,7 +185,7 @@ func (g *Genesis) ToBlock(db ethdb.Database) *Block {
 	}
 
 	if g.Difficulty == nil && g.Mixhash == (common.Hash{}) {
-		head.Difficulty = params.GenesisDifficulty
+		head.Difficulty = cfg.GenesisDifficulty
 	}
 
 	block := NewBlock(head, nil, trie.NewStackTrie(nil))
@@ -219,31 +219,31 @@ func (g *Genesis) Commit(db ethdb.Database) (*Block, error) {
 
 	config := g.Config
 	if config == nil {
-		config = params.AllProtocolChanges
+		config = cfg.AllProtocolChanges
 	}
 
-	if err := g.Alloc.write(db, block.Hash()); err != nil {
+	if err := g.Alloc.write(db, block.GetHash()); err != nil {
 		return nil, err
 	}
 
 	// stores the total difficulty ， 创世区块 就是 block.Difficulty()
-	WriteTd(db, block.Hash(), block.NumberU64(), block.Difficulty())
+	WriteTd(db, block.GetHash(), block.NumberU64(), block.Difficulty())
 	WriteBlock(db, block)
-	WriteCanonicalHash(db, block.Hash(), block.NumberU64())
-	WriteHeadBlockHash(db, block.Hash())
-	WriteHeadFastBlockHash(db, block.Hash())
-	WriteHeadHeaderHash(db, block.Hash())
-	WriteChainConfig(db, block.Hash(), config)
+	WriteCanonicalHash(db, block.GetHash(), block.NumberU64())
+	WriteHeadBlockHash(db, block.GetHash())
+	WriteHeadFastBlockHash(db, block.GetHash())
+	WriteHeadHeaderHash(db, block.GetHash())
+	WriteChainConfig(db, block.GetHash(), config)
 
 	// fmt.Println("In func Commit, success ")
 
 	return block, nil
 }
 
-func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*params.ChainConfig, common.Hash, error) {
+func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*cfg.ChainConfig, common.Hash, error) {
 	// wrong case:
 	if genesis != nil && genesis.Config == nil {
-		return params.AllProtocolChanges, common.Hash{}, errGenesisNoConfig
+		return cfg.AllProtocolChanges, common.Hash{}, errGenesisNoConfig
 	}
 
 	// case 1: Just commit the new block if there is no stored genesis block.
@@ -259,7 +259,7 @@ func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*params.ChainConfig
 		if err != nil {
 			return genesis.Config, common.Hash{}, err
 		}
-		return genesis.Config, block.Hash(), nil
+		return genesis.Config, block.GetHash(), nil
 	}
 
 	// case 2: We have the genesis block in database(perhaps in ancient database)
@@ -270,7 +270,7 @@ func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*params.ChainConfig
 			genesis = DefaultGenesisBlock()
 		}
 		// Ensure the stored genesis matches with the given one.
-		hash := genesis.ToBlock(nil).Hash()
+		hash := genesis.ToBlock(nil).GetHash()
 		if hash != stored {
 			return genesis.Config, hash, &GenesisMismatchError{stored, hash}
 		}
@@ -278,13 +278,13 @@ func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*params.ChainConfig
 		if err != nil {
 			return genesis.Config, hash, err
 		}
-		return genesis.Config, block.Hash(), nil
+		return genesis.Config, block.GetHash(), nil
 	}
 
 	// case 3: db 已有 genesis, state 也存在, stored 不为空
 	// 检查 当前的 genesis 是否 与 db 的匹配
 	if genesis != nil {
-		hash := genesis.ToBlock(nil).Hash()
+		hash := genesis.ToBlock(nil).GetHash()
 		if hash != stored {
 			return genesis.Config, hash, &GenesisMismatchError{stored, hash}
 		}
@@ -328,7 +328,7 @@ func (e *GenesisMismatchError) Error() string {
 // DefaultGenesisBlock returns the Ethereum main net genesis block.
 func DefaultGenesisBlock() *Genesis {
 	return &Genesis{
-		Config:     params.AllProtocolChanges,
+		Config:     cfg.AllProtocolChanges,
 		Nonce:      66,
 		Difficulty: big.NewInt(17179869184),
 		Alloc:      *DefaultAlloc,
@@ -345,11 +345,11 @@ func (g *Genesis) MustCommit(db ethdb.Database) *Block {
 	return block
 }
 
-func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
+func (g *Genesis) configOrDefault(ghash common.Hash) *cfg.ChainConfig {
 	switch {
 	case g != nil:
 		return g.Config
 	default:
-		return params.AllProtocolChanges
+		return cfg.AllProtocolChanges
 	}
 }

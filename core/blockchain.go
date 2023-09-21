@@ -2,10 +2,9 @@ package core
 
 import (
 	"errors"
+	"go-w3chain/cfg"
 	"sync/atomic"
 	"time"
-
-	"go-w3chain/params"
 
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -26,8 +25,8 @@ const (
 type txURI uint64
 
 type BlockChain struct {
-	chainConfig *params.ChainConfig // Chain configuration
-	cacheConfig *CacheConfig        // Cache configuration for pruning
+	chainConfig *cfg.ChainConfig // Chain configuration
+	cacheConfig *CacheConfig     // Cache configuration for pruning
 
 	db         ethdb.Database
 	stateCache state.Database // State database to reuse between imports (contains state cache)
@@ -68,7 +67,7 @@ var defaultCacheConfig = &CacheConfig{
 	SnapshotWait:   true,
 }
 
-func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *params.ChainConfig) (*BlockChain, error) {
+func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *cfg.ChainConfig) (*BlockChain, error) {
 	if cacheConfig == nil {
 		cacheConfig = defaultCacheConfig
 	}

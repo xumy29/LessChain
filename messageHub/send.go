@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/gob"
+	"fmt"
 	"go-w3chain/beaconChain"
 	"go-w3chain/cfg"
 	"go-w3chain/core"
@@ -59,10 +60,12 @@ func comGetHeightFromShard(shardID uint32, msg interface{}) *big.Int {
 	// 序列化后的消息
 	msg_bytes := packMsg("ComGetHeight", buf.Bytes())
 
-	conn, ok := conns2Shard.Get(shardID)
+	// 从分片的leader节点处获取
+	addr := cfg.NodeTable[shardID][0]
+	conn, ok := conns2Node.Get(addr)
 	if !ok {
-		conn = dial(cfg.NodeTable[shardID][0])
-		conns2Shard.Add(shardID, conn)
+		conn = dial(addr)
+		conns2Node.Add(addr, conn)
 	}
 	_, err = conn.Write(msg_bytes)
 	if err != nil {
@@ -144,10 +147,12 @@ func clientInjectTx2Com(comID uint32, msg interface{}) {
 	// 序列化后的消息
 	msg_bytes := packMsg("ClientSendTx", buf.Bytes())
 
-	conn, ok := conns2Com.Get(comID)
+	// 发送给委员会的leader即可
+	addr := cfg.ComNodeTable[comID][0]
+	conn, ok := conns2Node.Get(addr)
 	if !ok {
-		conn = dial(cfg.NodeTable[comID][0])
-		conns2Com.Add(comID, conn)
+		conn = dial(addr)
+		conns2Node.Add(addr, conn)
 	}
 	writer := bufio.NewWriter(conn)
 	writer.Write(msg_bytes)
@@ -168,22 +173,23 @@ func clientSetInjectDone2Nodes(cid uint32) {
 	// 序列化后的消息
 	msg_bytes := packMsg("ClientSetInjectDone", buf.Bytes())
 
-	// todo: 修改成向所有节点发送
-	// 向每个分片的leader节点发送合约地址等信息
-	var i uint32
+	// 向所有节点发送合约地址等信息
+	var i, j uint32
 	for i = 0; i < uint32(shardNum); i++ {
-		conn, ok := conns2Shard.Get(i)
-		if !ok {
-			conn = dial(cfg.NodeTable[i][0])
-			conns2Shard.Add(i, conn)
+		for j = 0; j < uint32(shardSize); j++ {
+			addr := cfg.NodeTable[i][j]
+			conn, ok := conns2Node.Get(addr)
+			if !ok {
+				conn = dial(addr)
+				conns2Node.Add(addr, conn)
+			}
+			_, err := conn.Write(msg_bytes)
+			if err != nil {
+				panic(err)
+			}
+			conn.Close()
 		}
-		_, err := conn.Write(msg_bytes)
-		if err != nil {
-			panic(err)
-		}
-		conn.Close()
 	}
-
 	log.Info("Msg Sent: ClientSetInjectDone", "clientID", cid)
 }
 
@@ -199,10 +205,12 @@ func comGetStateFromShard(shardID uint32, msg interface{}) {
 	// 序列化后的消息
 	msg_bytes := packMsg("ComGetState", buf.Bytes())
 
-	conn, ok := conns2Shard.Get(shardID)
+	// 从分片的leader节点获取
+	addr := cfg.NodeTable[shardID][0]
+	conn, ok := conns2Node.Get(addr)
 	if !ok {
-		conn = dial(cfg.NodeTable[shardID][0])
-		conns2Shard.Add(shardID, conn)
+		conn = dial(addr)
+		conns2Node.Add(addr, conn)
 	}
 	writer := bufio.NewWriter(conn)
 	writer.Write(msg_bytes)
@@ -222,11 +230,12 @@ func shardSendStateToCom(comID uint32, msg interface{}) {
 
 	// 序列化后的消息
 	msg_bytes := packMsg("ShardSendState", buf.Bytes())
-
-	conn, ok := conns2Shard.Get(comID)
+	// 只发送给委员会的leader节点
+	addr := cfg.ComNodeTable[comID][0]
+	conn, ok := conns2Node.Get(addr)
 	if !ok {
-		conn = dial(cfg.NodeTable[comID][0])
-		conns2Shard.Add(comID, conn)
+		conn = dial(addr)
+		conns2Node.Add(addr, conn)
 	}
 	writer := bufio.NewWriter(conn)
 	writer.Write(msg_bytes)
@@ -247,10 +256,12 @@ func comSendBlock2Shard(shardID uint32, msg interface{}) {
 	// 序列化后的消息
 	msg_bytes := packMsg("ComSendBlock", buf.Bytes())
 
-	conn, ok := conns2Shard.Get(shardID)
+	// 只发送给分片的leader节点
+	addr := cfg.NodeTable[shardID][0]
+	conn, ok := conns2Node.Get(addr)
 	if !ok {
-		conn = dial(cfg.NodeTable[shardID][0])
-		conns2Shard.Add(shardID, conn)
+		conn = dial(addr)
+		conns2Node.Add(addr, conn)
 	}
 	writer := bufio.NewWriter(conn)
 	writer.Write(msg_bytes)
@@ -271,10 +282,11 @@ func comSendReply2Client(clientID uint32, msg interface{}) {
 	// 序列化后的消息
 	msg_bytes := packMsg("ComSendTxReceipt", buf.Bytes())
 
-	conn, ok := conns2Client.Get(clientID)
+	addr := cfg.ClientTable[clientID]
+	conn, ok := conns2Node.Get(addr)
 	if !ok {
-		conn = dial(cfg.ClientTable[clientID])
-		conns2Client.Add(clientID, conn)
+		conn = dial(addr)
+		conns2Node.Add(addr, conn)
 	}
 	writer := bufio.NewWriter(conn)
 	writer.Write(msg_bytes)
@@ -324,10 +336,11 @@ func booterSendContract(msg interface{}) {
 	// 向每个分片的leader节点发送合约地址等信息
 	var i uint32
 	for i = 0; i < uint32(shardNum); i++ {
-		conn, ok := conns2Shard.Get(i)
+		addr := cfg.NodeTable[i][0]
+		conn, ok := conns2Node.Get(addr)
 		if !ok {
-			conn = dial(cfg.NodeTable[i][0])
-			conns2Shard.Add(i, conn)
+			conn = dial(addr)
+			conns2Node.Add(addr, conn)
 		}
 		_, err := conn.Write(msg_bytes)
 		if err != nil {
@@ -338,10 +351,11 @@ func booterSendContract(msg interface{}) {
 
 	// 向客户端发送合约地址等信息
 	for i = 0; i < uint32(clientNum); i++ {
-		conn, ok := conns2Client.Get(i)
+		addr := cfg.ClientTable[i]
+		conn, ok := conns2Node.Get(addr)
 		if !ok {
-			conn = dial(cfg.ClientTable[i])
-			conns2Client.Add(i, conn)
+			conn = dial(addr)
+			conns2Node.Add(addr, conn)
 		}
 		_, err := conn.Write(msg_bytes)
 		if err != nil {
@@ -352,4 +366,90 @@ func booterSendContract(msg interface{}) {
 
 	log.Info("Msg Sent: BooterSendContract", "data", data)
 
+}
+
+/////////////////////
+///// pbft //////////
+/////////////////////
+func sendPbftMsg(comID uint32, msg interface{}, msgType string) {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	var err error
+
+	switch msgType {
+	case CPrePrepare:
+		data := msg.(*core.PrePrepare)
+		err = enc.Encode(data)
+	case CPrepare:
+		data := msg.(*core.Prepare)
+		err = enc.Encode(data)
+	case CCommit:
+		data := msg.(*core.Commit)
+		err = enc.Encode(data)
+	case CReply:
+		data := msg.(*core.Reply)
+		err = enc.Encode(data)
+	case CRequestOldrequest:
+		data := msg.(*core.RequestOldMessage)
+		err = enc.Encode(data)
+	case CSendOldrequest:
+		data := msg.(*core.SendOldMessage)
+		err = enc.Encode(data)
+	default:
+		log.Error("unknown pbft msg type", "type", msgType)
+	}
+
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data(interface{})", msg)
+	}
+
+	// 序列化后的消息
+	msg_bytes := packMsg(msgType, buf.Bytes())
+
+	var i uint32
+	nodeAddr := pbftNode_ref.NodeInfo.NodeAddr
+	for i = 0; i < uint32(shardSize); i++ {
+		if msgType == CReply && i > 0 { // reply只需发给leader
+			return
+		}
+		addr := cfg.ComNodeTable[comID][i]
+		if addr == nodeAddr {
+			continue // 不用发给自己
+		}
+		conn, ok := conns2Node.Get(addr)
+		if !ok {
+			conn = dial(addr)
+			conns2Node.Add(addr, conn)
+		}
+		writer := bufio.NewWriter(conn)
+		writer.Write(msg_bytes)
+		writer.Flush()
+
+		log.Info(fmt.Sprintf("Msg Sent: %s ComID: %v, to nodeID: %v", msgType, comID, i))
+	}
+}
+
+func sendNodeInfo(comID uint32, msg interface{}) {
+	data := msg.(*core.NodeSendInfo)
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+
+	// 序列化后的消息
+	msg_bytes := packMsg(NodeSendInfo, buf.Bytes())
+
+	addr := cfg.ComNodeTable[comID][0]
+	conn, ok := conns2Node.Get(addr)
+	if !ok {
+		conn = dial(addr)
+		conns2Node.Add(addr, conn)
+	}
+	writer := bufio.NewWriter(conn)
+	writer.Write(msg_bytes)
+	writer.Flush()
+
+	log.Info("Msg Sent: NodeSendInfo", "ComID", comID, "to nodeID", 0)
 }

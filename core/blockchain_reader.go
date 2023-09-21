@@ -17,7 +17,7 @@ func (bc *BlockChain) GetBlock(hash common.Hash, number uint64) *Block {
 		return nil
 	}
 	// Cache the found block for next time and return
-	bc.blockCache.Add(block.Hash(), block)
+	bc.blockCache.Add(block.GetHeader(), block)
 	return block
 }
 

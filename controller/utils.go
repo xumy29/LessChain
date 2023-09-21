@@ -3,24 +3,17 @@ package controller
 import (
 	"go-w3chain/beaconChain"
 	"go-w3chain/client"
-	"go-w3chain/committee"
 	"go-w3chain/log"
 	"go-w3chain/node"
 	"go-w3chain/result"
-	"go-w3chain/shard"
 	"math"
 	"time"
 )
 
 var tbChain *beaconChain.BeaconChain
 
-func startShard(shard *shard.Shard) {
-	shard.Start()
-
-}
-
-func startCommittee(com *committee.Committee, nodeId int) {
-	com.Start(nodeId)
+func startNode(node *node.Node) {
+	node.Start()
 }
 
 func startClient(c *client.Client, injectSpeed int, recommitIntervalSecs int) {

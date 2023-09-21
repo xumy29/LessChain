@@ -11,4 +11,7 @@ type Committee interface {
 	NewBlockGenerated(block *Block)
 
 	StartWorker()
+
+	GetMembers() []*NodeInfo
+	AddMember(*NodeInfo)
 }

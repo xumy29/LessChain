@@ -12,6 +12,7 @@ import (
 	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
+	"golang.org/x/crypto/sha3"
 )
 
 type AddressInfo struct {
@@ -151,4 +152,10 @@ func IsComLeader(nodeId int) bool {
 
 func IsShardLeader(nodeId int) bool {
 	return nodeId == 0
+}
+
+func GetHash(val []byte) []byte {
+	hasher := sha3.NewLegacyKeccak256()
+	hasher.Write(val)
+	return hasher.Sum(nil)
 }

@@ -6,7 +6,6 @@ import (
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/node"
-	"go-w3chain/params"
 	"go-w3chain/utils"
 	"math/big"
 	"net"
@@ -44,7 +43,7 @@ func NewShard(shardID uint32, _node *node.Node) *Shard {
 	genesisBlock := core.DefaultGenesisBlock()
 	genesisBlock.MustCommit(chainDB)
 
-	chainConfig := &params.ChainConfig{
+	chainConfig := &cfg.ChainConfig{
 		ChainID: big.NewInt(int64(shardID)),
 	}
 
@@ -120,16 +119,15 @@ func (s *Shard) Close() {
 
 /**
  * 将创世区块的信标写到信标链
- * 该方法在分片被创建后，委员会启动前被调用
  */
 func (s *Shard) addGenesisTB() {
 	/* 写入到信标链 */
 	genesisBlock := s.blockchain.CurrentBlock()
-	g_header := genesisBlock.Header()
+	g_header := genesisBlock.GetHeader()
 	tb := &core.TimeBeacon{
 		Height:     g_header.Number.Uint64(),
 		ShardID:    uint32(s.shardID),
-		BlockHash:  genesisBlock.Hash().Hex(),
+		BlockHash:  genesisBlock.GetHash().Hex(),
 		TxHash:     g_header.TxHash.Hex(),
 		StatusHash: g_header.Root.Hex(),
 	}

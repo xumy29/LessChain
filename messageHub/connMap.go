@@ -8,25 +8,25 @@ import (
 // ConnectionsMap is a safe map for concurrent use.
 type ConnectionsMap struct {
 	sync.RWMutex
-	connections map[uint32]net.Conn
+	connections map[string]net.Conn
 }
 
 // NewConnectionsMap creates a new ConnectionsMap.
 func NewConnectionsMap() *ConnectionsMap {
 	return &ConnectionsMap{
-		connections: make(map[uint32]net.Conn),
+		connections: make(map[string]net.Conn),
 	}
 }
 
 // Add adds a connection to the map.
-func (cm *ConnectionsMap) Add(key uint32, conn net.Conn) {
+func (cm *ConnectionsMap) Add(key string, conn net.Conn) {
 	cm.Lock()
 	cm.connections[key] = conn
 	cm.Unlock()
 }
 
 // Get retrieves a connection by key.
-func (cm *ConnectionsMap) Get(key uint32) (net.Conn, bool) {
+func (cm *ConnectionsMap) Get(key string) (net.Conn, bool) {
 	cm.RLock()
 	conn, ok := cm.connections[key]
 	cm.RUnlock()
@@ -34,7 +34,7 @@ func (cm *ConnectionsMap) Get(key uint32) (net.Conn, bool) {
 }
 
 // Remove removes a connection by key.
-func (cm *ConnectionsMap) Remove(key uint32) {
+func (cm *ConnectionsMap) Remove(key string) {
 	cm.Lock()
 	delete(cm.connections, key)
 	cm.Unlock()

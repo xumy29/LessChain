@@ -8,6 +8,7 @@ import (
 	"go-w3chain/log"
 	"go-w3chain/result"
 	"go-w3chain/trie"
+	"go-w3chain/utils"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -171,11 +172,11 @@ func (w *Worker) newWorkLoop(recommit time.Duration) {
  * 由委员会对象代表委员会中的节点，直接调用委员会的多签名方法
  */
 func (w *Worker) broadcastTbInCommittee(block *core.Block) {
-	final_header := block.Header()
+	final_header := block.GetHeader()
 	tb := &beaconChain.TimeBeacon{
 		Height:     final_header.Number.Uint64(),
 		ShardID:    uint32(w.comID),
-		BlockHash:  block.Hash().Hex(),
+		BlockHash:  block.GetHash().Hex(),
 		TxHash:     final_header.TxHash.Hex(),
 		StatusHash: final_header.Root.Hex(),
 	}
@@ -230,7 +231,7 @@ func analyseStates(states *core.ShardSendState) (map[common.Address]*types.State
 		proofs := states.AccountsProofs[addr]
 		for _, proof := range proofs {
 			encodedNode := proof
-			hash := getHash(encodedNode)
+			hash := utils.GetHash(encodedNode)
 			// log.Debug(fmt.Sprintf("proof hash: %x", hash))
 			if _, ok := hash2Node[string(hash[:])]; ok { // 已经解析和存储过该node
 				continue
@@ -280,11 +281,14 @@ func (w *Worker) commit(timestamp int64) (*core.Block, error) {
 		return nil, errors.New("failed to commit transition state: " + err.Error())
 	}
 
+	// pbft consensus in committee
+	w.com.Node.PbftPropose(block)
+
 	// log.Debug("WorkerAccountState")
 	// for _, tx := range txs {
 	// 	log.Debug(fmt.Sprintf("tx type: %v", core.TxTypeStr(tx.TXtype)))
-	// 	log.Debug(fmt.Sprintf("accountHash: %x  value: %v", getHash((*tx.Sender)[:]), addr2State[*tx.Sender]))
-	// 	log.Debug(fmt.Sprintf("accountHash: %x  value: %v", getHash((*tx.Recipient)[:]), addr2State[*tx.Recipient]))
+	// 	log.Debug(fmt.Sprintf("accountHash: %x  value: %v", utils.GetHash((*tx.Sender)[:]), addr2State[*tx.Sender]))
+	// 	log.Debug(fmt.Sprintf("accountHash: %x  value: %v", utils.GetHash((*tx.Recipient)[:]), addr2State[*tx.Recipient]))
 	// }
 
 	w.com.AddBlock2Shard(block)
@@ -362,7 +366,7 @@ func rebuildHelper(
 				fullNode.Children[i] = myTrie.HashNode(temp)
 			}
 		}
-		newHash := getHash(myTrie.NodeToBytes(fullNode))
+		newHash := utils.GetHash(myTrie.NodeToBytes(fullNode))
 		// log.Debug(fmt.Sprintf("node original hash: %x  new hash: %x", hash, newHash))
 		return newHash
 	case *myTrie.ShortNode:
@@ -373,7 +377,7 @@ func rebuildHelper(
 			temp := rebuildHelper(shortNode.Val.(myTrie.HashNode), hash2Node, curKey, updadedStates)
 			shortNode.Val = myTrie.HashNode(temp)
 			shortNode.Key = myTrie.HexToCompact(shortNode.Key)
-			newHash := getHash(myTrie.NodeToBytes(shortNode))
+			newHash := utils.GetHash(myTrie.NodeToBytes(shortNode))
 			// log.Debug(fmt.Sprintf("node original hash: %x  new hash: %x", hash, newHash))
 			return newHash
 		case myTrie.ValueNode:
@@ -388,7 +392,7 @@ func rebuildHelper(
 				shortNode.Val = myTrie.ValueNode(encodedBytes)
 			}
 			shortNode.Key = myTrie.HexToCompact(shortNode.Key)
-			newHash := getHash(myTrie.NodeToBytes(shortNode))
+			newHash := utils.GetHash(myTrie.NodeToBytes(shortNode))
 			// log.Debug(fmt.Sprintf("node original hash: %x  new hash: %x", hash, newHash))
 			return newHash
 		default:
@@ -441,17 +445,17 @@ func (w *Worker) executeTransaction(
 		senderState := addr2State[*tx.Sender]
 		addNonceByOne(senderState)
 		subBalance(addr2State[*tx.Sender], tx.Value)
-		updatedStates[string(getHash((*tx.Sender)[:]))] = senderState
+		updatedStates[string(utils.GetHash((*tx.Sender)[:]))] = senderState
 		receiverState := addr2State[*tx.Recipient]
 		addBalance(receiverState, tx.Value)
-		updatedStates[string(getHash((*tx.Recipient)[:]))] = receiverState
+		updatedStates[string(utils.GetHash((*tx.Recipient)[:]))] = receiverState
 		tx.TXStatus = result.IntraSuccess
 		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "committee commit intra tx", "time", now)
 	} else if tx.TXtype == core.CrossTXType1 {
 		senderState := addr2State[*tx.Sender]
 		addNonceByOne(senderState)
 		subBalance(addr2State[*tx.Sender], tx.Value)
-		updatedStates[string(getHash((*tx.Sender)[:]))] = senderState
+		updatedStates[string(utils.GetHash((*tx.Sender)[:]))] = senderState
 		tx.TXStatus = result.CrossTXType1Success
 		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "committee commit cross1 tx", "time", now, "tbchain_height", w.com.tbchain_height)
 	} else if tx.TXtype == core.CrossTXType2 {
@@ -464,7 +468,7 @@ func (w *Worker) executeTransaction(
 		} else {
 			receiverState := addr2State[*tx.Recipient]
 			addBalance(receiverState, tx.Value)
-			updatedStates[string(getHash((*tx.Recipient)[:]))] = receiverState
+			updatedStates[string(utils.GetHash((*tx.Recipient)[:]))] = receiverState
 			tx.TXStatus = result.CrossTXType2Success
 			log.Trace("tracing transaction, ", "txid", tx.ID, "status", "committee commit cross2 tx", "time", now,
 				"tbchain_height", w.com.tbchain_height, "cross1ConfirmHeight", tx.ConfirmHeight, "txRollbackHeight", tx.RollbackHeight)
@@ -473,7 +477,7 @@ func (w *Worker) executeTransaction(
 		senderState := addr2State[*tx.Sender]
 		subNonceByOne(senderState)
 		addBalance(senderState, tx.Value)
-		updatedStates[string(getHash((*tx.Sender)[:]))] = senderState
+		updatedStates[string(utils.GetHash((*tx.Sender)[:]))] = senderState
 		tx.TXStatus = result.RollbackSuccess
 		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "committee commit rollback tx", "time", now)
 	} else {

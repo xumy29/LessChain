@@ -2,9 +2,11 @@ package node
 
 import (
 	"fmt"
+	"go-w3chain/cfg"
 	"go-w3chain/core"
 	"go-w3chain/eth_chain"
 	"go-w3chain/log"
+	"go-w3chain/pbft"
 	"go-w3chain/utils"
 	"path/filepath"
 	"strings"
@@ -44,12 +46,15 @@ type Node struct {
 	commID int
 	/* 节点上一次运行vrf得到的结果 */
 	VrfValue []byte
+	pbftNode *pbft.PbftConsensusNode
 
 	contractAddr common.Address
 	contractAbi  *abi.ABI
+
+	messageHub core.MessageHub
 }
 
-func NewNode(conf *core.NodeAddrConfig, parentdataDir string, shardID int, nodeID int) *Node {
+func NewNode(conf *core.NodeAddrConfig, parentdataDir string, shardID, nodeID, shardSize int) *Node {
 	node := &Node{
 		addrConfig: conf,
 		DataDir:    filepath.Join(parentdataDir, conf.Name),
@@ -67,7 +72,37 @@ func NewNode(conf *core.NodeAddrConfig, parentdataDir string, shardID int, nodeI
 	}
 	node.db = db
 
+	// 节点刚创建时，shardID == ComID
+	node.pbftNode = pbft.NewPbftNode(uint32(shardID), uint32(shardID), uint32(nodeID), uint32(shardSize),
+		cfg.AllProtocolChanges, "")
+
 	return node
+}
+
+func (node *Node) SetMessageHub(hub core.MessageHub) {
+	node.messageHub = hub
+}
+
+func (node *Node) Start() {
+	node.com.Start(node.NodeID)
+	node.sendNodeInfo()
+}
+
+func (node *Node) sendNodeInfo() {
+	if utils.IsComLeader(node.NodeID) {
+		return
+	}
+	info := &core.NodeSendInfo{
+		NodeInfo: node.pbftNode.NodeInfo,
+		Addr:     node.w3Account.accountAddr,
+	}
+	node.messageHub.Send(core.MsgTypeNodeSendInfo2Leader, uint32(node.comID), info, nil)
+}
+
+func (node *Node) PbftPropose(block *core.Block) {
+	node.pbftNode.Propose(block)
+	// wait till consensus is complete
+	<-node.pbftNode.OneConsensusDone
 }
 
 func (node *Node) SetShard(shard core.Shard) {
@@ -84,6 +119,10 @@ func (node *Node) GetShard() core.Shard {
 
 func (node *Node) GetCommittee() core.Committee {
 	return node.com
+}
+
+func (node *Node) GetPbftNode() *pbft.PbftConsensusNode {
+	return node.pbftNode
 }
 
 func (node *Node) Close() {
@@ -107,6 +146,13 @@ func (n *Node) GetAccount() *W3Account {
 	return n.w3Account
 }
 
+func (n *Node) HandleNodeSendInfo(info *core.NodeSendInfo) {
+	n.com.AddMember(info.NodeInfo)
+	if len(n.com.GetMembers()) == int(n.pbftNode.GetNodes_num()) {
+		n.shard.Start()
+	}
+}
+
 func (n *Node) HandleBooterSendContract(data *core.BooterSendContract) {
 	n.contractAddr = data.Addr
 	contractABI, err := abi.JSON(strings.NewReader(eth_chain.MyContractABI()))
@@ -114,8 +160,11 @@ func (n *Node) HandleBooterSendContract(data *core.BooterSendContract) {
 		log.Error("get contracy abi fail", "err", err)
 	}
 	n.contractAbi = &contractABI
-	// 启动 worker
+	// 启动 worker，满足三个条件： 1.是leader节点；2.收到合约地址；3.和委员会内所有节点建立起联系
 	if utils.IsComLeader(n.NodeID) {
+		if len(n.com.GetMembers()) != int(n.pbftNode.GetNodes_num()) {
+			log.Error(fmt.Sprintf("incorrect nodes number in committee. should be %v, got %v", n.pbftNode.GetNodes_num(), len(n.com.GetMembers())))
+		}
 		n.com.StartWorker()
 	}
 }

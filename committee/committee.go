@@ -13,7 +13,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/trie"
-	"golang.org/x/crypto/sha3"
 )
 
 type Committee struct {
@@ -23,7 +22,9 @@ type Committee struct {
 	messageHub core.MessageHub
 	/* 接收重组结果的管道 */
 	reconfigCh chan []*node.Node
-	Nodes      []*node.Node
+	Nodes      []*node.Node // 同属一个委员会的节点
+	members    []*core.NodeInfo
+	Node       *node.Node // 当前节点
 	txPool     *TxPool
 	/* 计数器，初始等于客户端个数，每一个客户端发送注入完成信号时计数器减一 */
 	injectNotDone  int32
@@ -39,6 +40,8 @@ func NewCommittee(comID uint32, clientCnt int, _node *node.Node, config *core.Co
 		config:             config,
 		reconfigCh:         make(chan []*node.Node, 0),
 		Nodes:              []*node.Node{_node},
+		members:            []*core.NodeInfo{_node.GetPbftNode().NodeInfo},
+		Node:               _node,
 		injectNotDone:      int32(clientCnt),
 		to_reconfig:        false,
 		shardSendStateChan: make(chan *core.ShardSendState, 0),
@@ -221,12 +224,6 @@ func (com *Committee) getBlockHeight() *big.Int {
 	return blockHeight
 }
 
-func getHash(val []byte) []byte {
-	hasher := sha3.NewLegacyKeccak256()
-	hasher.Write(val)
-	return hasher.Sum(nil)
-}
-
 /* 从对应的分片获取账户状态和证明
  */
 func (com *Committee) getStatusFromShard(addrList []common.Address) *core.ShardSendState {
@@ -245,7 +242,7 @@ func (com *Committee) getStatusFromShard(addrList []common.Address) *core.ShardS
 	for address, accountData := range response.AccountData {
 		proofDB := &proofReader{proof: response.AccountsProofs[address]}
 
-		computedValue, err := trie.VerifyProof(rootHash, getHash(address.Bytes()), proofDB)
+		computedValue, err := trie.VerifyProof(rootHash, utils.GetHash(address.Bytes()), proofDB)
 		if err != nil {
 			log.Error("Failed to verify Merkle proof", "err", err, "address", address)
 			return nil
@@ -271,7 +268,7 @@ func (com *Committee) HandleShardSendState(response *core.ShardSendState) {
 func (com *Committee) AddBlock2Shard(block *core.Block) {
 	comSendBlock := &core.ComSendBlock{
 		Transactions: block.Body().Transactions,
-		Header:       block.Header(),
+		Header:       block.GetHeader(),
 	}
 	com.messageHub.Send(core.MsgTypeSendBlock2Shard, com.comID, comSendBlock, nil)
 }
@@ -316,4 +313,12 @@ func (com *Committee) GetEthChainLatestBlockHash() (common.Hash, uint64) {
 
 func (com *Committee) GetCommitteeID() uint32 {
 	return com.comID
+}
+
+func (com *Committee) GetMembers() []*core.NodeInfo {
+	return com.members
+}
+
+func (com *Committee) AddMember(nodeInfo *core.NodeInfo) {
+	com.members = append(com.members, nodeInfo)
 }

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -29,6 +30,11 @@ type ShardSendState struct {
 	Height         *big.Int
 }
 
+type NodeSendInfo struct {
+	NodeInfo *NodeInfo
+	Addr     common.Address
+}
+
 type ShardSendGenesis struct {
 	Addrs           []common.Address
 	Gtb             *TimeBeacon
@@ -46,4 +52,67 @@ type ComSendBlock struct {
 
 type ClientSetInjectDone struct {
 	Cid uint32
+}
+
+//////////////////////////////
+////// pbft module ///////
+//////////////////////////////
+type NodeInfo struct {
+	ShardID  uint32
+	ComID    uint32
+	NodeID   uint32
+	NodeAddr string
+}
+
+func (n *NodeInfo) PrintNode() {
+	v := []interface{}{
+		n.NodeID,
+		n.ShardID,
+		n.NodeAddr,
+	}
+	fmt.Printf("%v\n", v)
+}
+
+type PbftRequest struct {
+	MsgType string
+	Msg     []byte // request message
+	ReqTime int64  // request time
+}
+
+type PrePrepare struct {
+	RequestMsg *PbftRequest // the request message should be pre-prepared
+	Digest     []byte       // the digest of this request, which is the only identifier
+	SeqID      uint64
+}
+
+type Prepare struct {
+	Digest     []byte // To identify which request is prepared by this node
+	SeqID      uint64
+	SenderInfo *NodeInfo // To identify who send this message
+}
+
+type Commit struct {
+	Digest     []byte // To identify which request is prepared by this node
+	SeqID      uint64
+	SenderInfo *NodeInfo // To identify who send this message
+}
+
+type Reply struct {
+	MessageID  uint64
+	SenderInfo *NodeInfo
+	Result     bool
+}
+
+type RequestOldMessage struct {
+	SeqStartHeight uint64
+	SeqEndHeight   uint64
+	ServerNode     *NodeInfo // send this request to the server node
+	SenderInfo     *NodeInfo
+}
+
+type SendOldMessage struct {
+	SeqStartHeight uint64
+	SeqEndHeight   uint64
+	OldRequest     []*PbftRequest
+	SenderInfo     *NodeInfo
 }
