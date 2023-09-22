@@ -29,9 +29,6 @@ func (rphm *RawPbftInsideExtraHandleMod) HandleinPrepare(pmsg *core.Prepare) boo
 
 // the operation in commit.
 func (rphm *RawPbftInsideExtraHandleMod) HandleinCommit(cmsg *core.Commit) bool {
-	if rphm.pbftNode.NodeID == rphm.pbftNode.view {
-		rphm.pbftNode.OneConsensusDone <- struct{}{}
-	}
 	return true
 }
 

@@ -89,6 +89,9 @@ func (p *PbftConsensusNode) HandlePrepare(pmsg *core.Prepare) {
 			p.ShardID, p.NodeID, pmsg.SeqID, p.sequenceID)
 	} else {
 		// if needed more operations, implement interfaces
+		p.lock.Lock()
+		defer p.lock.Unlock()
+
 		p.ihm.HandleinPrepare(pmsg)
 
 		p.set2DMap(true, string(pmsg.Digest), pmsg.SenderInfo)
@@ -103,8 +106,6 @@ func (p *PbftConsensusNode) HandlePrepare(pmsg *core.Prepare) {
 		// }
 
 		// if the node has received 2f messages (itself included), and it haven't committed, then it commit
-		p.lock.Lock()
-		defer p.lock.Unlock()
 		if cnt >= specifiedcnt && !p.isCommitBordcast[string(pmsg.Digest)] {
 			p.pl.Plog.Printf("S%dN%d : is going to commit... sequnceID: %d\n", p.ShardID, p.NodeID, pmsg.SeqID)
 			// generate commit and broadcast
@@ -135,14 +136,16 @@ func (p *PbftConsensusNode) reply(seqID uint64, digest []byte) {
 
 func (p *PbftConsensusNode) HandleCommit(cmsg *core.Commit) {
 	p.pl.Plog.Printf("S%dN%d received the Commit from ...%d sequenceID: %d\n", p.ShardID, p.NodeID, cmsg.SenderInfo.NodeID, cmsg.SeqID)
+
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
 	p.set2DMap(false, string(cmsg.Digest), cmsg.SenderInfo)
 	cnt := 0
 	for range p.cntCommitConfirm[string(cmsg.Digest)] {
 		cnt++
 	}
 
-	p.lock.Lock()
-	defer p.lock.Unlock()
 	// the main node will not send the prepare message
 	required_cnt := int(2 * p.malicious_nums)
 	if cnt >= required_cnt && !p.isReply[string(cmsg.Digest)] {
@@ -170,8 +173,10 @@ func (p *PbftConsensusNode) HandleCommit(cmsg *core.Commit) {
 			// implement interface
 			p.ihm.HandleinCommit(cmsg)
 			p.reply(cmsg.SeqID, cmsg.Digest)
-			p.pl.Plog.Printf("S%dN%d: this round of pbft %d is end \n", p.ShardID, p.NodeID, p.sequenceID)
-			p.sequenceID += 1
+			if p.NodeID != p.view {
+				p.pl.Plog.Printf("S%dN%d: this round of pbft %d is end \n", p.ShardID, p.NodeID, p.sequenceID)
+				p.sequenceID += 1
+			}
 		}
 
 		// // if this node is a main node, then unlock the sequencelock
@@ -186,16 +191,27 @@ func (p *PbftConsensusNode) HandleReply(rmsg *core.Reply) {
 	if p.NodeID != p.view {
 		return
 	}
+
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
 	if _, ok := p.gotEnoughReply[rmsg.MessageID]; ok {
 		return
 	}
 	p.pl.Plog.Printf("S%dN%d received the Reply from ...%d sequenceID: %d\n", p.ShardID, p.NodeID, rmsg.SenderInfo.NodeID, rmsg.MessageID)
+
 	p.replyCnt += 1
 	if p.replyCnt >= int(2*p.malicious_nums) { // 去掉leader自己和f（=1）
 		p.pl.Plog.Printf("S%dN%d : has received 2f replys ... sequenceID: %d\n", p.ShardID, p.NodeID, rmsg.MessageID)
+		// p.ihm.HandleinReply(rmsg) // if needed, add it to the interface and implement it
 
 		p.replyCnt = 0
 		p.gotEnoughReply[rmsg.MessageID] = true
+
+		p.pl.Plog.Printf("S%dN%d: this round of pbft %d is end \n", p.ShardID, p.NodeID, p.sequenceID)
+		p.sequenceID += 1
+		p.OneConsensusDone <- struct{}{}
+
 		p.pl.Plog.Printf("S%dN%d get sequenceLock unlocked...\n", p.ShardID, p.NodeID)
 		p.sequenceLock.Unlock()
 	}

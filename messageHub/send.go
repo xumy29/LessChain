@@ -393,7 +393,7 @@ func booterSendContract(msg interface{}) {
 	// 向每个分片的leader节点发送合约地址等信息
 	var i uint32
 	for i = 0; i < uint32(shardNum); i++ {
-		addr := cfg.NodeTable[i][0]
+		addr := cfg.ComNodeTable[i][0]
 		conn, ok := conns2Node.Get(addr)
 		if !ok {
 			conn = dial(addr)
