@@ -93,8 +93,8 @@ func (tb *TimeBeacon) AbiEncodeV2() []byte {
 
 type SignedTB struct {
 	TimeBeacon
-	Sigs       [][]byte
-	Vrfs       [][]byte
 	SeedHeight uint64
 	Signers    []common.Address
+	Sigs       [][]byte
+	Vrfs       [][]byte
 }

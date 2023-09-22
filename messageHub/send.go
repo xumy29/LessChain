@@ -303,9 +303,15 @@ func comAddTb2TBChain(msg interface{}) {
 	tbChain_ref.AddTimeBeacon(data)
 }
 
-func comGetLatestBlock(comID uint32, callback func(...interface{})) {
-	hash, height := tbChain_ref.GetEthChainLatestBlockHash(comID)
+func getEthLatestBlock(callback func(...interface{})) {
+	hash, height := tbChain_ref.GetEthChainLatestBlockHash()
 	callback(hash, height)
+}
+
+func getEthBlock(msg interface{}, callback func(...interface{})) {
+	height := msg.(uint64)
+	hash, got_height := tbChain_ref.GetEthChainBlockHash(height)
+	callback(hash, got_height)
 }
 
 func tbChainPushBlock2Client(msg interface{}) {

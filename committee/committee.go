@@ -2,6 +2,7 @@ package committee
 
 import (
 	"bytes"
+	"fmt"
 	"go-w3chain/beaconChain"
 	"go-w3chain/core"
 	"go-w3chain/log"
@@ -171,6 +172,7 @@ func (com *Committee) AddTBs(tbblock *beaconChain.TBBlock) {
 	// 		c.tbs[shardID][tb.Height] = tb
 	// 	}
 	// }
+	log.Debug(fmt.Sprintf("committee get tbchain confirm block... %v", tbblock))
 	com.tbchain_height = tbblock.Height
 
 	// 收到特定高度的信标链区块后准备重组
@@ -299,20 +301,20 @@ func (com *Committee) SetReconfigRes(res []*node.Node) {
 	com.reconfigCh <- res
 }
 
-func (com *Committee) GetEthChainLatestBlockHash() (common.Hash, uint64) {
+func (com *Committee) GetEthChainBlockHash(height uint64) (common.Hash, uint64) {
 	channel := make(chan struct{}, 1)
 	var blockHash common.Hash
-	var height uint64
+	var got_height uint64
 	callback := func(ret ...interface{}) {
 		blockHash = ret[0].(common.Hash)
-		height = ret[1].(uint64)
+		got_height = ret[1].(uint64)
 		channel <- struct{}{}
 	}
-	com.messageHub.Send(core.MsgTypeComGetLatestBlockHashFromEthChain, com.comID, nil, callback)
+	com.messageHub.Send(core.MsgTypeGetBlockHashFromEthChain, com.comID, height, callback)
 	// 阻塞
 	<-channel
 
-	return blockHash, height
+	return blockHash, got_height
 }
 
 /*

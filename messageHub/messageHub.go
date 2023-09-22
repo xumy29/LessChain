@@ -146,8 +146,10 @@ func (hub *GoodMessageHub) Send(msgType uint32, id uint32, msg interface{}, call
 	////////////////////
 	// 通过beaconChain模块中的ethclient与ethChain交互
 	///////////////////
-	case core.MsgTypeComGetLatestBlockHashFromEthChain:
-		comGetLatestBlock(id, callback)
+	case core.MsgTypeGetLatestBlockHashFromEthChain:
+		getEthLatestBlock(callback)
+	case core.MsgTypeGetBlockHashFromEthChain:
+		getEthBlock(msg, callback)
 
 	case core.MsgTypeTBChainPushTB2Client:
 		tbChainPushBlock2Client(msg)

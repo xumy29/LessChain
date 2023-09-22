@@ -31,9 +31,14 @@ func (tbChain *BeaconChain) HandleBooterSendContract(data *core.BooterSendContra
 	go eth_chain.SubscribeEvents(tbChain.cfg.Port, tbChain.contractAddr, eventChannel)
 }
 
-func (tbChain *BeaconChain) GetEthChainLatestBlockHash(comID uint32) (common.Hash, uint64) {
+func (tbChain *BeaconChain) GetEthChainLatestBlockHash() (common.Hash, uint64) {
 	client := tbChain.getEthClient()
 	return eth_chain.GetLatestBlockHash(client)
+}
+
+func (tbChain *BeaconChain) GetEthChainBlockHash(height uint64) (common.Hash, uint64) {
+	client := tbChain.getEthClient()
+	return eth_chain.GetBlockHash(client, height)
 }
 
 // func (tbChain *BeaconChain) GetEthChainBlockHash(shardID uint32, height uint64) common.Hash {
@@ -77,21 +82,46 @@ func (tbChain *BeaconChain) AdjustEthChainRecordedAddrs(addrs []common.Address, 
 
 func (tbChain *BeaconChain) generateEthChainBlock() *TBBlock {
 	tbs_new := make(map[uint32][]*core.TimeBeacon)
+	start_eth_height := uint64(0)
 	for {
 		if len(eventChannel) == 0 {
 			break
 		}
 
 		event := <-eventChannel
+		if start_eth_height == 0 {
+			start_eth_height = event.Eth_height
+			tbChain.height = start_eth_height
+		} else if event.Eth_height > start_eth_height { // 已经是下一个区块的事件了，等下一次出块再处理
+			break
+		}
+
 		tb := &core.TimeBeacon{
 			ShardID: event.ShardID,
 			Height:  event.Height,
 		}
 		tbs_new[tb.ShardID] = append(tbs_new[tb.ShardID], tb)
+
+	}
+
+	// 这一次出块没有确认的信标，从而没有信标链高度信息，需要手动获取
+	// 两种情况下会满足以下条件
+	// 1. 系统初始化时，这时信标链的区块对我们作用不大，我们需要的是从第一个包含信标的信标链区块开始以后的所有区块（包括空块）
+	// 2. 所有信标已被打包时，这时信标链的区块仍有意义，因为我们需要新区块跟在旧区块后面以确认旧区块中的信标
+	if len(tbs_new) == 0 {
+		if tbChain.height == 0 { // 第一种情况，不出块
+			return nil
+		} else { // 第二种情况，看情况决定是否出块
+			_, height := tbChain.GetEthChainLatestBlockHash()
+			if height > tbChain.height { // 信标链高度确实已有更新
+				tbChain.height = height
+			} else {
+				return nil
+			}
+		}
 	}
 
 	now := time.Now().Unix()
-	tbChain.height += 1 // todo: 调整为真实高度
 
 	confirmTBs := make([][]*ConfirmedTB, tbChain.shardNum)
 	for shardID, tbs := range tbs_new {

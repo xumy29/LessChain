@@ -117,7 +117,11 @@ func (w *Worker) newWorkLoop(recommit time.Duration) {
 			log.Error("worker commit block failed", "err", err)
 		}
 
-		w.broadcastTbInCommittee(block)
+		// 获取信标链已确认的最新区块哈希和高度
+		seed, height := w.com.GetEthChainBlockHash(w.com.tbchain_height)
+		log.Debug(fmt.Sprint("com GetEthChainBlockHash"))
+
+		w.broadcastTbInCommittee(block, seed, height)
 
 		// /* 通知committee 有新区块产生
 		//    当出完一个块需要重组时，worker会阻塞在这个函数内
@@ -170,7 +174,7 @@ func (w *Worker) newWorkLoop(recommit time.Duration) {
 /** 矿工出块以后，生成对应的区块信标，并广播到委员会中
  * 由委员会对象代表委员会中的节点，直接调用委员会的多签名方法
  */
-func (w *Worker) broadcastTbInCommittee(block *core.Block) {
+func (w *Worker) broadcastTbInCommittee(block *core.Block, seed common.Hash, height uint64) {
 	final_header := block.GetHeader()
 	tb := &core.TimeBeacon{
 		Height:     final_header.Number.Uint64(),
@@ -180,7 +184,7 @@ func (w *Worker) broadcastTbInCommittee(block *core.Block) {
 		StatusHash: final_header.Root.Hex(),
 	}
 
-	signedTB := w.com.initMultiSign(tb)
+	signedTB := w.com.initMultiSign(tb, seed, height)
 
 	w.com.SendTB(signedTB)
 }

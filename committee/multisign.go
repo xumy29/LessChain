@@ -12,10 +12,7 @@ import (
 /** 委员会中的节点对信标进行多签名
 由委员会的leader发起
 */
-func (com *Committee) initMultiSign(tb *core.TimeBeacon) *core.SignedTB {
-	// 0. 获取信标链最新区块哈希和高度，哈希作为vrf的随机种子
-	seed, height := com.GetEthChainLatestBlockHash()
-
+func (com *Committee) initMultiSign(tb *core.TimeBeacon, seed common.Hash, height uint64) *core.SignedTB {
 	// 发送消息
 	r := &core.ComLeaderInitMultiSign{
 		Seed:       seed,

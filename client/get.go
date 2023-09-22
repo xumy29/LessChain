@@ -59,6 +59,7 @@ func (c *Client) GetTB(shardID uint32, height uint64) *beaconChain.ConfirmedTB {
  * 客户端收到新确认信标后，检查是否有超时的跨片交易
  */
 func (c *Client) AddTBs(tbblock *beaconChain.TBBlock) {
+	log.Debug(fmt.Sprintf("client get tbchain confirm block... %v", tbblock))
 	for shardID, tbs := range tbblock.Tbs {
 		for _, tb := range tbs {
 			// log.Debug("addTB to c.tbs", "shardID", shardID, "blockHeight", tb.Height)

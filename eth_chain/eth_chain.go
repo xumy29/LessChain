@@ -61,12 +61,13 @@ func GetLatestBlockHash(client *ethclient.Client) (common.Hash, uint64) {
 	return header.Hash(), height
 }
 
-func GetBlockHash(client *ethclient.Client, height uint64) common.Hash {
+func GetBlockHash(client *ethclient.Client, height uint64) (common.Hash, uint64) {
 	header, err := client.HeaderByNumber(context.Background(), big.NewInt(int64(height)))
 	if err != nil {
 		log.Error("get tbchain block header fail", "height", height, "err", err)
 	}
-	return header.Hash()
+	got_height := header.Number.Uint64()
+	return header.Hash(), got_height
 }
 
 // 部署合约

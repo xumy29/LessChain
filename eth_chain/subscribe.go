@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"go-w3chain/log"
+	"strconv"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -31,9 +32,10 @@ type WebSocketResponse struct {
 }
 
 type Event struct {
-	Msg     string
-	ShardID uint32
-	Height  uint64
+	Msg        string
+	ShardID    uint32
+	Height     uint64
+	Eth_height uint64
 }
 
 func SubscribeEvents(port int, contractAddr common.Address, eventChannel chan *Event) {
@@ -92,11 +94,17 @@ func SubscribeEvents(port int, contractAddr common.Address, eventChannel chan *E
 			continue
 		}
 
-		// height := response.Params.Result.BlockNumber
+		heightStr := response.Params.Result.BlockNumber
+		eth_height, err := strconv.ParseInt(heightStr, 0, 64)
+		if err != nil {
+			log.Error(fmt.Sprintf("parseInt fail. stringValue: %v err: %v", heightStr, err))
+		}
+
 		// log.Debug(fmt.Sprintf("suscribe ethchain height: %v", height))
 		data := response.Params.Result.Data
 		// fmt.Println("Data:", data)
-		event := handleMessage(data)
+		event := handleMessage(data, uint64(eth_height))
+		event.Eth_height = uint64(eth_height)
 		if event.Msg == "addTB" {
 			eventChannel <- event
 		} else if event.Msg == "insufficient valid signatures" {
@@ -105,7 +113,7 @@ func SubscribeEvents(port int, contractAddr common.Address, eventChannel chan *E
 	}
 }
 
-func handleMessage(data string) *Event {
+func handleMessage(data string, eth_height uint64) *Event {
 	eventABI := `
 	[
 		{
@@ -166,9 +174,11 @@ func handleMessage(data string) *Event {
 	}
 	// addr := decodedData["addr"].([32]byte)
 
+	fmt.Printf("Eth_height: %d\t", eth_height)
 	fmt.Printf("Message: %s\t", message)
 	fmt.Printf("ShardID: %d\t", shardID)
 	fmt.Printf("Height: %d\n", height)
+
 	if (addr != common.Address{}) {
 		fmt.Printf("Address: %v\n", addr)
 	}

@@ -27,7 +27,9 @@ func (tbChain *BeaconChain) loop() {
 		case <-timer.C:
 			if tbChain.mode == 0 || tbChain.mode == 1 || tbChain.mode == 2 {
 				block := tbChain.GenerateBlock()
-				tbChain.toPushBlock(block)
+				if block != nil {
+					tbChain.toPushBlock(block)
+				}
 				timer.Reset(blockInterval)
 			} else {
 				err := fmt.Errorf("unknown mode of tbChain! mode=%d", tbChain.mode)
@@ -100,9 +102,14 @@ func (tbChain *BeaconChain) generateSimulationChainBlock() *TBBlock {
 * 订阅者包括客户端、委员会等需要获取信标辅助验证的角色
 */
 func (tbChain *BeaconChain) toPushBlock(block *TBBlock) {
+	if _, ok := tbChain.tbBlocks[block.Height]; ok {
+		log.Error(fmt.Sprintf("contradictory tbchain block have same height. old block: %v, new block: %v",
+			tbChain.tbBlocks[block.Height], block))
+	}
 	tbChain.tbBlocks[block.Height] = block
-	if block.Height > tbChain.cfg.Height2Confirm {
-		confirmBlock := tbChain.tbBlocks[block.Height-tbChain.cfg.Height2Confirm]
+
+	confirmHeight := block.Height - tbChain.cfg.Height2Confirm
+	if confirmBlock, ok := tbChain.tbBlocks[confirmHeight]; ok && confirmBlock != nil {
 		tbChain.PushBlock2Client(confirmBlock)
 		tbChain.PushBlock2Coms(confirmBlock)
 	}

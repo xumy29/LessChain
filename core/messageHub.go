@@ -28,7 +28,8 @@ const (
 	MsgTypeTBChainPushTB2Client
 	MsgTypeTBChainPushTB2Coms
 
-	MsgTypeComGetLatestBlockHashFromEthChain
+	MsgTypeGetLatestBlockHashFromEthChain
+	MsgTypeGetBlockHashFromEthChain
 
 	MsgTypeLeaderInitMultiSign
 	MsgTypeSendMultiSignReply
