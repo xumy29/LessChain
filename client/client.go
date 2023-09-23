@@ -37,7 +37,8 @@ type Client struct {
 	txs_map map[uint64]*core.Transaction
 
 	/* 已注入到分片的交易数量 */
-	injectCnt int
+	injectCnt         int
+	InjectDoneMsgSent bool
 
 	/* 委员会发送给客户端的待处理的交易收据 */
 	tx_reply *list.List

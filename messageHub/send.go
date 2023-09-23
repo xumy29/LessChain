@@ -158,7 +158,7 @@ func clientInjectTx2Com(comID uint32, msg interface{}) {
 	writer.Write(msg_bytes)
 	writer.Flush()
 
-	log.Info("Msg Sent: ClientSendTx", "targetComID", comID, "tx count", len(data))
+	log.Info("Msg Sent: ClientSendTx", "targetComID", comID, "targetAddr", addr, "tx count", len(data))
 }
 
 func clientSetInjectDone2Nodes(cid uint32) {
@@ -298,9 +298,9 @@ func comSendReply2Client(clientID uint32, msg interface{}) {
 // 调用beaconChain包，再通过ethClient与ethchain交互
 // 或者beaconChain监听到的ethchain事件，发送给客户端、委员会
 
-func comAddTb2TBChain(msg interface{}) {
+func comAddTb2TBChain(nodeID uint32, msg interface{}) {
 	data := msg.(*core.SignedTB)
-	tbChain_ref.AddTimeBeacon(data)
+	tbChain_ref.AddTimeBeacon(data, nodeID)
 }
 
 func getEthLatestBlock(callback func(...interface{})) {
@@ -320,6 +320,14 @@ func tbChainPushBlock2Client(msg interface{}) {
 	}
 	data := msg.(*beaconChain.TBBlock)
 	client_ref.AddTBs(data)
+}
+
+func tbChainPushBlock2Com(msg interface{}) {
+	if committee_ref == nil {
+		return
+	}
+	data := msg.(*beaconChain.TBBlock)
+	committee_ref.AddTBs(data)
 }
 
 func comLeaderInitMultiSign(comID uint32, msg interface{}) {
@@ -395,20 +403,22 @@ func booterSendContract(msg interface{}) {
 	// 序列化后的消息
 	msg_bytes := packMsg("BooterSendContract", buf.Bytes())
 
-	// todo: 修改成向所有节点发送
-	// 向每个分片的leader节点发送合约地址等信息
-	var i uint32
+	// 向所有节点发送合约地址等信息
+	var i, j uint32
 	for i = 0; i < uint32(shardNum); i++ {
-		addr := cfg.ComNodeTable[i][0]
-		conn, ok := conns2Node.Get(addr)
-		if !ok {
-			conn = dial(addr)
+		for j = 0; j < uint32(shardSize); j++ {
+			addr := cfg.ComNodeTable[i][j]
+			conn, ok := conns2Node.Get(addr)
+			if !ok {
+				conn = dial(addr)
+			}
+			_, err := conn.Write(msg_bytes)
+			if err != nil {
+				panic(err)
+			}
+			conn.Close()
 		}
-		_, err := conn.Write(msg_bytes)
-		if err != nil {
-			panic(err)
-		}
-		conn.Close()
+
 	}
 
 	// 向客户端发送合约地址等信息
@@ -468,11 +478,12 @@ func sendPbftMsg(comID uint32, msg interface{}, msgType string) {
 	msg_bytes := packMsg(msgType, buf.Bytes())
 
 	var i uint32
-	nodeAddr := pbftNode_ref.NodeInfo.NodeAddr
+	nodeAddr := node_ref.NodeInfo.NodeAddr
 	for i = 0; i < uint32(shardSize); i++ {
 		if msgType == CReply && i > 0 { // reply只需发给leader
 			return
 		}
+
 		addr := cfg.ComNodeTable[comID][i]
 		if addr == nodeAddr {
 			continue // 不用发给自己
@@ -486,7 +497,11 @@ func sendPbftMsg(comID uint32, msg interface{}, msgType string) {
 		writer.Write(msg_bytes)
 		writer.Flush()
 
-		log.Info(fmt.Sprintf("Msg Sent: %s ComID: %v, to nodeID: %v", msgType, comID, i))
+		if msgType == CPrePrepare {
+			log.Info(fmt.Sprintf("Msg Sent: %s ComID: %v, to nodeID: %v seqID: %d", msgType, comID, i, msg.(*core.PrePrepare).SeqID))
+		} else {
+			log.Info(fmt.Sprintf("Msg Sent: %s ComID: %v, to nodeID: %v", msgType, comID, i))
+		}
 	}
 }
 
@@ -513,4 +528,337 @@ func sendNodeInfo(comID uint32, msg interface{}) {
 	writer.Flush()
 
 	log.Info("Msg Sent: NodeSendInfo", "ComID", comID, "to nodeID", 0)
+}
+
+type SendReconfigMsgs struct {
+}
+
+func leaderInitReconfig(comID uint32, msg interface{}) {
+	data := msg.(*core.InitReconfig)
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+
+	// 序列化后的消息
+	msg_bytes := packMsg(LeaderInitReconfig, buf.Bytes())
+
+	var i uint32
+	for i = 0; i < uint32(shardSize); i++ {
+		addr := cfg.ComNodeTable[comID][i]
+		conn, ok := conns2Node.Get(addr)
+		if !ok {
+			conn = dial(addr)
+			conns2Node.Add(addr, conn)
+		}
+		writer := bufio.NewWriter(conn)
+		writer.Write(msg_bytes)
+		writer.Flush()
+	}
+	log.Info(fmt.Sprintf("Msg Sent: %s ComID: %d", LeaderInitReconfig, comID))
+}
+
+func sendReconfigResult2Leader(comID uint32, msg interface{}) {
+	data := msg.(*core.ReconfigResult)
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+
+	// 序列化后的消息
+	msg_bytes := packMsg(SendReconfigResult2ComLeader, buf.Bytes())
+
+	addr := cfg.ComNodeTable[comID][0]
+	conn, ok := conns2Node.Get(addr)
+	if !ok {
+		conn = dial(addr)
+		conns2Node.Add(addr, conn)
+	}
+	writer := bufio.NewWriter(conn)
+	writer.Write(msg_bytes)
+	writer.Flush()
+
+	log.Info(fmt.Sprintf("Msg Sent: %s ComID: %d", SendReconfigResult2ComLeader, comID))
+}
+
+func sendReconfigResults2AllLeaders(comID uint32, msg interface{}) {
+	data := msg.(*core.ComReconfigResults)
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+
+	// 序列化后的消息
+	msg_bytes := packMsg(SendReconfigResults2AllComLeaders, buf.Bytes())
+
+	var i uint32
+	for i = 0; i < uint32(shardNum); i++ {
+		addr := cfg.ComNodeTable[i][0]
+		conn, ok := conns2Node.Get(addr)
+		if !ok {
+			conn = dial(addr)
+			conns2Node.Add(addr, conn)
+		}
+		writer := bufio.NewWriter(conn)
+		writer.Write(msg_bytes)
+		writer.Flush()
+		log.Info(fmt.Sprintf("Msg Sent: %s from_ComID: %d to_ComID: %d", SendReconfigResults2AllComLeaders, comID, i))
+	}
+}
+
+func sendReconfigResults2ComNodes(comID uint32, msg interface{}) {
+	data := msg.(map[uint32]*core.ComReconfigResults)
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+
+	// 序列化后的消息
+	msg_bytes := packMsg(SendReconfigResults2ComNodes, buf.Bytes())
+
+	var i uint32
+	for i = 0; i < uint32(shardSize); i++ {
+		addr := cfg.ComNodeTable[comID][i]
+		conn, ok := conns2Node.Get(addr)
+		if !ok {
+			conn = dial(addr)
+			conns2Node.Add(addr, conn)
+		}
+		writer := bufio.NewWriter(conn)
+		writer.Write(msg_bytes)
+		writer.Flush()
+	}
+
+	log.Info(fmt.Sprintf("Msg Sent: %s ComID: %d to_nodeID: %d", SendReconfigResults2ComNodes, comID, i))
+}
+
+func comSendNewAddrs(nodeID uint32, msg interface{}) {
+	data := msg.(*core.AdjustAddrs)
+	tbChain_ref.SetAddrs(data.Addrs, data.Vrfs, data.SeedHeight, data.ComID, nodeID)
+}
+
+func sendNewNodeTable2Client(msg interface{}) {
+	data := msg.(map[uint32]map[uint32]string)
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+
+	// 序列化后的消息
+	msg_bytes := packMsg(SendNewNodeTable2Client, buf.Bytes())
+
+	var i uint32
+	for i = 0; i < uint32(clientNum); i++ {
+		addr := cfg.ClientTable[i]
+		conn, ok := conns2Node.Get(addr)
+		if !ok {
+			conn = dial(addr)
+			conns2Node.Add(addr, conn)
+		}
+		writer := bufio.NewWriter(conn)
+		writer.Write(msg_bytes)
+		writer.Flush()
+	}
+
+	log.Info(fmt.Sprintf("Msg Sent: %s to_clientID: %d", SendNewNodeTable2Client, i))
+}
+
+func sendGetPoolTx(comID uint32, msg interface{}, callback func(...interface{})) {
+	data := msg.(*core.GetPoolTx)
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+
+	// 序列化后的消息
+	msg_bytes := packMsg(GetPoolTx, buf.Bytes())
+
+	// 从分片的leader节点处获取
+	addr := data.ServerAddr
+	conn, ok := conns2Node.Get(addr)
+	if !ok {
+		conn = dial(addr)
+		conns2Node.Add(addr, conn)
+	}
+	_, err = conn.Write(msg_bytes)
+	if err != nil {
+		log.Error("WriteError", "err", err)
+	}
+	log.Info(fmt.Sprintf("Msg Sent: %s data: %v", GetPoolTx, "empty data"))
+
+	// 等待回复
+
+	// 首先读取消息长度的四个字节
+	lengthBuf := make([]byte, 4)
+	_, err = io.ReadFull(conn, lengthBuf)
+	if err != nil {
+		log.Error("ReadLengthError", "err", err)
+	}
+	// 解析这四个字节为int32来获取消息长度
+	msgLength := int(binary.BigEndian.Uint32(lengthBuf))
+
+	// 根据消息长度分配缓冲区
+	msgBuf := make([]byte, msgLength)
+	_, err = io.ReadFull(conn, msgBuf)
+	if err != nil {
+		log.Error("ReadMsgError", "err", err)
+	}
+
+	poolTx := new(core.PoolTx)
+	decodeBuf := bytes.NewReader(msgBuf)
+	decoder := gob.NewDecoder(decodeBuf)
+	err = decoder.Decode(poolTx)
+	if err != nil {
+		log.Error("Failed to decode", "err", err)
+	}
+
+	log.Info(fmt.Sprintf("Msg Response Received: %s pendingLen: %d pendingRollbackLen: %d", GetPoolTx, len(poolTx.Pending), len(poolTx.PendingRollback)))
+
+	callback(poolTx)
+}
+
+/* 用于分片、委员会、客户端、信标链传送消息 */
+func (hub *GoodMessageHub) Send(msgType uint32, id uint32, msg interface{}, callback func(res ...interface{})) {
+	switch msgType {
+	case core.MsgTypeComGetHeightFromShard:
+		height := comGetHeightFromShard(id, msg)
+		callback(height)
+
+	case core.MsgTypeShardSendGenesis:
+		shardSendGenesis(msg)
+	case core.MsgTypeBooterSendContract:
+		booterSendContract(msg)
+
+	case core.MsgTypeComGetStateFromShard:
+		comGetStateFromShard(id, msg)
+	case core.MsgTypeShardSendStateToCom:
+		go shardSendStateToCom(id, msg)
+
+	case core.MsgTypeClientInjectTX2Committee:
+		go clientInjectTx2Com(id, msg)
+	case core.MsgTypeSetInjectDone2Nodes:
+		clientSetInjectDone2Nodes(id)
+
+	case core.MsgTypeSendBlock2Shard:
+		go comSendBlock2Shard(id, msg)
+
+	case core.MsgTypeCommitteeReply2Client:
+		go comSendReply2Client(id, msg)
+
+	case core.MsgTypeLeaderInitMultiSign:
+		comLeaderInitMultiSign(id, msg)
+	case core.MsgTypeSendMultiSignReply:
+		sendMultiSignReply(id, msg)
+
+	case core.MsgTypeLeaderInitReconfig:
+		leaderInitReconfig(id, msg)
+	case core.MsgTypeSendReconfigResult2ComLeader:
+		sendReconfigResult2Leader(id, msg)
+	case core.MsgTypeSendReconfigResults2AllComLeaders:
+		sendReconfigResults2AllLeaders(id, msg)
+	case core.MsgTypeSendReconfigResults2ComNodes:
+		sendReconfigResults2ComNodes(id, msg)
+	case core.MsgTypeGetPoolTx:
+		sendGetPoolTx(id, msg, callback)
+	case core.MsgTypeComSendNewAddrs:
+		comSendNewAddrs(id, msg)
+	case core.MsgTypeSendNewNodeTable2Client:
+		sendNewNodeTable2Client(msg)
+
+	////////////////////
+	// 通过beaconChain模块中的ethclient与ethChain交互
+	///////////////////
+	case core.MsgTypeGetLatestBlockHashFromEthChain:
+		getEthLatestBlock(callback)
+	case core.MsgTypeGetBlockHashFromEthChain:
+		getEthBlock(msg, callback)
+
+	case core.MsgTypeComAddTb2TBChain:
+		comAddTb2TBChain(id, msg)
+	case core.MsgTypeTBChainPushTB2Client:
+		tbChainPushBlock2Client(msg)
+	case core.MsgTypeTBChainPushTB2Coms:
+		tbChainPushBlock2Com(msg)
+
+	////////////////////
+	///// pbft  ////////
+	////////////////////
+	case core.MsgTypePbftPrePrepare:
+		sendPbftMsg(id, msg, CPrePrepare)
+	case core.MsgTypePbftPrepare:
+		sendPbftMsg(id, msg, CPrepare)
+	case core.MsgTypePbftCommit:
+		sendPbftMsg(id, msg, CCommit)
+	case core.MsgTypePbftReply:
+		sendPbftMsg(id, msg, CReply)
+	case core.MsgTypePbftRequestOldMessage:
+		sendPbftMsg(id, msg, CRequestOldrequest)
+	case core.MsgTypePbftSendOldMessage:
+		sendPbftMsg(id, msg, CSendOldrequest)
+
+	case core.MsgTypeNodeSendInfo2Leader:
+		sendNodeInfo(id, msg)
+
+		// client
+		// case core.MsgTypeClientInjectTX2Committee:
+		// 	clientInjectTx2Com(id, msg)
+		// case core.MsgTypeCommitteeReply2Client:
+		// 	client := clients_ref[id]
+		// 	receipts := msg.([]*result.TXReceipt)
+		// 	client.AddTXReceipts(receipts)
+		// 	// client -> committee
+		// case core.MsgTypeSetInjectDone2Nodes:
+		// 	com := committees_ref[id]
+		// 	com.SetInjectTXDone()
+		// 	// shard、committee -> tbchain
+		// case core.MsgTypeComAddTb2TBChain:
+		// 	tb := msg.(*beaconChain.SignedTB)
+		// 	tbChain_ref.AddTimeBeacon(tb)
+		// case core.MsgTypeCommitteeInitialAddrs:
+		// 	addrs := msg.([]common.Address)
+		// 	tbChain_ref.SetAddrs(addrs, nil, 0, uint32(id))
+
+		// 	// committee、client <- tbchain
+		// case core.MsgTypeGetTB:
+		// 	height := msg.(uint64)
+		// 	tb := tbChain_ref.GetTimeBeacon(int(id), height)
+		// 	callback(tb)
+		// 	// committee <- shard
+		// case core.MsgTypeComGetStateFromShard:
+		// 	shard := shards_ref[id]
+		// 	states := shard.GetBlockChain().GetStateDB()
+		// parentHeight := shard.GetBlockChain().CurrentBlock().Number()
+		// 	callback(states, parentHeight)
+		// 	// committee -> shard
+		// case core.MsgTypeSendBlock2Shard:
+		// 	shard := shards_ref[id]
+		// 	block := msg.(*core.Block)
+		// 	shard.Addblock(block)
+		// 	// committee -> hub
+		// case core.MsgTypeReady4Reconfig:
+		// 	seedHeight := msg.(uint64)
+		// 	toReconfig(seedHeight)
+		// case core.MsgTypeTBChainPushTB2Client:
+		// 	block := msg.(*beaconChain.TBBlock)
+		// 	for _, c := range clients_ref {
+		// 		c.AddTBs(block)
+		// 	}
+		// case core.MsgTypeTBChainPushTB2Coms:
+		// 	block := msg.(*beaconChain.TBBlock)
+		// 	for _, c := range committees_ref {
+		// 		c.AddTBs(block)
+		// 	}
+	}
 }

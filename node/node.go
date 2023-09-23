@@ -1,6 +1,7 @@
 package node
 
 import (
+	"bytes"
 	"fmt"
 	"go-w3chain/cfg"
 	"go-w3chain/core"
@@ -9,6 +10,7 @@ import (
 	"go-w3chain/pbft"
 	"go-w3chain/utils"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -19,13 +21,7 @@ import (
 )
 
 type Node struct {
-	NodeID     int
-	addrConfig *core.NodeAddrConfig
-
-	// /** 存储该节点钱包数据的目录
-	//  * $Home/.w3Chain/shardi/nodej/keystore
-	//  */
-	// keyDir string
+	NodeInfo *core.NodeInfo
 
 	/** 该节点对应的账户 */
 	w3Account *W3Account
@@ -35,15 +31,12 @@ type Node struct {
 	 */
 	DataDir string
 
-	lock sync.Mutex
-	db   ethdb.Database
+	db ethdb.Database
 
-	shardID int
-	shard   core.Shard
-	comID   int
-	com     core.Committee
-	/* 节点所在委员会的ID */
-	commID int
+	shard    core.Shard
+	shardNum int
+	com      core.Committee
+
 	/* 节点上一次运行vrf得到的结果 */
 	VrfValue []byte
 	pbftNode *pbft.PbftConsensusNode
@@ -52,15 +45,24 @@ type Node struct {
 	contractAbi  *abi.ABI
 
 	messageHub core.MessageHub
+
+	reconfigResLock     sync.Mutex
+	reconfigResult      *core.ReconfigResult                // 本节点的重组结果
+	reconfigResults     []*core.ReconfigResult              // 本委员会所有节点的重组结果
+	com2ReconfigResults map[uint32]*core.ComReconfigResults // 所有委员会的节点的重组结果
 }
 
-func NewNode(conf *core.NodeAddrConfig, parentdataDir string, shardID, nodeID, shardSize int) *Node {
+func NewNode(parentdataDir string, shardNum, shardID, comID, nodeID, shardSize int) *Node {
+	nodeInfo := &core.NodeInfo{
+		ShardID:  uint32(shardID),
+		ComID:    uint32(comID),
+		NodeID:   uint32(nodeID),
+		NodeAddr: cfg.ComNodeTable[uint32(shardID)][uint32(nodeID)],
+	}
 	node := &Node{
-		addrConfig: conf,
-		DataDir:    filepath.Join(parentdataDir, conf.Name),
-		shardID:    shardID,
-		commID:     shardID,
-		NodeID:     nodeID,
+		DataDir:  filepath.Join(parentdataDir, fmt.Sprintf("S%dN%d", shardID, nodeID)),
+		shardNum: shardNum,
+		NodeInfo: nodeInfo,
 	}
 
 	node.w3Account = NewW3Account(node.DataDir)
@@ -73,8 +75,7 @@ func NewNode(conf *core.NodeAddrConfig, parentdataDir string, shardID, nodeID, s
 	node.db = db
 
 	// 节点刚创建时，shardID == ComID
-	node.pbftNode = pbft.NewPbftNode(uint32(shardID), uint32(shardID), uint32(nodeID), uint32(shardSize),
-		cfg.AllProtocolChanges, "")
+	node.pbftNode = pbft.NewPbftNode(node.NodeInfo, uint32(shardSize), "")
 
 	return node
 }
@@ -84,19 +85,19 @@ func (node *Node) SetMessageHub(hub core.MessageHub) {
 }
 
 func (node *Node) Start() {
-	node.com.Start(node.NodeID)
+	node.com.Start(node.NodeInfo.NodeID)
 	node.sendNodeInfo()
 }
 
 func (node *Node) sendNodeInfo() {
-	if utils.IsComLeader(node.NodeID) {
+	if utils.IsComLeader(node.NodeInfo.NodeID) {
 		return
 	}
 	info := &core.NodeSendInfo{
-		NodeInfo: node.pbftNode.NodeInfo,
+		NodeInfo: node.NodeInfo,
 		Addr:     node.w3Account.accountAddr,
 	}
-	node.messageHub.Send(core.MsgTypeNodeSendInfo2Leader, uint32(node.comID), info, nil)
+	node.messageHub.Send(core.MsgTypeNodeSendInfo2Leader, node.NodeInfo.ComID, info, nil)
 }
 
 func (node *Node) RunPbft(block *core.Block, exit chan struct{}) {
@@ -147,7 +148,7 @@ func (n *Node) GetDB() ethdb.Database {
 }
 
 func (n *Node) GetAddr() string {
-	return fmt.Sprintf("%s:%d", n.addrConfig.Host, n.addrConfig.Port)
+	return n.NodeInfo.NodeAddr
 }
 
 func (n *Node) GetAccount() *W3Account {
@@ -156,8 +157,7 @@ func (n *Node) GetAccount() *W3Account {
 
 func (n *Node) HandleNodeSendInfo(info *core.NodeSendInfo) {
 	n.shard.AddInitialAddr(info.Addr)
-	n.com.AddMember(info.NodeInfo)
-	if len(n.com.GetMembers()) == int(n.pbftNode.GetNodes_num()) {
+	if len(n.shard.GetNodeAddrs()) == int(n.pbftNode.GetNodes_num()) {
 		n.shard.Start()
 	}
 }
@@ -170,12 +170,204 @@ func (n *Node) HandleBooterSendContract(data *core.BooterSendContract) {
 	}
 	n.contractAbi = &contractABI
 	// 启动 worker，满足三个条件： 1.是leader节点；2.收到合约地址；3.和委员会内所有节点建立起联系
-	if utils.IsComLeader(n.NodeID) {
-		if len(n.com.GetMembers()) != int(n.pbftNode.GetNodes_num()) {
-			log.Error(fmt.Sprintf("incorrect nodes number in committee. should be %v, got %v", n.pbftNode.GetNodes_num(), len(n.com.GetMembers())))
-		}
+	if utils.IsComLeader(n.NodeInfo.NodeID) {
 		n.com.StartWorker()
 	}
+}
+
+type HandleReconfigMsgs struct {
+}
+
+// leader节点调用
+func (n *Node) AddReconfigResult(res *core.ReconfigResult) {
+	if n.NodeInfo.NodeID != 0 {
+		log.Error(fmt.Sprintf("wrong invoking function. only leader node can invoke this function. curNodeInfo: %v", n.NodeInfo))
+	}
+
+	if n.reconfigResults == nil { // 第一次重组时
+		n.reconfigResults = make([]*core.ReconfigResult, 0)
+		n.reconfigResults = append(n.reconfigResults, res)
+	} else {
+		last := n.reconfigResults[len(n.reconfigResults)-1]
+		if last.SeedHeight < res.SeedHeight { // 是上次重组时留下的
+			n.reconfigResults = make([]*core.ReconfigResult, 0)
+			n.reconfigResults = append(n.reconfigResults, res)
+		} else { // 是当前重组
+			n.reconfigResults = append(n.reconfigResults, res)
+		}
+	}
+}
+
+// leader节点调用
+func (n *Node) AddReconfigResults(res *core.ComReconfigResults) {
+	if n.com2ReconfigResults == nil { // 第一次重组时
+		n.com2ReconfigResults = make(map[uint32]*core.ComReconfigResults)
+		n.com2ReconfigResults[res.ComID] = res
+	} else {
+		last := n.com2ReconfigResults[0]
+		if last.Results[0].SeedHeight < res.Results[0].SeedHeight { // 是上次重组时留下的
+			n.com2ReconfigResults = make(map[uint32]*core.ComReconfigResults)
+			n.com2ReconfigResults[res.ComID] = res
+		} else { // 是当前重组
+			n.com2ReconfigResults[res.ComID] = res
+		}
+	}
+}
+
+func (n *Node) InitReconfig(data *core.InitReconfig) {
+	n.com.SetOldTxPool()
+	n.messageHub.Send(core.MsgTypeLeaderInitReconfig, n.NodeInfo.ComID, data, nil)
+}
+
+func (n *Node) HandleLeaderInitReconfig(data *core.InitReconfig) {
+	n.com.UpdateTbChainHeight(data.SeedHeight)
+
+	acc := n.GetAccount()
+	vrfValue := acc.GenerateVRFOutput(data.Seed[:]).RandomValue
+	newComId := utils.VrfValue2Shard(vrfValue, uint32(n.shardNum))
+
+	reply := &core.ReconfigResult{
+		Seed:         data.Seed,
+		SeedHeight:   data.SeedHeight,
+		Vrf:          vrfValue,
+		Addr:         acc.accountAddr,
+		OldNodeInfo:  n.NodeInfo,
+		Belong_ComID: data.ComID,
+		NewComID:     newComId,
+	}
+	n.reconfigResult = reply
+	n.messageHub.Send(core.MsgTypeSendReconfigResult2ComLeader, data.ComID, reply, nil)
+}
+
+func (n *Node) HandleSendReconfigResult2ComLeader(data *core.ReconfigResult) {
+	// 省略对vrf的检查...
+
+	n.reconfigResLock.Lock()
+
+	n.AddReconfigResult(data)
+	if len(n.reconfigResults) == int(n.pbftNode.GetNodes_num()) {
+		res := &core.ComReconfigResults{
+			ComID:   n.NodeInfo.ComID,
+			Results: n.reconfigResults,
+		}
+		// 发给自己也用网络，不直接存，这样可以统一处理
+		n.reconfigResLock.Unlock()
+		n.messageHub.Send(core.MsgTypeSendReconfigResults2AllComLeaders, n.NodeInfo.ComID, res, nil)
+	} else {
+		n.reconfigResLock.Unlock()
+	}
+}
+
+func (n *Node) HandleSendReconfigResults2AllComLeaders(data *core.ComReconfigResults) {
+	// 省略对vrf的检查...
+
+	n.reconfigResLock.Lock()
+
+	n.AddReconfigResults(data)
+	if len(n.com2ReconfigResults) == n.shardNum {
+		// 将所有vrf结果发送给委员会内的节点，包括发送者leader本身
+		n.messageHub.Send(core.MsgTypeSendReconfigResults2ComNodes, n.NodeInfo.ComID, n.com2ReconfigResults, nil)
+	}
+	n.reconfigResLock.Unlock()
+}
+
+func (n *Node) HandleSendReconfigResults2ComNodes(data *map[uint32]*core.ComReconfigResults) {
+	// 省略对vrf的检查...
+
+	// 先得到每个新委员会中的节点结果
+	newCom2Results := make(map[uint32][]*core.ReconfigResult)
+	for _, rets := range *data {
+		for _, res := range rets.Results {
+			newCom2Results[res.NewComID] = append(newCom2Results[res.NewComID], res)
+		}
+	}
+	// 对每个新委员会中结果按vrf从小到大排序
+	for _, results := range newCom2Results {
+		sort.Slice(results, func(i, j int) bool {
+			return bytes.Compare(results[i].Vrf, results[j].Vrf) < 0
+		})
+	}
+
+	// 更新ComNodeTable和本节点的NodeInfo
+	localNodeInfo := n.NodeInfo
+	newComNodeTable := make(map[uint32]map[uint32]string)
+	var oldComLeaderAddr string
+	var i uint32
+	for i = 0; i < uint32(n.shardNum); i++ {
+		newComNodeTable[i] = make(map[uint32]string)
+		for newID, result := range newCom2Results[i] {
+			newComNodeTable[i][uint32(newID)] = result.OldNodeInfo.NodeAddr
+			if *result.OldNodeInfo == *localNodeInfo {
+				newNodeInfo := &core.NodeInfo{
+					ShardID:  localNodeInfo.ShardID,
+					ComID:    n.reconfigResult.NewComID,
+					NodeID:   uint32(newID),
+					NodeAddr: localNodeInfo.NodeAddr,
+				}
+				log.Debug(fmt.Sprintf("local nodeInfo updated... before reconfiguration: %v after: %v", localNodeInfo, newNodeInfo))
+				n.updateNodeInfo(newNodeInfo)
+			}
+			if result.OldNodeInfo.ComID == n.reconfigResult.NewComID && result.OldNodeInfo.NodeID == 0 { // 本节点所在的新委员会原来的leader
+				oldComLeaderAddr = result.OldNodeInfo.NodeAddr
+			}
+		}
+	}
+
+	cfg.ComNodeTable = newComNodeTable
+	if n.NodeInfo.ComID == 0 && n.NodeInfo.NodeID == 0 { // 第一个委员会的第一个节点给客户端发送新表。。。（随便找的
+		n.messageHub.Send(core.MsgTypeSendNewNodeTable2Client, 0, cfg.ComNodeTable, nil)
+	}
+
+	n.EndReconfig(newCom2Results, oldComLeaderAddr)
+}
+
+func (n *Node) updateNodeInfo(newNodeInfo *core.NodeInfo) {
+	n.NodeInfo = newNodeInfo
+	n.pbftNode.NodeInfo = newNodeInfo
+}
+
+func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, oldComLeaderAddr string) {
+	// 更新合约上的地址
+	if utils.IsComLeader(n.NodeInfo.NodeID) {
+		comResults := newCom2Results[n.NodeInfo.ComID]
+		addrs := make([]common.Address, 0)
+		vrfs := make([][]byte, 0)
+		for _, res := range comResults {
+			addrs = append(addrs, res.Addr)
+			vrfs = append(vrfs, res.Vrf)
+		}
+		n.com.AdjustRecordedAddrs(addrs, vrfs, comResults[0].SeedHeight)
+	}
+
+	// todo: 下面逻辑仅在只有一个分片时有效，需修改以适配多分片
+	// 重新启动委员会和worker
+	n.com.Start(n.NodeInfo.NodeID)
+	// 同步交易池
+	if utils.IsComLeader(n.NodeInfo.NodeID) {
+		getPoolTxsCh := make(chan struct{}, 1)
+		callback := func(res ...interface{}) {
+			poolTx := res[0].(*core.PoolTx)
+			n.com.SetPoolTx(poolTx)
+			getPoolTxsCh <- struct{}{}
+		}
+		request := &core.GetPoolTx{
+			ServerAddr:   oldComLeaderAddr,
+			ClientAddr:   n.NodeInfo.NodeAddr,
+			RequestComID: n.NodeInfo.ComID,
+		}
+		if request.ServerAddr != request.ClientAddr {
+			n.messageHub.Send(core.MsgTypeGetPoolTx, n.NodeInfo.ComID, request, callback)
+			// 等待交易池更新后再启动worker
+			<-getPoolTxsCh
+		}
+
+	}
+
+	if utils.IsComLeader(n.NodeInfo.NodeID) {
+		n.com.StartWorker()
+	}
+
+	// todo
 }
 
 /*
@@ -187,9 +379,6 @@ func (n *Node) HandleBooterSendContract(data *core.BooterSendContract) {
 // OpenDatabase opens an existing database with the given name (or creates one if no
 // previous can be found) from within the node's instance directory.
 func (n *Node) OpenDatabase(name string, cache, handles int, namespace string, readonly bool) (ethdb.Database, error) {
-	n.lock.Lock()
-	defer n.lock.Unlock()
-
 	// namepsace = "", file = /home/pengxiaowen/.brokerChain/xxx/name
 	// cache , handle = 0, readonly = false
 	var err error
@@ -205,7 +394,7 @@ func (n *Node) OpenDatabase(name string, cache, handles int, namespace string, r
 func (n *Node) CloseDatabase() {
 	err := n.db.Close()
 	if err != nil {
-		log.Error("closeDatabase fail.", "nodeConfig", n.addrConfig)
+		log.Error("closeDatabase fail.", "nodeInfo", n.NodeInfo)
 	}
-	// log.Debug("closeDatabase", "nodeID", n.NodeID)
+	// log.Debug("closeDatabase", "nodeID", n.NodeInfo.NodeID)
 }

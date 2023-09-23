@@ -46,7 +46,7 @@ func (tbChain *BeaconChain) GetEthChainBlockHash(height uint64) (common.Hash, ui
 // 	return eth_chain.GetBlockHash(client, height)
 // }
 
-func (tbChain *BeaconChain) AddTimeBeacon2EthChain(signedtb *core.SignedTB) {
+func (tbChain *BeaconChain) AddTimeBeacon2EthChain(signedtb *core.SignedTB, nodeID uint32) {
 	tb := signedtb.TimeBeacon
 	// 转化为合约中的结构（目前两结构的成员变量是完全相同的）
 	contractTB := &eth_chain.ContractTB{
@@ -62,7 +62,7 @@ func (tbChain *BeaconChain) AddTimeBeacon2EthChain(signedtb *core.SignedTB) {
 		client := tbChain.getEthClient()
 		err := eth_chain.AddTB(client, tbChain.contractAddr,
 			tbChain.contractAbi, tbChain.mode, contractTB, signedtb.Sigs, signedtb.Vrfs,
-			signedtb.SeedHeight, signedtb.Signers, tbChain.cfg.ChainId)
+			signedtb.SeedHeight, signedtb.Signers, tbChain.cfg.ChainId, nodeID)
 		if err != nil {
 			log.Error("eth_chain.AddTB err", "err", err)
 		}
@@ -70,14 +70,14 @@ func (tbChain *BeaconChain) AddTimeBeacon2EthChain(signedtb *core.SignedTB) {
 	log.Debug("AddTbTXSent", "info", signedtb)
 }
 
-func (tbChain *BeaconChain) AdjustEthChainRecordedAddrs(addrs []common.Address, vrfs [][]byte, seedHeight uint64, shardID uint32) {
+func (tbChain *BeaconChain) AdjustEthChainRecordedAddrs(addrs []common.Address, vrfs [][]byte, seedHeight uint64, comID uint32, nodeID uint32) {
 	client := tbChain.getEthClient()
 	err := eth_chain.AdjustRecordedAddrs(client, tbChain.contractAddr,
-		tbChain.contractAbi, tbChain.mode, shardID, addrs, vrfs, seedHeight, tbChain.cfg.ChainId)
+		tbChain.contractAbi, tbChain.mode, comID, addrs, vrfs, seedHeight, tbChain.cfg.ChainId, nodeID)
 	if err != nil {
 		log.Error("eth_chain.AdjustRecordedAddrs err", "err", err)
 	}
-	log.Debug("AdjustAddrsTXSent", "shardID", shardID, "seedHeight", seedHeight)
+	log.Debug("AdjustAddrsTXSent", "shardID", comID, "seedHeight", seedHeight)
 }
 
 func (tbChain *BeaconChain) generateEthChainBlock() *TBBlock {

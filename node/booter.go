@@ -52,7 +52,7 @@ func (booter *Booter) GetAddr() string {
 func (booter *Booter) HandleShardSendGenesis(data *core.ShardSendGenesis) (exit bool) {
 	exit = false
 	// 调用tbchain的方法
-	booter.tbchain.SetAddrs(data.Addrs, nil, 0, data.Gtb.ShardID)
+	booter.tbchain.SetAddrs(data.Addrs, nil, 0, data.Gtb.ShardID, 0)
 	contractTB := &eth_chain.ContractTB{
 		ShardID:    data.Gtb.ShardID,
 		Height:     data.Gtb.Height,

@@ -75,21 +75,21 @@ func (tbChain *BeaconChain) SetMessageHub(hub core.MessageHub) {
 	tbChain.messageHub = hub
 }
 
-func (tbChain *BeaconChain) AddTimeBeacon(tb *core.SignedTB) {
+func (tbChain *BeaconChain) AddTimeBeacon(tb *core.SignedTB, nodeID uint32) {
 	if tbChain.mode == 0 {
 		tbChain.AddTimeBeacon2SimulationChain(tb)
 	} else if tbChain.mode == 1 || tbChain.mode == 2 {
-		tbChain.AddTimeBeacon2EthChain(tb)
+		tbChain.AddTimeBeacon2EthChain(tb, nodeID)
 	} else {
 		log.Error("unknown beaconChain mode!", "mode", tbChain.mode)
 	}
 }
 
-func (tbChain *BeaconChain) SetAddrs(addrs []common.Address, vrfs [][]byte, seedHeight uint64, shardID uint32) {
+func (tbChain *BeaconChain) SetAddrs(addrs []common.Address, vrfs [][]byte, seedHeight uint64, comID uint32, nodeID uint32) {
 	if tbChain.mode == 1 || tbChain.mode == 2 {
-		tbChain.addrs[shardID] = addrs
+		tbChain.addrs[comID] = addrs
 		if seedHeight > 0 {
-			tbChain.AdjustEthChainRecordedAddrs(addrs, vrfs, seedHeight, shardID)
+			tbChain.AdjustEthChainRecordedAddrs(addrs, vrfs, seedHeight, comID, nodeID)
 		}
 	}
 }

@@ -1,17 +1,21 @@
 package core
 
+import "github.com/ethereum/go-ethereum/common"
+
 type Committee interface {
-	Start(nodeId int)
+	Start(nodeId uint32)
 	Close()
 
 	SetInjectTXDone(uint32)
 	CanStopV1() bool
 	CanStopV2() bool
 
-	NewBlockGenerated(block *Block)
+	NewBlockGenerated(*Block, common.Hash, uint64)
 
 	StartWorker()
 
-	GetMembers() []*NodeInfo
-	AddMember(*NodeInfo)
+	AdjustRecordedAddrs(addrs []common.Address, vrfs [][]byte, seedHeight uint64)
+	SetPoolTx(*PoolTx)
+	SetOldTxPool()
+	UpdateTbChainHeight(height uint64)
 }

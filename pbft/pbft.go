@@ -3,17 +3,12 @@
 package pbft
 
 import (
-	"go-w3chain/cfg"
 	"go-w3chain/core"
 	"go-w3chain/pbft/pbft_log"
 	"sync"
 )
 
 type PbftConsensusNode struct {
-	// the local config about pbft
-	ShardID  uint32 // denote the ID of the shard (or pbft), only one pbft consensus in a shard
-	ComID    uint32
-	NodeID   uint32 // denote the ID of the node in the pbft (shard)
 	NodeInfo *core.NodeInfo
 
 	node_nums      uint32 // the number of nodes in this pfbt, denoted by N
@@ -48,8 +43,6 @@ type PbftConsensusNode struct {
 	// to handle the message in the pbft
 	ihm PbftInsideExtraHandleMod
 
-	// network
-	neighbors  []string
 	messageHub core.MessageHub
 
 	// notify uplayer that current consensus is done
@@ -57,19 +50,11 @@ type PbftConsensusNode struct {
 }
 
 // generate a pbft consensus for a node
-func NewPbftNode(shardID, comID, nodeID uint32, shardSize uint32, pcc *cfg.ChainConfig, messageHandleType string) *PbftConsensusNode {
+func NewPbftNode(nodeInfo *core.NodeInfo, shardSize uint32, messageHandleType string) *PbftConsensusNode {
 	p := new(PbftConsensusNode)
 	p.node_nums = shardSize
-	p.ShardID = shardID
-	p.ComID = comID
-	p.NodeID = nodeID
 
-	p.NodeInfo = &core.NodeInfo{
-		NodeID:   nodeID,
-		ShardID:  shardID,
-		ComID:    comID,
-		NodeAddr: cfg.NodeTable[shardID][nodeID],
-	}
+	p.NodeInfo = nodeInfo
 
 	p.sequenceID = 0
 	p.requestPool = make(map[string]*core.PbftRequest)
@@ -85,7 +70,7 @@ func NewPbftNode(shardID, comID, nodeID uint32, shardSize uint32, pcc *cfg.Chain
 
 	p.seqIDMap = make(map[uint64]uint64)
 
-	p.pl = pbft_log.NewPbftLog(shardID, nodeID)
+	p.pl = pbft_log.NewPbftLog(nodeInfo.ShardID, nodeInfo.NodeID)
 
 	// choose how to handle the messages in pbft or beyond pbft
 	switch string(messageHandleType) {

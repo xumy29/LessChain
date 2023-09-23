@@ -6,39 +6,31 @@ import (
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/node"
-	"go-w3chain/utils"
 	"math/big"
-	"net"
-	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
 type Shard struct {
-	shardID         uint32
-	chainDB         ethdb.Database // Block chain database
-	leader          *node.Node
-	nodes           []*node.Node
-	initialAddrList []common.Address // 分片初始时各节点的公钥地址，同时也是初始时对应委员会各节点的地址
-	// txPool     *core.TxPool
+	Node *node.Node
+
 	blockchain *core.BlockChain
 
-	connMap     map[string]net.Conn
-	connMaplock sync.RWMutex
-
-	txStatus map[uint64]uint64
-
-	messageHub core.MessageHub
+	messageHub      core.MessageHub
+	initialAddrList []common.Address // 分片初始时各节点的公钥地址，同时也是初始时对应委员会各节点的地址
 }
 
 func (s *Shard) AddInitialAddr(addr common.Address) {
 	s.initialAddrList = append(s.initialAddrList, addr)
+}
+
+func (s *Shard) GetNodeAddrs() []common.Address {
+	return s.initialAddrList
 }
 
 func NewShard(shardID uint32, _node *node.Node) *Shard {
@@ -58,38 +50,23 @@ func NewShard(shardID uint32, _node *node.Node) *Shard {
 	}
 
 	log.Info("NewShard", "shardID", shardID,
-		"nodeID", _node.NodeID)
+		"nodeID", _node.NodeInfo.NodeID)
 
 	shard := &Shard{
-		nodes:           []*node.Node{_node},
+		Node:            _node,
 		initialAddrList: []common.Address{*_node.GetAccount().GetAccountAddress()},
-		shardID:         shardID,
-		chainDB:         chainDB,
 		blockchain:      bc,
-		connMap:         make(map[string]net.Conn),
-		txStatus:        make(map[uint64]uint64),
-	}
-
-	if utils.IsShardLeader(_node.NodeID) {
-		shard.setLeader(_node)
 	}
 
 	return shard
 }
 
-func (shard *Shard) setLeader(node *node.Node) {
-	shard.leader = node
-}
-
 func (shard *Shard) GetShardID() uint32 {
-	return shard.shardID
+	return shard.Node.NodeInfo.ShardID
 }
 
 func (shard *Shard) AddBlock(block *core.Block) {
 	shard.blockchain.WriteBlock(block)
-	for _, tx := range block.Body().Transactions {
-		shard.txStatus[tx.ID] = tx.TXStatus
-	}
 }
 
 func (shard *Shard) GetBlockChain() *core.BlockChain {
@@ -132,7 +109,7 @@ func (s *Shard) addGenesisTB() {
 	g_header := genesisBlock.GetHeader()
 	tb := &core.TimeBeacon{
 		Height:     g_header.Number.Uint64(),
-		ShardID:    uint32(s.shardID),
+		ShardID:    s.GetShardID(),
 		BlockHash:  genesisBlock.GetHash().Hex(),
 		TxHash:     g_header.TxHash.Hex(),
 		StatusHash: g_header.Root.Hex(),
@@ -288,7 +265,7 @@ func (s *Shard) executeTransaction(tx *core.Transaction, stateDB *state.StateDB,
 		state.AddBalance(*tx.Sender, tx.Value)
 		state.SetNonce(*tx.Sender, tx.SenderNonce-1)
 	} else {
-		log.Error("Oops, something wrong! Cannot handle tx type", "cur shardID", s.shardID, "type", tx.TXtype, "tx", tx)
+		log.Error("Oops, something wrong! Cannot handle tx type", "cur shardID", s.GetShardID(), "type", tx.TXtype, "tx", tx)
 	}
 }
 

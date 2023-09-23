@@ -19,8 +19,8 @@ const (
 	MsgTypeCommitteeReply2Client
 	MsgTypeSetInjectDone2Nodes
 	MsgTypeComAddTb2TBChain
-	MsgTypeCommitteeInitialAddrs
-	MsgTypeCommitteeAdjustAddrs
+	// MsgTypeCommitteeInitialAddrs
+	MsgTypeComSendNewAddrs
 	MsgTypeGetTB
 
 	MsgTypeSendBlock2Shard
@@ -33,6 +33,13 @@ const (
 
 	MsgTypeLeaderInitMultiSign
 	MsgTypeSendMultiSignReply
+
+	MsgTypeLeaderInitReconfig
+	MsgTypeSendReconfigResult2ComLeader
+	MsgTypeSendReconfigResults2AllComLeaders
+	MsgTypeSendReconfigResults2ComNodes
+	MsgTypeGetPoolTx // 新leader向旧leader请求交易池中的交易
+	MsgTypeSendNewNodeTable2Client
 
 	//////////////////////
 	//// pbft module /////

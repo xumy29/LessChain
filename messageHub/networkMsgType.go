@@ -18,6 +18,13 @@ const (
 	LeaderInitMultiSign string = "LeaderInitMultiSign"
 	MultiSignReply      string = "MultiSignReply"
 
+	LeaderInitReconfig                string = "LeaderInitReconfig"
+	SendReconfigResult2ComLeader      string = "SendReconfigResult2ComLeader"
+	SendReconfigResults2AllComLeaders string = "SendReconfigResults2AllComLeaders"
+	SendReconfigResults2ComNodes      string = "SendReconfigResults2ComNodes"
+	GetPoolTx                         string = "GetPoolTx" // 新leader向旧leader请求交易池中的交易
+	SendNewNodeTable2Client           string = "SendNewNodeTable2Client"
+
 	// pbft part
 	CPrePrepare        string = "CPrePrepare"
 	CPrepare           string = "CPrepare"

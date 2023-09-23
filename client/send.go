@@ -24,7 +24,7 @@ func (c *Client) InjectTXs(cid int, inject_speed int) {
 	c.injectCnt = 0
 	resBroadcastMap := make(map[uint64]uint64)
 
-	msgsent := false
+	c.InjectDoneMsgSent = false
 	// 按秒注入
 	for {
 		time.Sleep(1000 * time.Millisecond) //fixme 应该记录下面的运行时间
@@ -34,16 +34,16 @@ func (c *Client) InjectTXs(cid int, inject_speed int) {
 		cross2TxSentCnt := c.sendCross2Txs(inject_speed - rollbackTxSentCnt)
 
 		c.injectCnt = c.sendPendingTxs(c.injectCnt, inject_speed-rollbackTxSentCnt-cross2TxSentCnt, resBroadcastMap)
-		if c.CanStopV1() {
-			break
-		}
-		if c.CanStopV2() && !msgsent {
+		if c.CanStopV2() && !c.InjectDoneMsgSent {
 			/* 通知各节点交易注入完成 */
 			c.messageHub.Send(core.MsgTypeSetInjectDone2Nodes, uint32(c.cid), struct{}{}, nil)
-			msgsent = true
+			c.InjectDoneMsgSent = true
 			if c.exitMode == 1 {
 				break
 			}
+		}
+		if c.CanStopV1() {
+			break
 		}
 
 	}

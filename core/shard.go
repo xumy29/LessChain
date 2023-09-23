@@ -13,6 +13,7 @@ type Shard interface {
 
 	SetInitialAccountState(map[common.Address]struct{}, *big.Int)
 	AddInitialAddr(addr common.Address)
+	GetNodeAddrs() []common.Address
 	AddBlock(*Block)
 
 	SetMessageHub(MessageHub)

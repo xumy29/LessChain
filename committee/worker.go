@@ -38,18 +38,16 @@ type Worker struct {
 
 	wg sync.WaitGroup
 
-	comID     uint32
 	curHeight *big.Int
 
 	com *Committee
 }
 
-func newWorker(config *core.CommitteeConfig, comID uint32) *Worker {
+func newWorker(config *core.CommitteeConfig) *Worker {
 	worker := &Worker{
 		config:  config,
 		startCh: make(chan struct{}, 1), // at most 1 element
 		exitCh:  make(chan struct{}, 1),
-		comID:   comID,
 	}
 
 	// Sanitize recommit interval if the user-specified one is too short.
@@ -92,11 +90,11 @@ func (w *Worker) isRunning() bool {
 // close terminates all background threads maintained by the worker.
 // Note the worker does not support being closed multiple times.
 func (w *Worker) close() {
-	log.Debug("closing worker of this committee..", "comID", w.comID)
+	log.Debug("closing worker of this committee..", "comID", w.com.Node.NodeInfo.ComID)
 	w.stop()
 	w.exitCh <- struct{}{}
 	w.wg.Wait()
-	log.Debug("worker of this committee has been close!", "comID", w.comID)
+	log.Debug("worker of this committee has been close!", "comID", w.com.Node.NodeInfo.ComID)
 }
 
 // newWorkLoop is a standalone goroutine to submit new sealing work upon received events.
@@ -123,10 +121,10 @@ func (w *Worker) newWorkLoop(recommit time.Duration) {
 
 		w.broadcastTbInCommittee(block, seed, height)
 
-		// /* 通知committee 有新区块产生
-		//    当出完一个块需要重组时，worker会阻塞在这个函数内
-		// */
-		// w.InformNewBlock(block)
+		/* 通知committee 有新区块产生
+		   当出完一个块需要重组时，worker会阻塞在这个函数内
+		*/
+		w.com.NewBlockGenerated(block, seed, height)
 
 		// 如果有重组，应在重组完成后再开始打包交易
 		timer.Reset(recommit)
@@ -178,7 +176,7 @@ func (w *Worker) broadcastTbInCommittee(block *core.Block, seed common.Hash, hei
 	final_header := block.GetHeader()
 	tb := &core.TimeBeacon{
 		Height:     final_header.Number.Uint64(),
-		ShardID:    uint32(w.comID),
+		ShardID:    uint32(w.com.Node.NodeInfo.ComID),
 		BlockHash:  block.GetHash().Hex(),
 		TxHash:     final_header.TxHash.Hex(),
 		StatusHash: final_header.Root.Hex(),
@@ -200,21 +198,13 @@ func (w *Worker) sendTXReceipt2Client(txs []*core.Transaction) {
 				TxID:             tx.ID,
 				ConfirmTimeStamp: tx.ConfirmTimestamp,
 				TxStatus:         tx.TXStatus,
-				ShardID:          int(w.comID),
+				ShardID:          int(w.com.Node.NodeInfo.ComID),
 				BlockHeight:      w.curHeight.Uint64(),
 			}
 		}
 	}
 	w.com.send2Client(table, txs)
 	// result.SetTXReceiptV2(table)
-}
-
-/**
- * 通知committee 有新区块产生
- * 当committee触发重组时，该方法会被阻塞，进而导致worker被阻塞，直到重组完成
- */
-func (w *Worker) InformNewBlock(block *core.Block) {
-	w.com.NewBlockGenerated(block)
 }
 
 func analyseStates(states *core.ShardSendState) (map[common.Address]*types.StateAccount, map[string]trie.Node) {
@@ -277,7 +267,7 @@ func (w *Worker) commit(timestamp int64) (*core.Block, error) {
 		Difficulty: math.BigPow(11, 11),
 		Number:     w.curHeight,
 		Time:       uint64(timestamp),
-		ShardID:    uint64(w.comID),
+		ShardID:    uint64(w.com.Node.NodeInfo.ComID),
 	}
 	block, err := w.Finalize(header, txs, hash2Node, states.StatusTrieHash, updatedStates)
 	if err != nil {
@@ -285,7 +275,9 @@ func (w *Worker) commit(timestamp int64) (*core.Block, error) {
 	}
 
 	// pbft consensus in committee
+	log.Debug(fmt.Sprintf("start running pbft... comID: %d", w.com.Node.NodeInfo.ComID))
 	w.com.Node.RunPbft(block, w.exitCh)
+	log.Debug(fmt.Sprintf("pbft done... comID: %d", w.com.Node.NodeInfo.ComID))
 
 	// log.Debug("WorkerAccountState")
 	// for _, tx := range txs {
@@ -298,8 +290,8 @@ func (w *Worker) commit(timestamp int64) (*core.Block, error) {
 	/* 生成交易收据, 并发送到客户端 */
 	w.sendTXReceipt2Client(txs)
 
-	log.Debug("create block", "comID", w.comID, "block Height", header.Number, "# tx", len(txs), "txpoolLen", w.com.txPool.PendingLen()+w.com.TXpool().PendingRollbackLen())
-	// log.Trace("create block", "comID", w.comID, "block Height", header.Number, "#TX", len(txs))
+	log.Debug("create block", "comID", w.com.Node.NodeInfo.ComID, "block Height", header.Number, "# tx", len(txs), "txpoolLen", w.com.txPool.PendingLen()+w.com.TXpool().PendingRollbackLen())
+	// log.Trace("create block", "comID", w.com.Node.NodeInfo.ComID, "block Height", header.Number, "#TX", len(txs))
 
 	return block, nil
 }
@@ -484,12 +476,12 @@ func (w *Worker) executeTransaction(
 		tx.TXStatus = result.RollbackSuccess
 		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "committee commit rollback tx", "time", now)
 	} else {
-		log.Error("Oops, something wrong! Cannot handle tx type", "cur comID", w.comID, "type", tx.TXtype, "tx", tx)
+		log.Error("Oops, something wrong! Cannot handle tx type", "cur comID", w.com.Node.NodeInfo.ComID, "type", tx.TXtype, "tx", tx)
 	}
 	// tx.ConfirmTimestamp = uint64(now)
 }
 
 // func (w *Worker) Reconfig() {
-// 	log.Info("start reconfiguration...", "before that this committee belongs to shard", w.comID)
+// 	log.Info("start reconfiguration...", "before that this committee belongs to shard", w.com.Node.NodeInfo.ComID)
 
 // }

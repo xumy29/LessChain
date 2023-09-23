@@ -25,6 +25,16 @@ type TxPool struct {
 	com             *Committee
 }
 
+// 该函数仅在重组后同步交易池时被使用
+func (pool *TxPool) SetPending(txs []*core.Transaction) {
+	pool.pending = txs
+}
+
+// 该函数仅在重组后同步交易池时被使用
+func (pool *TxPool) SetPendingRollback(txs []*core.Transaction) {
+	pool.pendingRollback = txs
+}
+
 func NewTxPool(shardID uint32) *TxPool {
 	pool := &TxPool{}
 	return pool
@@ -44,13 +54,13 @@ func (pool *TxPool) Reset() *TxPool {
 		table[tx.ID] = &result.TXReceipt{
 			TxID:     tx.ID,
 			TxStatus: tx.TXStatus,
-			ShardID:  int(pool.com.comID),
+			ShardID:  int(pool.com.Node.NodeInfo.ComID),
 		}
 	}
 	result.SetTXReceiptV2(table)
 
 	// 生成新的交易池
-	newpool := NewTxPool(pool.com.comID)
+	newpool := NewTxPool(pool.com.Node.NodeInfo.ComID)
 	newpool.setCommittee(pool.com)
 	return newpool
 }
@@ -83,7 +93,7 @@ func (pool *TxPool) AddTxs(txs []*core.Transaction) {
 		pool.AddTxWithoutLock(tx, now)
 	}
 
-	log.Trace("TxPoolAddTXs", "shardID", pool.com.comID, "txPoolPendingLen", pool.PendingLen(), "txPoolPendingRollbackLen", pool.PendingRollbackLen())
+	log.Trace("TxPoolAddTXs", "shardID", pool.com.Node.NodeInfo.ComID, "txPoolPendingLen", pool.PendingLen(), "txPoolPendingRollbackLen", pool.PendingRollbackLen())
 }
 
 /* worker.commitTransaction 从队列取出交易 */

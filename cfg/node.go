@@ -30,6 +30,7 @@ func init() {
 		}
 	}
 
+	// 初始时ComNodeTable与NodeTable相等，重组时会发现变化
 	ComNodeTable = NodeTable
 
 }

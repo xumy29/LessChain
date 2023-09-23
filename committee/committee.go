@@ -24,19 +24,15 @@ type MultiSignData struct {
 }
 
 type Committee struct {
-	comID      uint32
 	config     *core.CommitteeConfig
 	worker     *Worker
 	messageHub core.MessageHub
 
 	multiSignData *MultiSignData
 
-	/* 接收重组结果的管道 */
-	reconfigCh chan []*node.Node
-	Nodes      []*node.Node // 同属一个委员会的节点
-	members    []*core.NodeInfo
-	Node       *node.Node // 当前节点
-	txPool     *TxPool
+	Node      *node.Node // 当前节点
+	txPool    *TxPool
+	oldTxPool *TxPool // 重组前的交易池，新委员会leader请求时返回其中的交易
 	/* 计数器，初始等于客户端个数，每一个客户端发送注入完成信号时计数器减一 */
 	injectNotDone  int32
 	tbchain_height uint64
@@ -47,29 +43,27 @@ type Committee struct {
 
 func NewCommittee(comID uint32, clientCnt int, _node *node.Node, config *core.CommitteeConfig) *Committee {
 	com := &Committee{
-		comID:              comID,
 		config:             config,
 		multiSignData:      &MultiSignData{},
-		reconfigCh:         make(chan []*node.Node, 0),
-		Nodes:              []*node.Node{_node},
-		members:            []*core.NodeInfo{_node.GetPbftNode().NodeInfo},
 		Node:               _node,
 		injectNotDone:      int32(clientCnt),
 		to_reconfig:        false,
 		shardSendStateChan: make(chan *core.ShardSendState, 0),
 	}
-	log.Info("NewCommittee", "comID", comID, "nodeID", _node.NodeID)
+	log.Info("NewCommittee", "comID", comID, "nodeID", _node.NodeInfo.NodeID)
 
 	return com
 }
 
-func (com *Committee) Start(nodeId int) {
+func (com *Committee) Start(nodeId uint32) {
+	com.to_reconfig = false // 防止重组后该值一直为true
+	com.SetOldTxPool()
 	if utils.IsComLeader(nodeId) { // 只有委员会的leader节点会运行worker，即出块
-		pool := NewTxPool(com.comID)
+		pool := NewTxPool(com.Node.NodeInfo.ComID)
 		com.txPool = pool
 		pool.setCommittee(com)
 
-		worker := newWorker(com.config, com.comID)
+		worker := newWorker(com.config)
 		com.worker = worker
 		worker.setCommittee(com)
 	}
@@ -80,11 +74,6 @@ func (com *Committee) StartWorker() {
 }
 
 func (com *Committee) Close() {
-	// 避免退出时因reconfigCh阻塞导致worker无法退出
-	if com.to_reconfig {
-		com.reconfigCh <- nil
-	}
-
 	if com.worker != nil {
 		com.worker.close()
 	}
@@ -108,39 +97,20 @@ func (com *Committee) CanStopV2() bool {
  * 刚出完一个块判断是否达到重组条件
  * 当committee触发重组时，会在该方法会被阻塞，直到重组完成
  */
-func (com *Committee) NewBlockGenerated(block *core.Block) {
+func (com *Committee) NewBlockGenerated(block *core.Block, seed common.Hash, height uint64) {
 	if com.to_reconfig {
-		previousNodes := utils.GetFieldValueforList(com.Nodes, "NodeID")
+		// 关闭worker
+		com.worker.exitCh <- struct{}{}
 
-		com.SendReconfigMsg()
-
-		// 阻塞，直到重组完成，messageHub向管道内发送此委员会的新节点
-		reconfigRes := <-com.reconfigCh
-		com.Reconfig(reconfigRes)
-
-		log.Debug("committee reconfiguration done!",
-			"comID", com.comID,
-			"previous nodeIDs", previousNodes,
-			"now nodeIDs", utils.GetFieldValueforList(com.Nodes, "NodeID"),
-		)
+		msg := &core.InitReconfig{
+			Seed:       seed,
+			SeedHeight: height,
+			ComID:      com.Node.NodeInfo.ComID,
+		}
+		com.Node.InitReconfig(msg)
 		com.to_reconfig = false
 	}
-}
 
-func (com *Committee) Reconfig(nodes []*node.Node) {
-	com.Nodes = nodes
-
-	// 发起交易调用合约，更新委员会节点地址列表
-	addrs := make([]common.Address, len(nodes))
-	vrfs := make([][]byte, len(nodes))
-	for i, node := range nodes {
-		addrs[i] = *node.GetAccount().GetAccountAddress()
-		vrfs[i] = node.VrfValue
-	}
-	com.AdjustRecordedAddrs(addrs, vrfs, com.tbchain_height)
-
-	// // 委员会重组后，清空交易池，并标记被丢弃的交易
-	// com.txPool = com.txPool.Reset()
 }
 
 func (com *Committee) TXpool() *TxPool {
@@ -173,6 +143,9 @@ func (com *Committee) AddTBs(tbblock *beaconChain.TBBlock) {
 	// 	}
 	// }
 	log.Debug(fmt.Sprintf("committee get tbchain confirm block... %v", tbblock))
+	if tbblock.Height <= com.tbchain_height {
+		return
+	}
 	com.tbchain_height = tbblock.Height
 
 	// 收到特定高度的信标链区块后准备重组
@@ -184,18 +157,13 @@ func (com *Committee) AddTBs(tbblock *beaconChain.TBBlock) {
 /* 向信标链发起交易，更新委员会地址列表
  */
 func (com *Committee) AdjustRecordedAddrs(addrs []common.Address, vrfs [][]byte, seedHeight uint64) {
-	data := &AdjustAddrs{
+	data := &core.AdjustAddrs{
+		ComID:      com.Node.NodeInfo.ComID,
 		Addrs:      addrs,
 		Vrfs:       vrfs,
 		SeedHeight: seedHeight,
 	}
-	com.messageHub.Send(core.MsgTypeCommitteeAdjustAddrs, com.comID, data, nil)
-}
-
-type AdjustAddrs struct {
-	Addrs      []common.Address
-	Vrfs       [][]byte
-	SeedHeight uint64
+	com.messageHub.Send(core.MsgTypeComSendNewAddrs, com.Node.NodeInfo.NodeID, data, nil)
 }
 
 func (com *Committee) HandleClientSendtx(txs []*core.Transaction) {
@@ -230,10 +198,10 @@ func (com *Committee) getBlockHeight() *big.Int {
 	}
 
 	data := &core.ComGetHeight{
-		From_comID:     com.comID,
-		Target_shardID: com.comID,
+		From_comID:     com.Node.NodeInfo.ComID,
+		Target_shardID: com.Node.NodeInfo.ComID,
 	}
-	com.messageHub.Send(core.MsgTypeComGetHeightFromShard, com.comID, data, callback)
+	com.messageHub.Send(core.MsgTypeComGetHeightFromShard, com.Node.NodeInfo.ComID, data, callback)
 
 	return blockHeight
 }
@@ -242,11 +210,11 @@ func (com *Committee) getBlockHeight() *big.Int {
  */
 func (com *Committee) getStatusFromShard(addrList []common.Address) *core.ShardSendState {
 	request := &core.ComGetState{
-		From_comID:     com.comID,
-		Target_shardID: com.comID,
+		From_comID:     com.Node.NodeInfo.ComID,
+		Target_shardID: com.Node.NodeInfo.ComID,
 		AddrList:       addrList, // TODO: implement it
 	}
-	com.messageHub.Send(core.MsgTypeComGetStateFromShard, com.comID, request, nil)
+	com.messageHub.Send(core.MsgTypeComGetStateFromShard, com.Node.NodeInfo.ComID, request, nil)
 
 	response := <-com.shardSendStateChan
 
@@ -283,22 +251,14 @@ func (com *Committee) AddBlock2Shard(block *core.Block) {
 	comSendBlock := &core.ComSendBlock{
 		Block: block,
 	}
-	com.messageHub.Send(core.MsgTypeSendBlock2Shard, com.comID, comSendBlock, nil)
+	com.messageHub.Send(core.MsgTypeSendBlock2Shard, com.Node.NodeInfo.ComID, comSendBlock, nil)
 }
 
 /**
  * 将新区块的信标发送到信标链
  */
 func (com *Committee) SendTB(tb *core.SignedTB) {
-	com.messageHub.Send(core.MsgTypeComAddTb2TBChain, 0, tb, nil)
-}
-
-func (com *Committee) SendReconfigMsg() {
-	com.messageHub.Send(core.MsgTypeReady4Reconfig, com.comID, com.tbchain_height, nil)
-}
-
-func (com *Committee) SetReconfigRes(res []*node.Node) {
-	com.reconfigCh <- res
+	com.messageHub.Send(core.MsgTypeComAddTb2TBChain, com.Node.NodeInfo.NodeID, tb, nil)
 }
 
 func (com *Committee) GetEthChainBlockHash(height uint64) (common.Hash, uint64) {
@@ -310,7 +270,7 @@ func (com *Committee) GetEthChainBlockHash(height uint64) (common.Hash, uint64) 
 		got_height = ret[1].(uint64)
 		channel <- struct{}{}
 	}
-	com.messageHub.Send(core.MsgTypeGetBlockHashFromEthChain, com.comID, height, callback)
+	com.messageHub.Send(core.MsgTypeGetBlockHashFromEthChain, com.Node.NodeInfo.ComID, height, callback)
 	// 阻塞
 	<-channel
 
@@ -325,13 +285,29 @@ func (com *Committee) GetEthChainBlockHash(height uint64) (common.Hash, uint64) 
 */
 
 func (com *Committee) GetCommitteeID() uint32 {
-	return com.comID
+	return com.Node.NodeInfo.ComID
 }
 
-func (com *Committee) GetMembers() []*core.NodeInfo {
-	return com.members
+// 该方法仅在重组后同步交易池时使用
+func (com *Committee) SetPoolTx(poolTx *core.PoolTx) {
+	com.txPool.SetPending(poolTx.Pending)
+	com.txPool.SetPendingRollback(poolTx.PendingRollback)
 }
 
-func (com *Committee) AddMember(nodeInfo *core.NodeInfo) {
-	com.members = append(com.members, nodeInfo)
+func (com *Committee) HandleGetPoolTx(request *core.GetPoolTx) *core.PoolTx {
+	poolTx := &core.PoolTx{
+		Pending:         com.oldTxPool.pending,
+		PendingRollback: com.oldTxPool.pendingRollback,
+	}
+	return poolTx
+}
+
+func (com *Committee) SetOldTxPool() {
+	com.oldTxPool = com.txPool
+}
+
+func (com *Committee) UpdateTbChainHeight(height uint64) {
+	if height > com.tbchain_height {
+		com.tbchain_height = height
+	}
 }

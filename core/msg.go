@@ -67,6 +67,45 @@ type MultiSignReply struct {
 	NodeInfo   *NodeInfo
 }
 
+type InitReconfig struct {
+	Seed       common.Hash
+	SeedHeight uint64
+	ComID      uint32
+}
+
+type ReconfigResult struct {
+	Seed         common.Hash
+	SeedHeight   uint64
+	Vrf          []byte
+	Addr         common.Address
+	OldNodeInfo  *NodeInfo
+	Belong_ComID uint32
+	NewComID     uint32
+}
+
+type ComReconfigResults struct {
+	ComID   uint32
+	Results []*ReconfigResult
+}
+
+type AdjustAddrs struct {
+	ComID      uint32
+	Addrs      []common.Address
+	Vrfs       [][]byte
+	SeedHeight uint64
+}
+
+type GetPoolTx struct {
+	ServerAddr   string // 向该地址请求交易
+	ClientAddr   string // 交易发送回该地址
+	RequestComID uint32 // 请求该委员会的交易
+}
+
+type PoolTx struct {
+	Pending         []*Transaction
+	PendingRollback []*Transaction
+}
+
 //////////////////////////////
 ////// pbft module ///////
 //////////////////////////////

@@ -24,11 +24,6 @@ func (p *PbftConsensusNode) set2DMap(isPrePareConfirm bool, key string, val *cor
 	}
 }
 
-// get neighbor nodes in a shard
-func (p *PbftConsensusNode) getNeighborNodes() []string {
-	return p.neighbors
-}
-
 // get the digest of request
 func getDigest(r *core.PbftRequest) []byte {
 	data := r

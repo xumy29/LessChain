@@ -14,8 +14,6 @@ import (
 	"go-w3chain/messageHub"
 	"go-w3chain/node"
 	"go-w3chain/shard"
-	"net"
-	"strconv"
 	"sync"
 
 	// "go-w3chain/miner"
@@ -78,25 +76,13 @@ func runClient(allCfg *cfg.Cfg) {
 func runNode(allCfg *cfg.Cfg) {
 	shardId := allCfg.ShardId
 	nodeId := allCfg.NodeId
-
-	// 节点地址信息
-	addr := cfg.NodeTable[uint32(shardId)][uint32(nodeId)]
-	host, port_str, err := net.SplitHostPort(addr)
-	if err != nil {
-		log.Error("invalid node address!", "addr", addr)
-	}
-	port, _ := strconv.ParseInt(port_str, 10, 32)
-	nodeAddrConfig := &core.NodeAddrConfig{
-		Name: fmt.Sprintf("S%dN%d", shardId, nodeId),
-		Host: host,
-		Port: int(port),
-	}
+	comId := shardId
 
 	// 节点数据存储目录
 	dataDir := cfg.DefaultDataDir()
 
 	// 创建节点
-	node := node.NewNode(nodeAddrConfig, dataDir, shardId, nodeId, allCfg.ShardSize)
+	node := node.NewNode(dataDir, allCfg.ShardNum, shardId, comId, nodeId, allCfg.ShardSize)
 	defer closeNode(node)
 
 	// TODO：建立分片内连接

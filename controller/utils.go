@@ -83,10 +83,9 @@ func toStopClient(c *client.Client, recommitIntervalSecs,
 		if exitMode == 0 {
 			canStop = c.CanStopV1()
 		} else if exitMode == 1 {
-			canStop = c.CanStopV2()
+			canStop = c.CanStopV2() && c.InjectDoneMsgSent
 		}
 		c.LogQueues()
-
 		if canStop {
 			c.Close()
 			break

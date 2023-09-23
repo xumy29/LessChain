@@ -146,11 +146,11 @@ func VrfValue2Shard(value []byte, shardNum uint32) uint32 {
 	return uint32(uint8(value[0])) % shardNum
 }
 
-func IsComLeader(nodeId int) bool {
+func IsComLeader(nodeId uint32) bool {
 	return nodeId == 0
 }
 
-func IsShardLeader(nodeId int) bool {
+func IsShardLeader(nodeId uint32) bool {
 	return nodeId == 0
 }
 

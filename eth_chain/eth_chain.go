@@ -34,12 +34,12 @@ func Connect(port int) (*ethclient.Client, error) {
 	return client, err
 }
 
-func myPrivateKey(shardID int, mode int) (*ecdsa.PrivateKey, error) {
+func myPrivateKey(comID, nodeID uint32, mode int) (*ecdsa.PrivateKey, error) {
 	var account string
 	if mode == 1 {
-		account = cfg.GanacheChainAccounts[shardID]
+		account = cfg.GanacheChainAccounts[comID]
 	} else if mode == 2 {
-		account = cfg.GethChainAccounts[shardID]
+		account = cfg.GethChainAccounts[comID][nodeID]
 	} else {
 		log.Error("unknown chain mode", "mode", mode)
 	}
@@ -88,7 +88,7 @@ func DeployContract(client *ethclient.Client,
 	bytecode := common.FromHex(myContractByteCode())
 
 	// 获取私钥
-	privateKey, err := myPrivateKey(0, mode)
+	privateKey, err := myPrivateKey(0, 0, mode)
 	if err != nil {
 		return common.Address{}, nil, big.NewInt(0), err
 	}
@@ -130,7 +130,7 @@ var (
 func AddTB(client *ethclient.Client, contractAddr common.Address,
 	abi *abi.ABI, mode int, tb *ContractTB,
 	sigs [][]byte, vrfs [][]byte, seedHeight uint64,
-	signers []common.Address, chainID int,
+	signers []common.Address, chainID int, nodeID uint32,
 ) error {
 
 	call_lock.Lock()
@@ -138,8 +138,8 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 
 	var tmpShardID uint32 = 0
 	tmpShardID = tb.ShardID
-	// 有较多个分片时，一个账户负责多个分片的交易
-	tmpShardID = tmpShardID % uint32(len(cfg.GethChainAccounts))
+	// // 有较多个分片时，一个账户负责多个分片的交易
+	// tmpShardID = tmpShardID % uint32(len(cfg.GethChainAccounts))
 
 	// 构造调用数据
 	callData, err := abi.Pack("addTB", *tb, sigs, vrfs, seedHeight, signers)
@@ -149,7 +149,7 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 	}
 
 	// 通过私钥构造签名者
-	privateKey, err := myPrivateKey(int(tmpShardID), mode)
+	privateKey, err := myPrivateKey(tmpShardID, nodeID, mode)
 	if err != nil {
 		log.Error(fmt.Sprintf("get myPrivateKey err: %v", err))
 		return err
@@ -232,7 +232,7 @@ func AdjustRecordedAddrs(client *ethclient.Client, contractAddr common.Address,
 	abi *abi.ABI, mode int,
 	shardID uint32, addrs []common.Address,
 	vrfs [][]byte, seedHeight uint64,
-	chainID int,
+	chainID int, nodeID uint32,
 ) error {
 
 	call_lock.Lock()
@@ -250,7 +250,7 @@ func AdjustRecordedAddrs(client *ethclient.Client, contractAddr common.Address,
 	tmpShardID = tmpShardID % uint32(len(cfg.GethChainAccounts))
 
 	// 通过私钥构造签名者
-	privateKey, err := myPrivateKey(int(tmpShardID), mode)
+	privateKey, err := myPrivateKey(tmpShardID, nodeID, mode)
 	if err != nil {
 		fmt.Println("get myPrivateKey err: ", err)
 		return err

@@ -24,7 +24,7 @@ func (com *Committee) initMultiSign(tb *core.TimeBeacon, seed common.Hash, heigh
 	com.multiSignData.Sigs = make([][]byte, 0)
 	com.multiSignData.Vrfs = make([][]byte, 0)
 	com.multiSignData.MultiSignDone = make(chan struct{}, 1)
-	com.messageHub.Send(core.MsgTypeLeaderInitMultiSign, com.comID, r, nil)
+	com.messageHub.Send(core.MsgTypeLeaderInitMultiSign, com.Node.NodeInfo.ComID, r, nil)
 	// 等待多签名完成
 	select {
 	case <-com.multiSignData.MultiSignDone:
@@ -62,7 +62,7 @@ func (com *Committee) HandleMultiSignRequest(request *core.ComLeaderInitMultiSig
 		NodeInfo:   com.Node.GetPbftNode().NodeInfo,
 	}
 
-	com.messageHub.Send(core.MsgTypeSendMultiSignReply, com.comID, reply, nil)
+	com.messageHub.Send(core.MsgTypeSendMultiSignReply, com.Node.NodeInfo.ComID, reply, nil)
 }
 
 func (com *Committee) HandleMultiSignReply(reply *core.MultiSignReply) {
