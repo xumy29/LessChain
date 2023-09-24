@@ -17,11 +17,11 @@ func init() {
 	ClientTable = make(map[uint32]string)
 	ClientTable[0] = "127.0.0.1:" + fmt.Sprint(19000)
 
-	// 配置128个分片，每个分片20个节点的地址
+	// 配置32个分片，每个分片20个节点的地址
 	NodeTable = make(map[uint32]map[uint32]string)
 	currentPort := 20000
 	var i, j uint32
-	for i = 0; i < 128; i++ {
+	for i = 0; i < 32; i++ {
 		NodeTable[i] = make(map[uint32]string)
 		host := "127.0.0.1"
 		for j = 0; j < 20; j++ {

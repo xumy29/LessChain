@@ -39,7 +39,8 @@ func myPrivateKey(comID, nodeID uint32, mode int) (*ecdsa.PrivateKey, error) {
 	if mode == 1 {
 		account = cfg.GanacheChainAccounts[comID]
 	} else if mode == 2 {
-		account = cfg.GethChainAccounts[comID][nodeID]
+		nodeAddr := cfg.ComNodeTable[comID][nodeID]
+		account = cfg.GetGethChainPrivateKey(nodeAddr)
 	} else {
 		log.Error("unknown chain mode", "mode", mode)
 	}
@@ -120,7 +121,8 @@ func DeployContract(client *ethclient.Client,
 }
 
 var (
-	lastNonce map[uint32]uint64 = make(map[uint32]uint64)
+	// lastNonce map[uint32]uint64 = make(map[uint32]uint64)
+	lastNonce map[string]uint64 = make(map[string]uint64)
 	// 通过该锁使不同委员会的AddTB方法串行执行，避免一些并发调用导致的问题
 	call_lock      sync.Mutex
 	lowestGasPrice *big.Int = big.NewInt(0)
@@ -136,10 +138,9 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 	call_lock.Lock()
 	defer call_lock.Unlock()
 
-	var tmpShardID uint32 = 0
-	tmpShardID = tb.ShardID
-	// // 有较多个分片时，一个账户负责多个分片的交易
-	// tmpShardID = tmpShardID % uint32(len(cfg.GethChainAccounts))
+	var comID uint32 = 0
+	comID = tb.ShardID
+	nodeAddr := cfg.ComNodeTable[comID][nodeID]
 
 	// 构造调用数据
 	callData, err := abi.Pack("addTB", *tb, sigs, vrfs, seedHeight, signers)
@@ -149,7 +150,7 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 	}
 
 	// 通过私钥构造签名者
-	privateKey, err := myPrivateKey(tmpShardID, nodeID, mode)
+	privateKey, err := myPrivateKey(comID, nodeID, mode)
 	if err != nil {
 		log.Error(fmt.Sprintf("get myPrivateKey err: %v", err))
 		return err
@@ -165,7 +166,7 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 	auth.Value = big.NewInt(0)       // 设置发送的以太币数量（如果有的话）
 
 	var nonce uint64
-	_, ok := lastNonce[tmpShardID]
+	_, ok := lastNonce[nodeAddr]
 	if !ok {
 		// 如果在之前的交易中使用了相同的账户地址，而这些交易还未被确认（被区块打包），那么下一笔交易的nonce应该是
 		// 当前账户的最新nonce+1。
@@ -176,10 +177,10 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 			return err
 		}
 
-		lastNonce[tmpShardID] = nonce
+		lastNonce[nodeAddr] = nonce
 	} else {
-		nonce = lastNonce[tmpShardID] + 1
-		lastNonce[tmpShardID] = nonce
+		nonce = lastNonce[nodeAddr] + 1
+		lastNonce[nodeAddr] = nonce
 	}
 	// nonce_lock.Unlock()
 
@@ -230,7 +231,7 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 
 func AdjustRecordedAddrs(client *ethclient.Client, contractAddr common.Address,
 	abi *abi.ABI, mode int,
-	shardID uint32, addrs []common.Address,
+	comID uint32, addrs []common.Address,
 	vrfs [][]byte, seedHeight uint64,
 	chainID int, nodeID uint32,
 ) error {
@@ -244,13 +245,8 @@ func AdjustRecordedAddrs(client *ethclient.Client, contractAddr common.Address,
 		return err
 	}
 
-	var tmpShardID uint32 = 0
-	tmpShardID = shardID
-	// 有较多个分片时，一个账户负责多个分片的交易
-	tmpShardID = tmpShardID % uint32(len(cfg.GethChainAccounts))
-
 	// 通过私钥构造签名者
-	privateKey, err := myPrivateKey(tmpShardID, nodeID, mode)
+	privateKey, err := myPrivateKey(comID, nodeID, mode)
 	if err != nil {
 		fmt.Println("get myPrivateKey err: ", err)
 		return err
@@ -266,7 +262,8 @@ func AdjustRecordedAddrs(client *ethclient.Client, contractAddr common.Address,
 	auth.Value = big.NewInt(0)       // 设置发送的以太币数量（如果有的话）
 
 	var nonce uint64
-	_, ok := lastNonce[tmpShardID]
+	nodeAddr := cfg.ComNodeTable[comID][nodeID]
+	_, ok := lastNonce[nodeAddr]
 	if !ok {
 		// 如果在之前的交易中使用了相同的账户地址，而这些交易还未被确认（被区块打包），那么下一笔交易的nonce应该是
 		// 当前账户的最新nonce+1。
@@ -277,10 +274,10 @@ func AdjustRecordedAddrs(client *ethclient.Client, contractAddr common.Address,
 			return err
 		}
 
-		lastNonce[tmpShardID] = nonce
+		lastNonce[nodeAddr] = nonce
 	} else {
-		nonce = lastNonce[tmpShardID] + 1
-		lastNonce[tmpShardID] = nonce
+		nonce = lastNonce[nodeAddr] + 1
+		lastNonce[nodeAddr] = nonce
 	}
 	// nonce_lock.Unlock()
 
@@ -309,7 +306,7 @@ func AdjustRecordedAddrs(client *ethclient.Client, contractAddr common.Address,
 		// 发送交易
 		err = client.SendTransaction(context.Background(), signedTx)
 		if err != nil {
-			log.Debug("client.SendTransaction err", "err", err, "txtype", "adjustRecordedAddrs", "shardID", shardID, "seedHeight", seedHeight,
+			log.Debug("client.SendTransaction err", "err", err, "txtype", "adjustRecordedAddrs", "shardID", comID, "seedHeight", seedHeight,
 				"gasPrice", lowestGasPrice, "nonce", nonce)
 			fmt.Println("client.SendTransaction err: ", err)
 
