@@ -50,6 +50,14 @@ func (p *PbftConsensusNode) Propose(block *core.Block) {
 func (p *PbftConsensusNode) HandlePrePrepare(ppmsg *core.PrePrepare) {
 	p.pl.Plog.Printf("received the PrePrepare ... sequenceID: %d\n", ppmsg.SeqID)
 
+	debug := true
+	// 假设只有重组后，原来的非共识节点变为共识节点时才会出现sequenceID不一致的问题
+	// 方便起见，直接同步至新的sequenceID
+	// 这是不安全的，仅能用于实验调试
+	if debug {
+		p.sequenceID = ppmsg.SeqID
+	}
+
 	flag := false
 	if digest := getDigest(ppmsg.RequestMsg); string(digest) != string(ppmsg.Digest) {
 		p.pl.Plog.Printf("S%dN%d : the digest is not consistent, so refuse to prepare.\n",
@@ -81,6 +89,8 @@ func (p *PbftConsensusNode) HandlePrepare(pmsg *core.Prepare) {
 	p.pl.Plog.Printf("S%dN%d : received the Prepare from ...%d sequenceID: %d\n",
 		p.NodeInfo.ShardID, p.NodeInfo.NodeID, pmsg.SenderInfo.NodeID, pmsg.SeqID)
 
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	if _, ok := p.requestPool[string(pmsg.Digest)]; !ok {
 		p.pl.Plog.Printf("S%dN%d : doesn't have the digest in the requst pool, refuse to commit... sequenceID: %d\n",
 			p.NodeInfo.ShardID, p.NodeInfo.NodeID, pmsg.SeqID)
@@ -89,8 +99,6 @@ func (p *PbftConsensusNode) HandlePrepare(pmsg *core.Prepare) {
 			p.NodeInfo.ShardID, p.NodeInfo.NodeID, pmsg.SeqID, p.sequenceID)
 	} else {
 		// if needed more operations, implement interfaces
-		p.lock.Lock()
-		defer p.lock.Unlock()
 
 		p.ihm.HandleinPrepare(pmsg)
 

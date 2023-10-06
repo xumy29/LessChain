@@ -46,6 +46,7 @@ func myPrivateKey(comID, nodeID uint32, mode int) (*ecdsa.PrivateKey, error) {
 	}
 	privateKey, err := crypto.HexToECDSA(account)
 	if err != nil {
+		log.Error(fmt.Sprintf("crypto.HexToECDSA fail. err: %v hex: %v addr: %v", err, account, cfg.ComNodeTable[comID][nodeID]))
 		return nil, err
 	}
 
@@ -91,28 +92,25 @@ func DeployContract(client *ethclient.Client,
 	// 获取私钥
 	privateKey, err := myPrivateKey(0, 0, mode)
 	if err != nil {
-		return common.Address{}, nil, big.NewInt(0), err
+		log.Error(fmt.Sprintf("getPrivateKey err: %v", err))
 	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(int64(chainID)))
 	if err != nil {
-		fmt.Println("bind.NewKeyedTransactorWithChainID err: ", err)
-		return common.Address{}, nil, big.NewInt(0), err
+		log.Error(fmt.Sprintf("bind.NewKeyedTransactorWithChainID err: %v", err))
 	}
 
 	// 部署合约
 	log.Debug("addrs", "addr", addrs)
 	address, tx, _, err := bind.DeployContract(auth, contractABI, bytecode, client, genesisTBs, required_sig_cnt, shard_num, addrs)
 	if err != nil {
-		fmt.Println("DeployContract err: ", err)
-		return common.Address{}, nil, big.NewInt(0), err
+		log.Error(fmt.Sprintf("DeployContract err: %v", err))
 	}
 
 	// 等待交易被挖矿确认
 	_, err = bind.WaitDeployed(context.Background(), client, tx)
 	if err != nil {
-		fmt.Println("WaitDeployed err: ", err)
-		return common.Address{}, nil, big.NewInt(0), err
+		log.Error(fmt.Sprintf("WaitDeployed err: %v", err))
 	}
 
 	fmt.Printf("contract deploy. address: %v\n", address)
@@ -241,19 +239,19 @@ func AdjustRecordedAddrs(client *ethclient.Client, contractAddr common.Address,
 	// 构造调用数据
 	callData, err := abi.Pack("adjustRecordedAddrs", addrs, vrfs, seedHeight)
 	if err != nil {
-		fmt.Println("abi.Pack err: ", err)
+		log.Error(fmt.Sprint("abi.Pack err: ", err))
 		return err
 	}
 
 	// 通过私钥构造签名者
 	privateKey, err := myPrivateKey(comID, nodeID, mode)
 	if err != nil {
-		fmt.Println("get myPrivateKey err: ", err)
+		log.Error(fmt.Sprint("get myPrivateKey err: ", err))
 		return err
 	}
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(int64(chainID)))
 	if err != nil {
-		fmt.Println("bind.NewKeyedTransactorWithChainID err: ", err)
+		log.Error(fmt.Sprint("bind.NewKeyedTransactorWithChainID err: ", err))
 		return err
 	}
 

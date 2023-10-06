@@ -12,7 +12,7 @@ type Shard interface {
 	GetChainHeight() uint64
 
 	SetInitialAccountState(map[common.Address]struct{}, *big.Int)
-	AddInitialAddr(addr common.Address)
+	AddInitialAddr(addr common.Address, nodeID uint32)
 	GetNodeAddrs() []common.Address
 	AddBlock(*Block)
 

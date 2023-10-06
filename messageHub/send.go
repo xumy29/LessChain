@@ -19,7 +19,7 @@ import (
 func dial(addr string) net.Conn {
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
-		// log.Error("DialTCPError", "target_addr", addr, "err", err)
+		log.Error("DialTCPError", "target_addr", addr, "err", err)
 		panic(err)
 	}
 	return conn
@@ -176,7 +176,7 @@ func clientSetInjectDone2Nodes(cid uint32) {
 	// 向所有节点发送合约地址等信息
 	var i, j uint32
 	for i = 0; i < uint32(shardNum); i++ {
-		for j = 0; j < uint32(shardSize); j++ {
+		for j = 0; j < uint32(comAllNodeNum); j++ {
 			addr := cfg.NodeTable[i][j]
 			conn, ok := conns2Node.Get(addr)
 			if !ok {
@@ -406,8 +406,8 @@ func booterSendContract(msg interface{}) {
 	// 向所有节点发送合约地址等信息
 	var i, j uint32
 	for i = 0; i < uint32(shardNum); i++ {
-		for j = 0; j < uint32(shardSize); j++ {
-			addr := cfg.ComNodeTable[i][j]
+		for j = 0; j < uint32(comAllNodeNum); j++ {
+			addr := cfg.NodeTable[i][j]
 			conn, ok := conns2Node.Get(addr)
 			if !ok {
 				conn = dial(addr)
@@ -546,7 +546,8 @@ func leaderInitReconfig(comID uint32, msg interface{}) {
 	msg_bytes := packMsg(LeaderInitReconfig, buf.Bytes())
 
 	var i uint32
-	for i = 0; i < uint32(shardSize); i++ {
+	// 向包括共识节点在内的所有委员会内节点发送该消息
+	for i = 0; i < data.ComNodeNum; i++ {
 		addr := cfg.ComNodeTable[comID][i]
 		conn, ok := conns2Node.Get(addr)
 		if !ok {
@@ -625,7 +626,7 @@ func sendReconfigResults2ComNodes(comID uint32, msg interface{}) {
 	msg_bytes := packMsg(SendReconfigResults2ComNodes, buf.Bytes())
 
 	var i uint32
-	for i = 0; i < uint32(shardSize); i++ {
+	for i = 0; i < data[comID].ComNodeNum; i++ {
 		addr := cfg.ComNodeTable[comID][i]
 		conn, ok := conns2Node.Get(addr)
 		if !ok {

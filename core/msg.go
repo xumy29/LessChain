@@ -38,6 +38,7 @@ type NodeSendInfo struct {
 type ShardSendGenesis struct {
 	Addrs           []common.Address
 	Gtb             *TimeBeacon
+	ShardID         uint32
 	Target_nodeAddr string
 }
 
@@ -71,6 +72,7 @@ type InitReconfig struct {
 	Seed       common.Hash
 	SeedHeight uint64
 	ComID      uint32
+	ComNodeNum uint32
 }
 
 type ReconfigResult struct {
@@ -84,8 +86,9 @@ type ReconfigResult struct {
 }
 
 type ComReconfigResults struct {
-	ComID   uint32
-	Results []*ReconfigResult
+	ComID      uint32
+	Results    []*ReconfigResult
+	ComNodeNum uint32
 }
 
 type AdjustAddrs struct {

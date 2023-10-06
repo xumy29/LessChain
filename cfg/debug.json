@@ -8,15 +8,16 @@
     "ClientNum": 1,
     "ClientId": 0,
 
-    "ShardNum": 1,
+    "ShardNum": 2,
     "ShardId": 0,
     "ShardSize": 4,
+    "ComAllNodeNum":8,
     "NodeId": 0,
     "MultiSignRequiredNum": 2,
 
 
-    "MaxTxNum": 15000,
-    "InjectSpeed": 250,
+    "MaxTxNum": 30000,
+    "InjectSpeed": 500,
     "RecommitInterval": 4,
     "MaxBlockTXSize": 1000,
 

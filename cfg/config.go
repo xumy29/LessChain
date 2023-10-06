@@ -23,6 +23,7 @@ type Cfg struct {
 	ShardNum             int `json:"ShardNum"`
 	ShardId              int `json:"ShardId"`
 	ShardSize            int `json:"ShardSize"`
+	ComAllNodeNum        int `json:"ComAllNodeNum"`
 	NodeId               int `json:"NodeId"`
 	MultiSignRequiredNum int `json:"MultiSignRequiredNum"`
 

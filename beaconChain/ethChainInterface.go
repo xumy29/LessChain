@@ -167,19 +167,14 @@ func (tbChain *BeaconChain) AddEthChainGenesisTB(tb *eth_chain.ContractTB) (comm
 
 func (tbChain *BeaconChain) deployContract(genesisTBs []eth_chain.ContractTB) {
 	// 创建合约，各分片创世区块作为构造函数的参数
-	var err error
 	client := tbChain.getEthClient()
 
-	tbChain.contractAddr, tbChain.contractAbi, _, err = eth_chain.DeployContract(client,
+	tbChain.contractAddr, tbChain.contractAbi, _, _ = eth_chain.DeployContract(client,
 		tbChain.mode, genesisTBs,
 		uint32(tbChain.cfg.MultiSignRequiredNum),
 		uint32(tbChain.shardNum),
 		tbChain.addrs,
 		tbChain.cfg.ChainId)
-	if err != nil {
-		log.Error("error occurs during deploying contract.", "err", err)
-		panic(err)
-	}
 }
 
 func (tbChain *BeaconChain) getEthClient() *ethclient.Client {

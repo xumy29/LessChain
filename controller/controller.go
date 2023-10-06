@@ -55,7 +55,7 @@ func runClient(allCfg *cfg.Cfg) {
 	messageHub := messageHub.NewMessageHub()
 
 	/* 设置各个分片、委员会和客户端、信标链的通信渠道 */
-	messageHub.Init(client, nil, nil, tbChain, allCfg.ShardNum, allCfg.ShardSize, allCfg.ClientNum, &wg)
+	messageHub.Init(client, nil, nil, tbChain, allCfg.ShardNum, allCfg.ShardSize, allCfg.ComAllNodeNum, allCfg.ClientNum, &wg)
 
 	startClient(client, allCfg.InjectSpeed, allCfg.RecommitIntervalSecs)
 	toStopClient(client, allCfg.RecommitIntervalSecs, allCfg.LogProgressInterval,
@@ -82,7 +82,7 @@ func runNode(allCfg *cfg.Cfg) {
 	dataDir := cfg.DefaultDataDir()
 
 	// 创建节点
-	node := node.NewNode(dataDir, allCfg.ShardNum, shardId, comId, nodeId, allCfg.ShardSize)
+	node := node.NewNode(dataDir, allCfg.ShardNum, shardId, comId, nodeId, allCfg.ShardSize, allCfg.ComAllNodeNum)
 	defer closeNode(node)
 
 	// TODO：建立分片内连接
@@ -124,7 +124,7 @@ func runNode(allCfg *cfg.Cfg) {
 	/* 创建消息中心(用于委员会和信标链的交互等) */
 	messageHub := messageHub.NewMessageHub()
 	/* 设置各个分片、委员会和客户端、信标链的通信渠道 */
-	messageHub.Init(nil, node, nil, tbChain, allCfg.ShardNum, allCfg.ShardSize, allCfg.ClientNum, &wg)
+	messageHub.Init(nil, node, nil, tbChain, allCfg.ShardNum, allCfg.ShardSize, allCfg.ComAllNodeNum, allCfg.ClientNum, &wg)
 
 	// 启动节点
 	startNode(node)
@@ -161,7 +161,7 @@ func runBooterNode(allCfg *cfg.Cfg) {
 	/* 创建消息中心(用于委员会和信标链的交互等) */
 	messageHub := messageHub.NewMessageHub()
 	/* 设置各个分片、委员会和客户端、信标链的通信渠道 */
-	messageHub.Init(nil, nil, booter, tbChain, allCfg.ShardNum, allCfg.ShardSize, allCfg.ClientNum, &wg)
+	messageHub.Init(nil, nil, booter, tbChain, allCfg.ShardNum, allCfg.ShardSize, allCfg.ComAllNodeNum, allCfg.ClientNum, &wg)
 	defer messageHub.Close()
 
 	wg.Wait()

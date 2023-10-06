@@ -25,7 +25,8 @@ type Shard struct {
 	initialAddrList []common.Address // 分片初始时各节点的公钥地址，同时也是初始时对应委员会各节点的地址
 }
 
-func (s *Shard) AddInitialAddr(addr common.Address) {
+func (s *Shard) AddInitialAddr(addr common.Address, nodeID uint32) {
+	log.Debug(fmt.Sprintf("addInitialAddr... nodeID: %v addr: %x", nodeID, addr))
 	s.initialAddrList = append(s.initialAddrList, addr)
 }
 
@@ -123,6 +124,7 @@ func (s *Shard) addGenesisTB() {
 	genesis := &core.ShardSendGenesis{
 		Addrs:           addrs,
 		Gtb:             tb,
+		ShardID:         s.Node.NodeInfo.ShardID,
 		Target_nodeAddr: cfg.BooterAddr,
 	}
 

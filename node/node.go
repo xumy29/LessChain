@@ -33,9 +33,10 @@ type Node struct {
 
 	db ethdb.Database
 
-	shard    core.Shard
-	shardNum int
-	com      core.Committee
+	shard         core.Shard
+	shardNum      int
+	comAllNodeNum int // 委员会中所有节点，包括共识节点和非共识节点
+	com           core.Committee
 
 	/* 节点上一次运行vrf得到的结果 */
 	VrfValue []byte
@@ -52,7 +53,7 @@ type Node struct {
 	com2ReconfigResults map[uint32]*core.ComReconfigResults // 所有委员会的节点的重组结果
 }
 
-func NewNode(parentdataDir string, shardNum, shardID, comID, nodeID, shardSize int) *Node {
+func NewNode(parentdataDir string, shardNum, shardID, comID, nodeID, shardSize, comAllNodeNum int) *Node {
 	nodeInfo := &core.NodeInfo{
 		ShardID:  uint32(shardID),
 		ComID:    uint32(comID),
@@ -60,9 +61,10 @@ func NewNode(parentdataDir string, shardNum, shardID, comID, nodeID, shardSize i
 		NodeAddr: cfg.ComNodeTable[uint32(shardID)][uint32(nodeID)],
 	}
 	node := &Node{
-		DataDir:  filepath.Join(parentdataDir, fmt.Sprintf("S%dN%d", shardID, nodeID)),
-		shardNum: shardNum,
-		NodeInfo: nodeInfo,
+		DataDir:       filepath.Join(parentdataDir, fmt.Sprintf("S%dN%d", shardID, nodeID)),
+		shardNum:      shardNum,
+		NodeInfo:      nodeInfo,
+		comAllNodeNum: comAllNodeNum,
 	}
 
 	node.w3Account = NewW3Account(node.DataDir)
@@ -97,6 +99,7 @@ func (node *Node) sendNodeInfo() {
 		NodeInfo: node.NodeInfo,
 		Addr:     node.w3Account.accountAddr,
 	}
+	log.Debug(fmt.Sprintf("sendNodeInfo... addr: %x", info.Addr))
 	node.messageHub.Send(core.MsgTypeNodeSendInfo2Leader, node.NodeInfo.ComID, info, nil)
 }
 
@@ -156,8 +159,8 @@ func (n *Node) GetAccount() *W3Account {
 }
 
 func (n *Node) HandleNodeSendInfo(info *core.NodeSendInfo) {
-	n.shard.AddInitialAddr(info.Addr)
-	if len(n.shard.GetNodeAddrs()) == int(n.pbftNode.GetNodes_num()) {
+	n.shard.AddInitialAddr(info.Addr, info.NodeInfo.NodeID)
+	if len(n.shard.GetNodeAddrs()) == int(n.comAllNodeNum) {
 		n.shard.Start()
 	}
 }
@@ -204,18 +207,21 @@ func (n *Node) AddReconfigResults(res *core.ComReconfigResults) {
 		n.com2ReconfigResults = make(map[uint32]*core.ComReconfigResults)
 		n.com2ReconfigResults[res.ComID] = res
 	} else {
-		last := n.com2ReconfigResults[0]
-		if last.Results[0].SeedHeight < res.Results[0].SeedHeight { // 是上次重组时留下的
-			n.com2ReconfigResults = make(map[uint32]*core.ComReconfigResults)
-			n.com2ReconfigResults[res.ComID] = res
-		} else { // 是当前重组
-			n.com2ReconfigResults[res.ComID] = res
+		for _, last := range n.com2ReconfigResults {
+			if last.Results[0].SeedHeight < res.Results[0].SeedHeight { // 是上次重组时留下的
+				n.com2ReconfigResults = make(map[uint32]*core.ComReconfigResults)
+				n.com2ReconfigResults[res.ComID] = res
+			} else { // 是当前重组
+				n.com2ReconfigResults[res.ComID] = res
+			}
+			break // 拿到任意一个元素后即可结束遍历
 		}
 	}
 }
 
 func (n *Node) InitReconfig(data *core.InitReconfig) {
 	n.com.SetOldTxPool()
+	data.ComNodeNum = uint32(n.comAllNodeNum)
 	n.messageHub.Send(core.MsgTypeLeaderInitReconfig, n.NodeInfo.ComID, data, nil)
 }
 
@@ -245,10 +251,11 @@ func (n *Node) HandleSendReconfigResult2ComLeader(data *core.ReconfigResult) {
 	n.reconfigResLock.Lock()
 
 	n.AddReconfigResult(data)
-	if len(n.reconfigResults) == int(n.pbftNode.GetNodes_num()) {
+	if len(n.reconfigResults) == int(n.comAllNodeNum) {
 		res := &core.ComReconfigResults{
-			ComID:   n.NodeInfo.ComID,
-			Results: n.reconfigResults,
+			ComID:      n.NodeInfo.ComID,
+			Results:    n.reconfigResults,
+			ComNodeNum: uint32(n.comAllNodeNum),
 		}
 		// 发给自己也用网络，不直接存，这样可以统一处理
 		n.reconfigResLock.Unlock()
@@ -362,6 +369,9 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 		}
 
 	}
+
+	// 更新委员会节点数量
+	n.comAllNodeNum = len(newCom2Results[n.NodeInfo.ComID])
 
 	if utils.IsComLeader(n.NodeInfo.NodeID) {
 		n.com.StartWorker()

@@ -24,11 +24,12 @@ var (
 	booter_ref    *node.Booter
 	tbChain_ref   *beaconChain.BeaconChain
 
-	shardNum   int
-	shardSize  int
-	clientNum  int
-	conns2Node *ConnectionsMap
-	listenConn net.Listener
+	shardNum      int
+	shardSize     int
+	comAllNodeNum int // 包括共识节点和非共识节点，该字段仅在初始化时有效
+	clientNum     int
+	conns2Node    *ConnectionsMap
+	listenConn    net.Listener
 )
 
 func init() {
@@ -52,7 +53,7 @@ func NewMessageHub() *GoodMessageHub {
 }
 
 func (hub *GoodMessageHub) Init(client *client.Client, node *node.Node, booter *node.Booter,
-	tbChain *beaconChain.BeaconChain, _shardNum int, _shardSize, _clientNum int, wg *sync.WaitGroup) {
+	tbChain *beaconChain.BeaconChain, _shardNum int, _shardSize, _shardAllNodeNum, _clientNum int, wg *sync.WaitGroup) {
 	clientNum = _clientNum
 	client_ref = client
 
@@ -67,6 +68,7 @@ func (hub *GoodMessageHub) Init(client *client.Client, node *node.Node, booter *
 	tbChain_ref = tbChain
 	shardNum = _shardNum
 	shardSize = _shardSize
+	comAllNodeNum = _shardAllNodeNum
 	log.Info("messageHubInit", "shardNum", shardNum)
 
 	if committee_ref != nil {
