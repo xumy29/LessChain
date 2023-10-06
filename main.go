@@ -33,13 +33,13 @@ var nodeId = pflag.Int32P("nodeId", "n", 0, "node id")
 func main() {
 	pflag.Parse()
 
-	args := &Args{
-		Mode:     *mode,
-		Role:     *role,
-		ShardNum: *shardNum,
-		ShardId:  *shardId,
-		NodeId:   *nodeId,
-	}
+	// args := &Args{
+	// 	Mode:     *mode,
+	// 	Role:     *role,
+	// 	ShardNum: *shardNum,
+	// 	ShardId:  *shardId,
+	// 	NodeId:   *nodeId,
+	// }
 
 	cfgfilename := "cfg/debug.json"
 	if *mode == "run" {
@@ -50,12 +50,12 @@ func main() {
 	}
 	fmt.Println("cfg file:", cfgfilename)
 
-	if *role == "node" && *nodeId < 4 {
-		var wg sync.WaitGroup
-		wg.Add(1)
-		go OpenNewTerminalsAndRun(&wg, args)
-		wg.Wait()
-	}
+	// if *role == "node" && *nodeId < 4 {
+	// 	var wg sync.WaitGroup
+	// 	wg.Add(1)
+	// 	go OpenNewTerminalsAndRun(&wg, args)
+	// 	wg.Wait()
+	// }
 
 	controller.Main(cfgfilename, *role, *shardNum, *shardId, *nodeId)
 	// closeTerminalWindow(*nodeId)

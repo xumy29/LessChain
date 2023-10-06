@@ -372,6 +372,10 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 
 	// 更新委员会节点数量
 	n.comAllNodeNum = len(newCom2Results[n.NodeInfo.ComID])
+	log.Debug(fmt.Sprintf("after reconfiguration, com %d has %d nodes in total.", n.NodeInfo.ComID, n.comAllNodeNum))
+	if n.comAllNodeNum < 3 { // pbft协议至少需要包括leader在内的3个节点
+		log.Error(fmt.Sprintf("after reconfiguration, com %d has less than 3 nodes, not enough for pbft consensus", n.NodeInfo.ComID))
+	}
 
 	if utils.IsComLeader(n.NodeInfo.NodeID) {
 		n.com.StartWorker()
