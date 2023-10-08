@@ -14,6 +14,7 @@ import (
 	"go-w3chain/messageHub"
 	"go-w3chain/node"
 	"go-w3chain/shard"
+	"os"
 	"sync"
 
 	// "go-w3chain/miner"
@@ -177,6 +178,14 @@ func Main(cfgfilename string, role string, shardNum, shardID, nodeID int32) {
 	cfg.NodeId = int(nodeID)
 
 	/* 设置日志存储路径 */
+	// 检查logs文件夹是否存在
+	if _, err := os.Stat("logs"); os.IsNotExist(err) {
+		// 如果logs文件夹不存在，则创建它
+		err := os.Mkdir("logs", 0755)
+		if err != nil {
+			fmt.Println("Error creating logs directory:", err)
+		}
+	}
 	if cfg.LogFile == "" {
 		if cfg.Role == "node" {
 			cfg.LogFile = fmt.Sprintf("logs/S%dN%d.log", cfg.ShardId, cfg.NodeId)
