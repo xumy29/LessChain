@@ -10,7 +10,7 @@ function RunInNewTerminal {
 }
 
 
-$SHARD_NUM=2
+$SHARD_NUM=4
 $SHARD_ALL_NODE_NUM=8
 
 # 获取脚本所在的路径

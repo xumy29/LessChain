@@ -82,16 +82,20 @@ func (pool *TxPool) AddTxWithoutLock(tx *core.Transaction, now int64) {
 }
 
 func (pool *TxPool) AddTxs(txs []*core.Transaction) {
+	// log.Debug("11111")
 	/* 需要对lock和r_lock都加锁的场景，都按照先lock再r_lock的顺序，避免死锁 */
 	pool.lock.Lock()
+	// log.Debug("22222")
 	defer pool.lock.Unlock()
 	pool.r_lock.Lock()
+	// log.Debug("33333")
 	defer pool.r_lock.Unlock()
 	now := time.Now().Unix()
 	// fmt.Printf("收到交易%v\n", txs)
 	for _, tx := range txs {
 		pool.AddTxWithoutLock(tx, now)
 	}
+	// log.Debug("44444")
 
 	log.Trace("TxPoolAddTXs", "shardID", pool.com.Node.NodeInfo.ComID, "txPoolPendingLen", pool.PendingLen(), "txPoolPendingRollbackLen", pool.PendingRollbackLen())
 }

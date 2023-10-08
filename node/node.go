@@ -321,9 +321,6 @@ func (n *Node) HandleSendReconfigResults2ComNodes(data *map[uint32]*core.ComReco
 	}
 
 	cfg.ComNodeTable = newComNodeTable
-	if n.NodeInfo.ComID == 0 && n.NodeInfo.NodeID == 0 { // 第一个委员会的第一个节点给客户端发送新表。。。（随便找的
-		n.messageHub.Send(core.MsgTypeSendNewNodeTable2Client, 0, cfg.ComNodeTable, nil)
-	}
 
 	n.EndReconfig(newCom2Results, oldComLeaderAddr)
 }
@@ -370,6 +367,10 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 
 	}
 
+	if n.NodeInfo.ComID == 0 && n.NodeInfo.NodeID == 0 { // 第一个委员会的第一个节点给客户端发送新表。。。（随便找的
+		n.messageHub.Send(core.MsgTypeSendNewNodeTable2Client, 0, cfg.ComNodeTable, nil)
+	}
+
 	// 更新委员会节点数量
 	n.comAllNodeNum = len(newCom2Results[n.NodeInfo.ComID])
 	log.Debug(fmt.Sprintf("after reconfiguration, com %d has %d nodes in total.", n.NodeInfo.ComID, n.comAllNodeNum))
@@ -380,6 +381,9 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 	if utils.IsComLeader(n.NodeInfo.NodeID) {
 		n.com.StartWorker()
 	}
+
+	// 删除无用的长连接，释放系统资源，防止某些端口被强制关闭
+	n.messageHub.Send(core.MsgTypeClearConnection, 0, n.NodeInfo, nil)
 
 	// todo
 }

@@ -53,4 +53,6 @@ const (
 	MsgTypePbftSendOldMessage
 
 	MsgTypeNodeSendInfo2Leader
+
+	MsgTypeClearConnection
 )

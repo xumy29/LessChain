@@ -11,6 +11,7 @@ import (
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/result"
+	"go-w3chain/utils"
 	"io"
 	"math/big"
 	"net"
@@ -680,9 +681,9 @@ func sendNewNodeTable2Client(msg interface{}) {
 		writer := bufio.NewWriter(conn)
 		writer.Write(msg_bytes)
 		writer.Flush()
+		log.Info(fmt.Sprintf("Msg Sent: %s to_clientID: %d", SendNewNodeTable2Client, i))
 	}
 
-	log.Info(fmt.Sprintf("Msg Sent: %s to_clientID: %d", SendNewNodeTable2Client, i))
 }
 
 func sendGetPoolTx(comID uint32, msg interface{}, callback func(...interface{})) {
@@ -739,6 +740,30 @@ func sendGetPoolTx(comID uint32, msg interface{}, callback func(...interface{}))
 	log.Info(fmt.Sprintf("Msg Response Received: %s pendingLen: %d pendingRollbackLen: %d", GetPoolTx, len(poolTx.Pending), len(poolTx.PendingRollback)))
 
 	callback(poolTx)
+}
+
+// 清理多余的长连接
+func clearConnection(msg interface{}) {
+	nodeInfo := msg.(*core.NodeInfo)
+	to_preserved := make(map[string]struct{})
+	// 保留与本委员会所有节点的连接
+	for _, addr := range cfg.ComNodeTable[nodeInfo.ComID] {
+		to_preserved[addr] = struct{}{}
+	}
+	if utils.IsComLeader(nodeInfo.NodeID) {
+		// 保留与其他委员会的leader节点的连接
+		for i := 0; i < shardNum; i++ {
+			to_preserved[cfg.ComNodeTable[uint32(i)][0]] = struct{}{}
+		}
+	}
+	before_cnt := len(conns2Node.connections)
+	for addr, conn := range conns2Node.connections {
+		if _, ok := to_preserved[addr]; !ok {
+			conn.Close()
+			conns2Node.Remove(addr)
+		}
+	}
+	log.Debug(fmt.Sprintf("remove unused tcp connections. before count: %d after count: %d", before_cnt, len(conns2Node.connections)))
 }
 
 /* 用于分片、委员会、客户端、信标链传送消息 */
@@ -823,54 +848,8 @@ func (hub *GoodMessageHub) Send(msgType uint32, id uint32, msg interface{}, call
 	case core.MsgTypeNodeSendInfo2Leader:
 		sendNodeInfo(id, msg)
 
-		// client
-		// case core.MsgTypeClientInjectTX2Committee:
-		// 	clientInjectTx2Com(id, msg)
-		// case core.MsgTypeCommitteeReply2Client:
-		// 	client := clients_ref[id]
-		// 	receipts := msg.([]*result.TXReceipt)
-		// 	client.AddTXReceipts(receipts)
-		// 	// client -> committee
-		// case core.MsgTypeSetInjectDone2Nodes:
-		// 	com := committees_ref[id]
-		// 	com.SetInjectTXDone()
-		// 	// shard、committee -> tbchain
-		// case core.MsgTypeComAddTb2TBChain:
-		// 	tb := msg.(*beaconChain.SignedTB)
-		// 	tbChain_ref.AddTimeBeacon(tb)
-		// case core.MsgTypeCommitteeInitialAddrs:
-		// 	addrs := msg.([]common.Address)
-		// 	tbChain_ref.SetAddrs(addrs, nil, 0, uint32(id))
-
-		// 	// committee、client <- tbchain
-		// case core.MsgTypeGetTB:
-		// 	height := msg.(uint64)
-		// 	tb := tbChain_ref.GetTimeBeacon(int(id), height)
-		// 	callback(tb)
-		// 	// committee <- shard
-		// case core.MsgTypeComGetStateFromShard:
-		// 	shard := shards_ref[id]
-		// 	states := shard.GetBlockChain().GetStateDB()
-		// parentHeight := shard.GetBlockChain().CurrentBlock().Number()
-		// 	callback(states, parentHeight)
-		// 	// committee -> shard
-		// case core.MsgTypeSendBlock2Shard:
-		// 	shard := shards_ref[id]
-		// 	block := msg.(*core.Block)
-		// 	shard.Addblock(block)
-		// 	// committee -> hub
-		// case core.MsgTypeReady4Reconfig:
-		// 	seedHeight := msg.(uint64)
-		// 	toReconfig(seedHeight)
-		// case core.MsgTypeTBChainPushTB2Client:
-		// 	block := msg.(*beaconChain.TBBlock)
-		// 	for _, c := range clients_ref {
-		// 		c.AddTBs(block)
-		// 	}
-		// case core.MsgTypeTBChainPushTB2Coms:
-		// 	block := msg.(*beaconChain.TBBlock)
-		// 	for _, c := range committees_ref {
-		// 		c.AddTBs(block)
-		// 	}
+	case core.MsgTypeClearConnection:
+		clearConnection(msg)
 	}
+
 }
