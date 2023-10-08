@@ -1,4 +1,5 @@
 # windows上运行的脚本
+# 注：路径上不要包含中文或特殊符号！！！
 
 # 定义执行命令的函数
 function RunInNewTerminal {
@@ -17,7 +18,9 @@ $scriptPath = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
 $ethChainDir = Join-Path -Path $scriptPath -ChildPath "eth_chain\geth-chain-data"
 
 # 删除旧的内容并初始化
-Remove-Item -Path "$ethChainDir\data\geth" -Recurse -Force
+if (Test-Path "$ethChainDir\data\geth") {
+    Remove-Item -Path "$ethChainDir\data\geth" -Recurse -Force
+}
 # Set-Location -Path $ethChainDir
 # & geth --datadir ./data init genesis.json
 

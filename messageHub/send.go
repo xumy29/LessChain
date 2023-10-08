@@ -184,9 +184,20 @@ func clientSetInjectDone2Nodes(cid uint32) {
 				conns2Node.Add(addr, conn)
 			}
 			_, err := conn.Write(msg_bytes)
+			// if err != nil {
+			// 	panic(err)
+			// }
+			// 尝试重新建立连接后再发送一次，若依然失败则panic
 			if err != nil {
-				panic(err)
+				log.Debug(fmt.Sprint("write tcp error: ", err))
+				conn = dial(addr)
+				conns2Node.Add(addr, conn)
+				_, err := conn.Write(msg_bytes)
+				if err != nil {
+					panic(err)
+				}
 			}
+
 			conn.Close()
 		}
 	}

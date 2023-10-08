@@ -467,7 +467,12 @@ func handleConnection(conn net.Conn, ln net.Listener) {
 				// 发送端主动关闭连接
 				return
 			}
-			log.Error("Error reading from connection", "err", err)
+			// log.Error("Error reading from connection", "err", err)
+			// 当一台机子上跑比较多节点时，总会出现突然的"Error reading from connection"
+			// err="read tcp 127.0.0.1:19000->127.0.0.1:64134: wsarecv: An existing connection was forcibly closed by the remote host."
+			// 的错误。这里尝试性地在遇到该错误时直接return，不终止程序。
+			log.Debug("Error reading from connection", "err", err)
+			return
 		}
 		length := int(binary.BigEndian.Uint32(lenBuf))
 		packedMsg := make([]byte, length)
