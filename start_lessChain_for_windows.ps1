@@ -10,7 +10,7 @@ function RunInNewTerminal {
 }
 
 
-$SHARD_NUM=4
+$SHARD_NUM=2
 $SHARD_ALL_NODE_NUM=8
 
 # 获取脚本所在的路径
@@ -40,6 +40,7 @@ Start-Sleep -Seconds 1
     0..($SHARD_ALL_NODE_NUM-1) | ForEach-Object {
         $nodeIndex = $_
         RunInNewTerminal "Set-Location $scriptPath; ./lessChain.exe -r node -S $SHARD_NUM -s $shardIndex -n $nodeIndex"
+        Start-Sleep -Seconds 0.2
     }
 }
 

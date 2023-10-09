@@ -16,12 +16,12 @@
     "MultiSignRequiredNum": 2,
 
 
-    "MaxTxNum": 40000,
-    "InjectSpeed": 1000,
+    "MaxTxNum": 20000,
+    "InjectSpeed": 500,
     "RecommitInterval": 4,
     "MaxBlockTXSize": 1000,
 
-    "Height2Reconfig": 4,
+    "Height2Reconfig": 4000,
     "ReconfigTime": 4,
 
     "TbchainBlockIntervalSecs": 10,

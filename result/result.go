@@ -144,6 +144,9 @@ func SetTXReceiptV2(table map[uint64]*TXReceipt) {
 /* 打印 所有交易 statusList */
 func PrintTXReceipt() {
 	for txid, txStatusList := range res.AllTXStatus {
+		if txid%1000 != 0 {
+			continue
+		}
 		if len(res.AllTXStatus[txid]) == 0 {
 			log.Debug("no status", "txid", txid)
 			continue
