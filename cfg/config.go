@@ -15,7 +15,7 @@ type Cfg struct {
 	IsLogProgress       bool   `json:"IsLogProgress"`
 	LogProgressInterval int    `json:"LogProgressInterval"`
 
-	Role string
+	Role string `json:"Role"`
 
 	ClientNum int `json:"ClientNum"`
 	ClientId  int `json:"ClientId"`

@@ -29,7 +29,7 @@ type ContractTB struct {
 }
 
 func Connect(port int) (*ethclient.Client, error) {
-	addr := fmt.Sprintf("%s:%d", cfg.GethIPAddr, port)
+	addr := fmt.Sprintf("http://%s:%d", cfg.GethIPAddr, port)
 	client, err := ethclient.Dial(addr)
 	return client, err
 }
