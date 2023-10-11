@@ -253,7 +253,7 @@ func handleShardSendGenesis(dataBytes []byte) (exit bool) {
 		log.Error("decodeDataErr", "err", err, "dataBytes", data)
 	}
 
-	log.Info("Msg Received: ShardSendGenesis")
+	log.Info("Msg Received: ShardSendGenesis", "shardId", data.ShardID)
 
 	exit = booter_ref.HandleShardSendGenesis(&data)
 	return exit

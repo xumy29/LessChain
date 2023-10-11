@@ -23,12 +23,13 @@ func init() {
 	NodeTable = make(map[uint32]map[uint32]string)
 
 	startIP := 4
+	startPort := 20000
+	shardPerMachine := 2
 	var i, j uint32
 	for i = 0; i < 9; i++ {
 		NodeTable[i] = make(map[uint32]string)
-		// 从50002开始配置分片节点，每台服务器配置1个分片的节点，端口都是 20000 ~ 20019
-		host := fmt.Sprintf("192.168.3.%d", startIP+int(i))
-		startPort := 20000
+		// 从50002开始配置分片节点
+		host := fmt.Sprintf("192.168.3.%d", startIP+int(i)/shardPerMachine)
 		for j = 0; j < 20; j++ {
 			NodeTable[i][j] = host + ":" + fmt.Sprint(startPort)
 			startPort += 1
