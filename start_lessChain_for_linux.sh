@@ -28,20 +28,22 @@ then
 
     # 启动其他终端并运行相应的命令
     echo "Starting booter..."
-    screen -d -m bash -c "cd $SCRIPT_DIR && go build -o ./lessChain && ./lessChain -r booter -S $SHARD_NUM"
+    screen -d -m bash -c "go build -o ./lessChain && ./lessChain -r booter -S $SHARD_NUM"
     sleep 5
 
     echo "Starting client..."
-    screen -d -m bash -c "cd $SCRIPT_DIR && ./lessChain -r client -S $SHARD_NUM"
+    screen -d -m bash -c "./lessChain -r client -S $SHARD_NUM"
     sleep 1
 else
+    go build -o ./lessChain
+    sleep 5
     # 启动分片节点
     for ((j=$SHARD_START_INDEX;j<=$SHARD_END_INDEX;j++));
     do
         for ((i=0;i<$SHARD_ALL_NODE_NUM;i++));
         do
             echo "Starting node S$j N$i..."
-            screen -d -m bash -c "cd $SCRIPT_DIR && ./lessChain -r node -S $SHARD_NUM -s $j -n $i"
+            screen -d -m bash -c "./lessChain -r node -S $SHARD_NUM -s $j -n $i"
             sleep 0.2
         done
     done

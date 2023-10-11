@@ -22,7 +22,7 @@ func init() {
 	// 配置每个分片20个节点的地址
 	NodeTable = make(map[uint32]map[uint32]string)
 
-	startIP := 3
+	startIP := 4
 	var i, j uint32
 	for i = 0; i < 9; i++ {
 		NodeTable[i] = make(map[uint32]string)
