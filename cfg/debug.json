@@ -5,11 +5,15 @@
     "IsLogProgress": true,
     "LogProgressInterval": 20,
 
+    "Role": "node",
+
     "ClientNum": 1,
     "ClientId": 0,
 
     "ShardNum": 2,
     "ShardId": 0,
+    "ShardStartIndex": 0,
+    "ShardEndIndex": 0,
     "ShardSize": 4,
     "ComAllNodeNum":8,
     "NodeId": 0,

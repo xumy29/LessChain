@@ -3,6 +3,7 @@ package eth_chain
 import (
 	"encoding/json"
 	"fmt"
+	"go-w3chain/cfg"
 	"go-w3chain/log"
 	"strconv"
 	"strings"
@@ -40,7 +41,7 @@ type Event struct {
 
 func SubscribeEvents(port int, contractAddr common.Address, eventChannel chan *Event) {
 	// WebSocket 连接地址
-	url := fmt.Sprintf("ws://localhost:%d", port)
+	url := fmt.Sprintf("ws://%s:%d", cfg.GethIPAddr, port)
 
 	// 创建 WebSocket 连接
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
