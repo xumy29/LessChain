@@ -104,21 +104,27 @@ func (tbChain *BeaconChain) generateEthChainBlock() *TBBlock {
 
 	}
 
-	// 这一次出块没有确认的信标，从而没有信标链高度信息，需要手动获取
-	// 两种情况下会满足以下条件
-	// 1. 系统初始化时，这时信标链的区块对我们作用不大，我们需要的是从第一个包含信标的信标链区块开始以后的所有区块（包括空块）
-	// 2. 所有信标已被打包时，这时信标链的区块仍有意义，因为我们需要新区块跟在旧区块后面以确认旧区块中的信标
+	// 在当前设置中，当客户端注入交易完成时，会发送消息停止所有节点。
+	// 节点退出时，交易未被全部处理，因而一定有未被打包的信标。
+	// 因此，如果在运行时遇到len(tbs_new) == 0 的情况，可以肯定是因为没来得及获取到新确认的信标，直接返回nil即可
+	// 结合以上代码，每个节点最多落后其他节点一个信标链高度，仍可以通过信标链与其他节点保持“同步”
+	// 但这会导致该节点交易池对交易是否超时的判断有误吗？—— 不会，因为交易池判断依据是本分片的高度而非信标链的高度
 	if len(tbs_new) == 0 {
-		if tbChain.height == 0 { // 第一种情况，不出块
-			return nil
-		} else { // 第二种情况，看情况决定是否出块
-			_, height := tbChain.GetEthChainLatestBlockHash()
-			if height > tbChain.height { // 信标链高度确实已有更新
-				tbChain.height = height
-			} else {
-				return nil
-			}
-		}
+		return nil
+		// 这一次出块没有确认的信标，从而没有信标链高度信息，需要手动获取
+		// 两种情况下会满足以下条件
+		// 1. 系统初始化时，这时信标链的区块对我们作用不大，我们需要的是从第一个包含信标的信标链区块开始以后的所有区块（包括空块）
+		// 2. 所有信标已被打包时，这时信标链的区块仍有意义，因为我们需要新区块跟在旧区块后面以确认旧区块中的信标
+		// if tbChain.height == 0 { // 第一种情况，不出块
+		// 	return nil
+		// } else { // 第二种情况，看情况决定是否出块
+		// 	_, height := tbChain.GetEthChainLatestBlockHash()
+		// 	if height > tbChain.height { // 信标链高度确实已有更新
+		// 		tbChain.height = height
+		// 	} else {
+		// 		return nil
+		// 	}
+		// }
 	}
 
 	now := time.Now().Unix()
