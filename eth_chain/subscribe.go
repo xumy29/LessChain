@@ -184,6 +184,9 @@ func handleMessage(data string, eth_height uint64) *Event {
 		fmt.Printf("Address: %v\n", addr)
 	}
 
+	log.Debug(fmt.Sprintf("got event... Eth_height:%d Message:%s ShardID:%d Height:%d Address:%v",
+		eth_height, message, shardID, height, addr))
+
 	return &Event{
 		Msg:     message,
 		ShardID: shardID,

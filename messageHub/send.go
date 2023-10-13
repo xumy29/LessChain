@@ -20,8 +20,15 @@ import (
 func dial(addr string) net.Conn {
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
-		log.Error("DialTCPError", "target_addr", addr, "err", err)
-		panic(err)
+		log.Debug("DialTCPError", "target_addr", addr, "err", err)
+		// 再dial一次
+		log.Debug("Try dial again...")
+		conn, err = net.Dial("tcp", addr)
+		if err != nil {
+			log.Error("DialTCPError", "target_addr", addr, "err", err)
+		} else {
+			log.Debug("dial success.", "target_addr", addr)
+		}
 	}
 	return conn
 }
@@ -174,7 +181,7 @@ func clientSetInjectDone2Nodes(cid uint32) {
 	// 序列化后的消息
 	msg_bytes := packMsg("ClientSetInjectDone", buf.Bytes())
 
-	// 向所有节点发送合约地址等信息
+	// 向所有节点发送交易注入完成信息
 	var i, j uint32
 	for i = 0; i < uint32(shardNum); i++ {
 		for j = 0; j < uint32(comAllNodeNum); j++ {
@@ -200,9 +207,9 @@ func clientSetInjectDone2Nodes(cid uint32) {
 			}
 
 			conn.Close()
+			log.Info("Msg Sent: ClientSetInjectDone", "clientID", cid, "shardID", i, "nodeID", j)
 		}
 	}
-	log.Info("Msg Sent: ClientSetInjectDone", "clientID", cid)
 }
 
 func comGetStateFromShard(shardID uint32, msg interface{}) {

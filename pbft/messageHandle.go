@@ -50,6 +50,9 @@ func (p *PbftConsensusNode) Propose(block *core.Block) {
 func (p *PbftConsensusNode) HandlePrePrepare(ppmsg *core.PrePrepare) {
 	p.pl.Plog.Printf("received the PrePrepare ... sequenceID: %d\n", ppmsg.SeqID)
 
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
 	debug := true
 	// 假设只有重组后，原来的非共识节点变为共识节点时才会出现sequenceID不一致的问题
 	// 方便起见，直接同步至新的sequenceID
