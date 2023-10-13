@@ -21,7 +21,8 @@ import (
 )
 
 type Node struct {
-	NodeInfo *core.NodeInfo
+	NodeInfo         *core.NodeInfo
+	nodeSendInfoLock sync.Mutex
 
 	/** 该节点对应的账户 */
 	w3Account *W3Account
@@ -159,6 +160,9 @@ func (n *Node) GetAccount() *W3Account {
 }
 
 func (n *Node) HandleNodeSendInfo(info *core.NodeSendInfo) {
+	n.nodeSendInfoLock.Lock()
+	defer n.nodeSendInfoLock.Unlock()
+
 	n.shard.AddInitialAddr(info.Addr, info.NodeInfo.NodeID)
 	if len(n.shard.GetNodeAddrs()) == int(n.comAllNodeNum) {
 		n.shard.Start()

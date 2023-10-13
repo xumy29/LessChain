@@ -9,14 +9,16 @@ import (
 	"go-w3chain/log"
 	"net"
 	"strconv"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 )
 
 type Booter struct {
-	addrConfig *core.NodeAddrConfig
-	tbchain    *beaconChain.BeaconChain
-	messageHub core.MessageHub
+	addrConfig  *core.NodeAddrConfig
+	tbchain     *beaconChain.BeaconChain
+	messageHub  core.MessageHub
+	genesisLock sync.Mutex
 }
 
 func NewBooter() *Booter {
@@ -50,6 +52,9 @@ func (booter *Booter) GetAddr() string {
 /* booter接收各个分片的创世区块信标和初始账户列表
 收集齐后部署信标链上的合约，并返回退出booter监听线程的信号 */
 func (booter *Booter) HandleShardSendGenesis(data *core.ShardSendGenesis) (exit bool) {
+	booter.genesisLock.Lock()
+	defer booter.genesisLock.Unlock()
+
 	exit = false
 	// 调用tbchain的方法
 	booter.tbchain.SetAddrs(data.Addrs, nil, 0, data.Gtb.ShardID, 0)

@@ -66,6 +66,13 @@ func (com *Committee) HandleMultiSignRequest(request *core.ComLeaderInitMultiSig
 }
 
 func (com *Committee) HandleMultiSignReply(reply *core.MultiSignReply) {
+	com.multiSignLock.Lock()
+	defer com.multiSignLock.Unlock()
+
+	if len(com.multiSignData.Signers) >= com.config.MultiSignRequiredNum {
+		return
+	}
+
 	if !node.VerifySignature(reply.Request.Seed[:], reply.VrfValue, reply.PubAddress) {
 		log.Debug(fmt.Sprintf("vrf verification not pass.. nodeID: %d", reply.NodeInfo.NodeID))
 		return

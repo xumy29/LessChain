@@ -10,6 +10,7 @@ import (
 	"go-w3chain/result"
 	"go-w3chain/utils"
 	"math/big"
+	"sync"
 	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -29,6 +30,7 @@ type Committee struct {
 	messageHub core.MessageHub
 
 	multiSignData *MultiSignData
+	multiSignLock sync.Mutex
 
 	Node      *node.Node // 当前节点
 	txPool    *TxPool
