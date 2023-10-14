@@ -105,6 +105,9 @@ func SubscribeEvents(port int, contractAddr common.Address, eventChannel chan *E
 		data := response.Params.Result.Data
 		// fmt.Println("Data:", data)
 		event := handleMessage(data, uint64(eth_height))
+		if event == nil {
+			continue
+		}
 		event.Eth_height = uint64(eth_height)
 		if event.Msg == "addTB" {
 			eventChannel <- event
@@ -147,6 +150,43 @@ func handleMessage(data string, eth_height uint64) *Event {
 			],
 			"name": "LogMessage",
 			"type": "event"
+		},
+		{
+			"anonymous": false,
+			"inputs": [
+				{
+					"indexed": false,
+					"internalType": "string",
+					"name": "verifyType",
+					"type": "string"
+				},
+				{
+					"indexed": false,
+					"internalType": "bytes32",
+					"name": "msgHash",
+					"type": "bytes32"
+				},
+				{
+					"indexed": false,
+					"internalType": "bytes",
+					"name": "sig",
+					"type": "bytes"
+				},
+				{
+					"indexed": false,
+					"internalType": "address",
+					"name": "recoverAddr",
+					"type": "address"
+				},
+				{
+					"indexed": false,
+					"internalType": "address",
+					"name": "expectedAddr",
+					"type": "address"
+				}
+			],
+			"name": "VerifyMessage",
+			"type": "event"
 		}
 	]
 	`
@@ -155,41 +195,61 @@ func handleMessage(data string, eth_height uint64) *Event {
 		log.Error("abi.JSON fail", "err", err)
 	}
 
-	decodedData := make(map[string]interface{})
-	err = abi.UnpackIntoMap(decodedData, "LogMessage", common.FromHex(data))
-	if err != nil {
-		log.Error("abi.UnpackIntoMap", "err", err)
+	// 尝试解码为LogMessage事件
+	decodedLogData := make(map[string]interface{})
+	errLog := abi.UnpackIntoMap(decodedLogData, "LogMessage", common.FromHex(data))
+	// 尝试解码为VerifyMessage事件
+	decodedVerifyData := make(map[string]interface{})
+	errVerify := abi.UnpackIntoMap(decodedVerifyData, "VerifyMessage", common.FromHex(data))
+
+	if errLog != nil && errVerify != nil {
+		log.Error("Failed to decode both LogMessage and VerifyMessage", "errLog", errLog, "errVerify", errVerify)
 	}
 
-	// 读取数据前可以先打印看看有哪些字段
-	// 而且需要检查eventABI是否正确
-	// fmt.Printf("decodedData: %v\n", decodedData)
+	if errLog == nil {
+		// 读取数据前可以先打印看看有哪些字段
+		// 而且需要检查eventABI是否正确
+		// fmt.Printf("decodedData: %v\n", decodedData)
 
-	message := decodedData["message"].(string)
-	shardID := decodedData["shardID"].(uint32)
-	height := decodedData["height"].(uint64)
+		message := decodedLogData["message"].(string)
+		shardID := decodedLogData["shardID"].(uint32)
+		height := decodedLogData["height"].(uint64)
 
-	addr := common.Address{}
-	if decodedData["addr"] != nil {
-		addr = decodedData["addr"].(common.Address)
+		addr := common.Address{}
+		if decodedLogData["addr"] != nil {
+			addr = decodedLogData["addr"].(common.Address)
+		}
+		// addr := decodedData["addr"].([32]byte)
+
+		fmt.Printf("Eth_height: %d\t", eth_height)
+		fmt.Printf("Message: %s\t", message)
+		fmt.Printf("ShardID: %d\t", shardID)
+		fmt.Printf("Height: %d\n", height)
+
+		if (addr != common.Address{}) {
+			fmt.Printf("Address: %v\n", addr)
+		}
+
+		log.Debug(fmt.Sprintf("got LogEvent... Eth_height:%d Message:%s ShardID:%d Height:%d Address:%v",
+			eth_height, message, shardID, height, addr))
+
+		return &Event{
+			Msg:     message,
+			ShardID: shardID,
+			Height:  height,
+		}
 	}
-	// addr := decodedData["addr"].([32]byte)
 
-	fmt.Printf("Eth_height: %d\t", eth_height)
-	fmt.Printf("Message: %s\t", message)
-	fmt.Printf("ShardID: %d\t", shardID)
-	fmt.Printf("Height: %d\n", height)
+	if errVerify == nil {
+		verifyType := decodedVerifyData["verifyType"].(string)
+		msgHash := decodedVerifyData["msgHash"].([]byte)
+		sig := decodedVerifyData["sig"].([]byte)
+		recoverAddr := decodedVerifyData["recoverAddr"].(common.Address)
+		expectedAddr := decodedVerifyData["expectedAddr"].(common.Address)
 
-	if (addr != common.Address{}) {
-		fmt.Printf("Address: %v\n", addr)
+		log.Debug(fmt.Sprintf("got VerifyEvent... verifyType:%s msgHash:%x sig:%x recoverAddr:%x expectedAddr:%x",
+			verifyType, msgHash, sig, recoverAddr, expectedAddr))
 	}
 
-	log.Debug(fmt.Sprintf("got event... Eth_height:%d Message:%s ShardID:%d Height:%d Address:%v",
-		eth_height, message, shardID, height, addr))
-
-	return &Event{
-		Msg:     message,
-		ShardID: shardID,
-		Height:  height,
-	}
+	return nil
 }

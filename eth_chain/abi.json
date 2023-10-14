@@ -84,6 +84,43 @@
 		"type": "event"
 	},
 	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "verifyType",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "bytes32",
+				"name": "msgHash",
+				"type": "bytes32"
+			},
+			{
+				"indexed": false,
+				"internalType": "bytes",
+				"name": "sig",
+				"type": "bytes"
+			},
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "recoverAddr",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "expectedAddr",
+				"type": "address"
+			}
+		],
+		"name": "VerifyMessage",
+		"type": "event"
+	},
+	{
 		"inputs": [
 			{
 				"components": [
