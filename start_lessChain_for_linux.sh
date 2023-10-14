@@ -40,7 +40,9 @@ else
     # 启动分片节点
     for ((j=$SHARD_START_INDEX;j<=$SHARD_END_INDEX;j++));
     do
-        for ((i=0;i<$SHARD_ALL_NODE_NUM;i++));
+        screen -d -m bash -c "./lessChain -r node -S $SHARD_NUM -s $j -n 0"
+        sleep 2
+        for ((i=1;i<$SHARD_ALL_NODE_NUM;i++));
         do
             echo "Starting node S$j N$i..."
             screen -d -m bash -c "./lessChain -r node -S $SHARD_NUM -s $j -n $i"
