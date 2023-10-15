@@ -207,11 +207,11 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 		// 发送交易
 		err = client.SendTransaction(context.Background(), signedTx)
 		if err != nil {
-			log.Error("client.SendTransaction err", "err", err, "txtype", "AddTB", "shardID", tb.ShardID, "height", tb.Height,
+			log.Debug("client.SendTransaction err", "err", err, "txtype", "AddTB", "shardID", tb.ShardID, "height", tb.Height,
 				"gasPrice", lowestGasPrice, "nonce", nonce)
 			fmt.Println("client.SendTransaction err: ", err)
 
-			if err.Error() != "transaction underpriced" {
+			if !strings.Contains(err.Error(), "transaction underpriced") {
 				return err
 			} else {
 				// 每次提升10%的手续费，并将该手续费作为最低手续费
