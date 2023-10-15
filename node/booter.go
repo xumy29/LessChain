@@ -54,7 +54,6 @@ func (booter *Booter) GetAddr() string {
 func (booter *Booter) HandleShardSendGenesis(data *core.ShardSendGenesis) (exit bool) {
 	booter.genesisLock.Lock()
 	defer booter.genesisLock.Unlock()
-
 	exit = false
 	// 调用tbchain的方法
 	booter.tbchain.SetAddrs(data.Addrs, nil, 0, data.Gtb.ShardID, 0)

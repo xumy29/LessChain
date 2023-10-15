@@ -20,7 +20,7 @@ func generateEthAccount() {
 	passwordFile := "./emptyPsw.txt" // 这个文件应该包含用于加密新账户的密码，默认为空
 
 	// 设定要创建的账户数量
-	numAccounts := 10
+	numAccounts := 59
 
 	// 循环创建账户
 	for i := 1; i <= numAccounts; i++ {
@@ -82,7 +82,13 @@ func recoverPrivateKeyAndWrite() {
 
 		privateKey := key.PrivateKey
 		address := key.Address.Hex()[2:] // 去掉前缀
-		privateKeys[address] = fmt.Sprintf("%x", privateKey.D)
+		prikeyHex := fmt.Sprintf("%x", privateKey.D)
+		// 排除掉不合法的私钥
+		if len(prikeyHex) != 64 {
+			fmt.Printf("priavteKey has invalid len. skip this one. privateKey: %x\n", prikeyHex)
+			continue
+		}
+		privateKeys[address] = prikeyHex
 		genesisAlloc[address] = GenesisAlloc{Balance: "1000000000000000000000"}
 
 		fmt.Printf("successfully recover privatekey... current cnt: %v\n", len(privateKeys))
