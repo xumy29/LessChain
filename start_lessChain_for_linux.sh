@@ -8,8 +8,8 @@ GETH_DIR="$SCRIPT_DIR/eth_chain/geth-chain-data"
 CONFIG_FILE="$SCRIPT_DIR/cfg/debug.json"
 SHARD_NUM=$(jq .ShardNum $CONFIG_FILE)
 SHARD_ALL_NODE_NUM=$(jq .ComAllNodeNum $CONFIG_FILE)
+MACHINE_NUM=$(jq .MachineNum $CONFIG_FILE)
 SHARD_START_INDEX=$(jq .ShardStartIndex $CONFIG_FILE)
-SHARD_END_INDEX=$(jq .ShardEndIndex $CONFIG_FILE)
 ROLE=$(jq -r .Role $CONFIG_FILE)
 
 if [ "$ROLE" != "node" ]
@@ -38,14 +38,16 @@ else
     go build -o ./lessChain
     sleep 5
     # 启动分片节点
-    for ((j=$SHARD_START_INDEX;j<=$SHARD_END_INDEX;j++));
+    for ((j=0;j<$((SHARD_NUM / MACHINE_NUM));j++));
     do
-        screen -d -m bash -c "./lessChain -r node -S $SHARD_NUM -s $j -n 0"
+        shardIndex=$((SHARD_START_INDEX + MACHINE_NUM * j))
+        echo "Starting node S$shardIndex N0..."
+        screen -d -m bash -c "./lessChain -r node -S $SHARD_NUM -s $shardIndex -n 0"
         sleep 2
         for ((i=1;i<$SHARD_ALL_NODE_NUM;i++));
         do
-            echo "Starting node S$j N$i..."
-            screen -d -m bash -c "./lessChain -r node -S $SHARD_NUM -s $j -n $i"
+            echo "Starting node S$shardIndex N$i..."
+            screen -d -m bash -c "./lessChain -r node -S $SHARD_NUM -s $shardIndex -n $i"
             sleep 0.2
         done
     done

@@ -228,10 +228,12 @@ func handleMessage(data string, eth_height uint64) *Event {
 
 		if (addr != common.Address{}) {
 			fmt.Printf("Address: %v\n", addr)
+			log.Debug(fmt.Sprintf("got LogEvent... Eth_height:%d Message:%s ShardID:%d Height:%d Address:%v",
+				eth_height, message, shardID, height, addr))
+		} else {
+			log.Debug(fmt.Sprintf("got LogEvent... Eth_height:%d Message:%s ShardID:%d Height:%d",
+				eth_height, message, shardID, height))
 		}
-
-		log.Debug(fmt.Sprintf("got LogEvent... Eth_height:%d Message:%s ShardID:%d Height:%d Address:%v",
-			eth_height, message, shardID, height, addr))
 
 		return &Event{
 			Msg:     message,
