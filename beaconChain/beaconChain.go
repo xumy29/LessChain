@@ -34,6 +34,9 @@ type BeaconChain struct {
 	stopCh   chan struct{}
 	wg       sync.WaitGroup
 
+	// geth 私链最新高度的区块打包的信标
+	geth_tbs_new map[uint64]map[uint32][]*core.TimeBeacon
+
 	contract *Contract
 	addrs    [][]common.Address
 
@@ -48,16 +51,17 @@ type BeaconChain struct {
  */
 func NewTBChain(cfg *core.BeaconChainConfig, shardNum int) *BeaconChain {
 	tbChain := &BeaconChain{
-		cfg:      cfg,
-		mode:     cfg.Mode,
-		shardNum: shardNum,
-		tbs:      make(map[int][]*ConfirmedTB),
-		tbs_new:  make(map[int][]*core.SignedTB),
-		height:   0,
-		stopCh:   make(chan struct{}),
-		contract: NewContract(shardNum, cfg.MultiSignRequiredNum),
-		addrs:    make([][]common.Address, shardNum),
-		tbBlocks: make(map[uint64]*TBBlock),
+		cfg:          cfg,
+		mode:         cfg.Mode,
+		shardNum:     shardNum,
+		tbs:          make(map[int][]*ConfirmedTB),
+		tbs_new:      make(map[int][]*core.SignedTB),
+		geth_tbs_new: make(map[uint64]map[uint32][]*core.TimeBeacon),
+		height:       0,
+		stopCh:       make(chan struct{}),
+		contract:     NewContract(shardNum, cfg.MultiSignRequiredNum),
+		addrs:        make([][]common.Address, shardNum),
+		tbBlocks:     make(map[uint64]*TBBlock),
 	}
 	log.Info("NewTBChain")
 	tbChain.wg.Add(1)
