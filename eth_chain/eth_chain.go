@@ -212,7 +212,13 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 			fmt.Println("client.SendTransaction err: ", err)
 
 			if !strings.Contains(err.Error(), "transaction underpriced") {
-				return err
+				if !strings.Contains(err.Error(), "nonce too low") {
+					return err
+				} else {
+					nonce = nonce + 1
+					lastNonce[nodeAddr] = nonce
+				}
+
 			} else {
 				// 每次提升10%的手续费，并将该手续费作为最低手续费
 				toAdd := new(big.Int).Div(lowestGasPrice, big.NewInt(10))
