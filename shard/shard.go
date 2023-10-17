@@ -265,7 +265,6 @@ func (s *Shard) executeTransaction(tx *core.Transaction, stateDB *state.StateDB,
 	} else if tx.TXtype == core.RollbackTXType {
 		state.SetNonce(*tx.Sender, state.GetNonce(*tx.Sender)-1)
 		state.AddBalance(*tx.Sender, tx.Value)
-		state.SetNonce(*tx.Sender, tx.SenderNonce-1)
 	} else {
 		log.Error("Oops, something wrong! Cannot handle tx type", "cur shardID", s.GetShardID(), "type", tx.TXtype, "tx", tx)
 	}

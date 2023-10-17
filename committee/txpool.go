@@ -135,8 +135,12 @@ func (pool *TxPool) Pending(maxBlockSize int, parentBlockHeight *big.Int) ([]*co
 		tx := pool.pending[i]
 		// 为保证交易原子性，cross2 交易应判断是否超时
 		if tx.TXtype == core.CrossTXType2 {
+			// log.Debug(fmt.Sprintf("txpool selecting cross2 tx... txid: %d shard cur height: %d cross1ConfirmHeight: %d rollbackHeight: %d",
+			// 	tx.ID, parentBlockHeight.Uint64(), tx.Cross1ConfirmHeight, tx.RollbackHeight))
 			// 如果新区块高度超过回滚高度，则丢弃交易
 			if parentBlockHeight.Uint64()+1 > tx.Cross1ConfirmHeight+tx.RollbackHeight {
+				// log.Debug(fmt.Sprintf("tx has expired. txid: %d shard cur height: %d cross1ConfirmHeight: %d rollbackHeight: %d",
+				// 	tx.ID, parentBlockHeight.Uint64(), tx.Cross1ConfirmHeight, tx.RollbackHeight))
 				// 如果cross2交易已超时，不会选择该交易进行打包，队列指针后移时需要将maxBlockSize也+1
 				i++
 				maxBlockSize++

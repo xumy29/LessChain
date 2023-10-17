@@ -454,20 +454,12 @@ func (w *Worker) executeTransaction(
 		tx.TXStatus = result.CrossTXType1Success
 		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "committee commit cross1 tx", "time", now, "tbchain_height", w.com.tbchain_height)
 	} else if tx.TXtype == core.CrossTXType2 {
-		if w.com.tbchain_height >= tx.ConfirmHeight+tx.RollbackHeight {
-			log.Error("This cross2tx is expired, should not be processed by worker",
-				"txid", tx.ID,
-				"tbchain_cur_height", w.com.tbchain_height,
-				"cross1txConfirmHeight", tx.ConfirmHeight,
-				"txRollbackHeight", tx.RollbackHeight)
-		} else {
-			receiverState := addr2State[*tx.Recipient]
-			addBalance(receiverState, tx.Value)
-			updatedStates[string(utils.GetHash((*tx.Recipient)[:]))] = receiverState
-			tx.TXStatus = result.CrossTXType2Success
-			log.Trace("tracing transaction, ", "txid", tx.ID, "status", "committee commit cross2 tx", "time", now,
-				"tbchain_height", w.com.tbchain_height, "cross1ConfirmHeight", tx.ConfirmHeight, "txRollbackHeight", tx.RollbackHeight)
-		}
+		receiverState := addr2State[*tx.Recipient]
+		addBalance(receiverState, tx.Value)
+		updatedStates[string(utils.GetHash((*tx.Recipient)[:]))] = receiverState
+		tx.TXStatus = result.CrossTXType2Success
+		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "committee commit cross2 tx", "time", now,
+			"tbchain_height", w.com.tbchain_height, "cross1ConfirmHeight", tx.ConfirmHeight, "txRollbackHeight", tx.RollbackHeight)
 	} else if tx.TXtype == core.RollbackTXType {
 		senderState := addr2State[*tx.Sender]
 		subNonceByOne(senderState)
