@@ -15,6 +15,7 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"time"
 )
 
 func dial(addr string) net.Conn {
@@ -31,6 +32,19 @@ func dial(addr string) net.Conn {
 		}
 	}
 	return conn
+}
+
+// 每隔一定时间尝试一次dial，直到成功
+// 易造成死循环，谨慎使用
+func mustDial(addr string, interval time.Duration) net.Conn {
+	for {
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			time.Sleep(interval)
+		} else {
+			return conn
+		}
+	}
 }
 
 func packMsg(msgType string, data []byte) []byte {
@@ -539,7 +553,7 @@ func sendNodeInfo(comID uint32, msg interface{}) {
 	addr := cfg.ComNodeTable[comID][0]
 	conn, ok := conns2Node.Get(addr)
 	if !ok {
-		conn = dial(addr)
+		conn = mustDial(addr, time.Second)
 		conns2Node.Add(addr, conn)
 	}
 	writer := bufio.NewWriter(conn)
