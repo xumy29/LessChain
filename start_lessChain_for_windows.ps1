@@ -26,18 +26,20 @@ if (Test-Path "$ethChainDir\data\geth") {
 
 
 RunInNewTerminal "Set-Location $ethChainDir; geth --datadir ./data init genesis.json; geth --datadir ./data --syncmode full --port 30310 --http --http.addr localhost --http.port 8545 --http.api personal,eth,net,web3,txpool,miner --ws --ws.port 8545 --allow-insecure-unlock --networkid 1337 -unlock 0x9128d0f6f5e04bd43305f7a323a67309c694a8f4 --password ./emptyPsw.txt --mine --miner.etherbase=0x9128d0f6f5e04bd43305f7a323a67309c694a8f4"
-Start-Sleep -Seconds 2
+Start-Sleep -Seconds 3
 
 # 启动其他终端并运行相应的命令
 RunInNewTerminal "Set-Location $scriptPath; go build -o ./lessChain.exe; ./lessChain.exe -r booter -S $SHARD_NUM"
-Start-Sleep -Seconds 5
+Start-Sleep -Seconds 8
 RunInNewTerminal "Set-Location $scriptPath; ./lessChain.exe -r client -S $SHARD_NUM"
 Start-Sleep -Seconds 1
 
 # 启动终端，运行节点命令
 0..($SHARD_NUM-1) | ForEach-Object {
     $shardIndex = $_
-    0..($SHARD_ALL_NODE_NUM-1) | ForEach-Object {
+    RunInNewTerminal "Set-Location $scriptPath; ./lessChain.exe -r node -S $SHARD_NUM -s $shardIndex -n 0"
+    Start-Sleep -Seconds 2
+    1..($SHARD_ALL_NODE_NUM-1) | ForEach-Object {
         $nodeIndex = $_
         RunInNewTerminal "Set-Location $scriptPath; ./lessChain.exe -r node -S $SHARD_NUM -s $shardIndex -n $nodeIndex"
         Start-Sleep -Seconds 0.2

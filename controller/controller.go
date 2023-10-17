@@ -14,6 +14,7 @@ import (
 	"go-w3chain/messageHub"
 	"go-w3chain/node"
 	"go-w3chain/shard"
+	"go-w3chain/utils"
 	"os"
 	"sync"
 
@@ -92,11 +93,12 @@ func runNode(allCfg *cfg.Cfg) {
 	shard := shard.NewShard(uint32(shardId), node)
 	node.SetShard(shard)
 
-	// 加载交易数据
-	data.LoadETHData(allCfg.DatasetDir, allCfg.MaxTxNum)
-	data.SetTxShardId(allCfg.ShardNum)
 	// 初始化分片中的账户状态
-	data.SetShardInitialAccountState(shard)
+	if utils.IsShardLeader(node.NodeInfo.NodeID) { // 目前不考虑分片重组和节点失败，只有分片leader需要设置初始状态
+		data.LoadETHData(allCfg.DatasetDir, allCfg.MaxTxNum)
+		data.SetTxShardId(allCfg.ShardNum)
+		data.SetShardInitialAccountState(shard)
+	}
 
 	// 创建本节点对应的委员会实例
 	committeeConfig := &core.CommitteeConfig{
