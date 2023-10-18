@@ -130,19 +130,11 @@ func (c *Client) checkExpiredTXs() {
 	expired_txs := make([]uint64, 0, len(c.cross1_confirm_height_map)/2)
 	for txid, confirmHeight := range c.cross1_confirm_height_map {
 		tx := c.txs_map[txid]
-		if c.shard_cur_heights[uint32(tx.Recipient_sid)] >= confirmHeight+tx.RollbackHeight {
-			// log.Debug("checkExpiredTX", "txid", txid, "tbchain_height", c.tbchain_height,
-			// 	"confirmHeight", confirmHeight, "rollbackHeight", c.txs_map[txid].RollbackHeight)
-
-			// // 发送回滚交易前应判断交易后半部分是否已被打包，若已被打包则不发送回滚交易
-			// tx := c.txs_map[txid]
-			// cross2_packed := c.checkCross2TxPacked(tx)
-			// if cross2_packed {
-			// 	log.Trace("tracing transaction", "txid", tx.ID, "status", result.GetStatusString(result.RollbackFail), "time", now)
-			// } else {
-			// 	expired_txs = append(expired_txs, txid)
-			// 	log.Trace("tracing transaction", "txid", txid, "status", "client add tx to expired_tx", "time", now)
-			// }
+		if c.shard_cur_heights[uint32(tx.Recipient_sid)] > confirmHeight+tx.RollbackHeight {
+			// 这里的if语句中是 > 而非 >= 有重要的含义
+			// 虽然在checkExpiredTXs之前已经processTXReceipts了，但不排除一种可能
+			// 即client此时还未收到cross2的reply
+			// 用 > 号相当于给更多的缓冲时间，防止一笔交易同时出现rollback和cross2两种状态
 			expired_txs = append(expired_txs, txid)
 			log.Trace("tracing transaction", "txid", txid, "status", "client add tx to expired_tx", "time", now)
 			delete(c.cross1_confirm_height_map, txid)
