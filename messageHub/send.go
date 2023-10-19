@@ -669,9 +669,8 @@ func sendReconfigResults2ComNodes(comID uint32, msg interface{}) {
 		writer := bufio.NewWriter(conn)
 		writer.Write(msg_bytes)
 		writer.Flush()
+		log.Info(fmt.Sprintf("Msg Sent: %s ComID: %d to_nodeID: %d", SendReconfigResults2ComNodes, comID, i))
 	}
-
-	log.Info(fmt.Sprintf("Msg Sent: %s ComID: %d to_nodeID: %d", SendReconfigResults2ComNodes, comID, i))
 }
 
 func comSendNewAddrs(nodeID uint32, msg interface{}) {

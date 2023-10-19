@@ -382,7 +382,7 @@ func handleSendReconfigResults2AllComLeaders(dataBytes []byte) {
 		log.Error("decodeDataErr", "err", err, "dataBytes", data)
 	}
 
-	log.Info(fmt.Sprintf("Msg Received: %s from_comID: %d", SendReconfigResult2ComLeader, data.ComID))
+	log.Info(fmt.Sprintf("Msg Received: %s from_comID: %d", SendReconfigResults2AllComLeaders, data.ComID))
 
 	node_ref.HandleSendReconfigResults2AllComLeaders(&data)
 }

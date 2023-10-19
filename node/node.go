@@ -216,6 +216,9 @@ func (n *Node) AddReconfigResults(res *core.ComReconfigResults) {
 				n.com2ReconfigResults = make(map[uint32]*core.ComReconfigResults)
 				n.com2ReconfigResults[res.ComID] = res
 			} else { // 是当前重组
+				if _, ok := n.com2ReconfigResults[res.ComID]; ok {
+					log.Error(fmt.Sprintf("this committee's reconfig result has been received. why receive again? from_comID: %d", res.ComID))
+				}
 				n.com2ReconfigResults[res.ComID] = res
 			}
 			break // 拿到任意一个元素后即可结束遍历
@@ -273,13 +276,14 @@ func (n *Node) HandleSendReconfigResults2AllComLeaders(data *core.ComReconfigRes
 	// 省略对vrf的检查...
 
 	n.reconfigResLock.Lock()
+	defer n.reconfigResLock.Unlock()
 
 	n.AddReconfigResults(data)
 	if len(n.com2ReconfigResults) == n.shardNum {
 		// 将所有vrf结果发送给委员会内的节点，包括发送者leader本身
 		n.messageHub.Send(core.MsgTypeSendReconfigResults2ComNodes, n.NodeInfo.ComID, n.com2ReconfigResults, nil)
 	}
-	n.reconfigResLock.Unlock()
+
 }
 
 func (n *Node) HandleSendReconfigResults2ComNodes(data *map[uint32]*core.ComReconfigResults) {
