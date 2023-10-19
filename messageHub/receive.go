@@ -233,7 +233,7 @@ func handleComSendTxReceipt(dataBytes []byte) {
 		log.Error("decodeDataErr", "err", err, "dataBytes", data)
 	}
 
-	log.Info("Msg Received: ComSendTxReceipt", "tx count", len(data))
+	log.Info("Msg Received: ComSendTxReceipt", "tx count", len(data), "comID", data[0].ShardID, "blockHeight", data[0].BlockHeight)
 
 	client_ref.HandleComSendTxReceipt(data)
 }

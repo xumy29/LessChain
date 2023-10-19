@@ -85,8 +85,11 @@ func (tbChain *BeaconChain) generateEthChainBlock() *TBBlock {
 	start_eth_height := uint64(0)
 	if len(tbChain.geth_tbs_new) != 0 {
 		for h, _ := range tbChain.geth_tbs_new {
-			start_eth_height = h
-			break
+			if start_eth_height == 0 {
+				start_eth_height = h
+			} else if h < start_eth_height {
+				start_eth_height = h
+			}
 		}
 	}
 	for {

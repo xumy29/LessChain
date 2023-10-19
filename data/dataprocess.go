@@ -85,12 +85,18 @@ func LoadETHData(filepath string, maxTxNum int) []*core.Transaction {
  * 根据交易发送地址和接收地址设置交易的发送分片和接收分片
  */
 func SetTxShardId(shardNum int) {
+	intraTxNum := 0
 	for _, tx := range alltxs {
 		sid := utils.Addr2Shard(tx.Sender.Hex(), shardNum) // id = 0,1,..
 		tx.Sender_sid = uint32(sid)
 		to_sid := utils.Addr2Shard(tx.Recipient.Hex(), shardNum) // id = 0,1,..
 		tx.Recipient_sid = uint32(to_sid)
+		if sid == to_sid {
+			intraTxNum += 1
+		}
 	}
+	log.Debug("TxNum of different type", "intra tx number", intraTxNum, "cross tx number", len(alltxs)-intraTxNum,
+		"cross tx rate", float64(len(alltxs)-intraTxNum)/float64(len(alltxs)))
 }
 
 /**
