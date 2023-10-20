@@ -27,12 +27,12 @@ type TxPool struct {
 
 // 该函数仅在重组后同步交易池时被使用
 func (pool *TxPool) SetPending(txs []*core.Transaction) {
-	pool.pending = txs
+	pool.pending = append(txs, pool.pending...)
 }
 
 // 该函数仅在重组后同步交易池时被使用
 func (pool *TxPool) SetPendingRollback(txs []*core.Transaction) {
-	pool.pendingRollback = txs
+	pool.pendingRollback = append(txs, pool.pendingRollback...)
 }
 
 func NewTxPool(shardID uint32) *TxPool {
@@ -97,7 +97,7 @@ func (pool *TxPool) AddTxs(txs []*core.Transaction) {
 	}
 	// log.Debug("44444")
 
-	log.Trace("TxPoolAddTXs", "shardID", pool.com.Node.NodeInfo.ComID, "txPoolPendingLen", pool.PendingLen(), "txPoolPendingRollbackLen", pool.PendingRollbackLen())
+	log.Debug("TxPoolAddTXs", "comID", pool.com.Node.NodeInfo.ComID, "txPoolPendingLen", pool.PendingLen(), "txPoolPendingRollbackLen", pool.PendingRollbackLen())
 }
 
 /* worker.commitTransaction 从队列取出交易 */

@@ -631,9 +631,15 @@ func sendReconfigResults2AllLeaders(comID uint32, msg interface{}) {
 	// 序列化后的消息
 	msg_bytes := packMsg(SendReconfigResults2AllComLeaders, buf.Bytes())
 
+	// 先拷贝待发送地址，否则leader接收到该消息后可能更新地址表
+	// 导致某些地址缺失或错误
+	target_addrs := make(map[uint32]string)
+	for comID, list := range cfg.ComNodeTable {
+		target_addrs[comID] = list[0]
+	}
 	var i uint32
 	for i = 0; i < uint32(shardNum); i++ {
-		addr := cfg.ComNodeTable[i][0]
+		addr := target_addrs[i]
 		conn, ok := conns2Node.Get(addr)
 		if !ok {
 			conn = dial(addr)
@@ -642,7 +648,7 @@ func sendReconfigResults2AllLeaders(comID uint32, msg interface{}) {
 		writer := bufio.NewWriter(conn)
 		writer.Write(msg_bytes)
 		writer.Flush()
-		log.Info(fmt.Sprintf("Msg Sent: %s from_ComID: %d to_ComID: %d", SendReconfigResults2AllComLeaders, comID, i))
+		log.Info(fmt.Sprintf("Msg Sent: %s from_ComID: %d to_ComID: %d to_addr: %s", SendReconfigResults2AllComLeaders, comID, i, addr))
 	}
 }
 
@@ -659,8 +665,11 @@ func sendReconfigResults2ComNodes(comID uint32, msg interface{}) {
 	msg_bytes := packMsg(SendReconfigResults2ComNodes, buf.Bytes())
 
 	var i uint32
+	// 先拷贝待发送地址，否则leader接收到该消息后可能更新地址表
+	// 导致某些地址缺失或错误
+	target_addrs := cfg.ComNodeTable[comID]
 	for i = 0; i < data[comID].ComNodeNum; i++ {
-		addr := cfg.ComNodeTable[comID][i]
+		addr := target_addrs[i]
 		conn, ok := conns2Node.Get(addr)
 		if !ok {
 			conn = dial(addr)
@@ -669,7 +678,7 @@ func sendReconfigResults2ComNodes(comID uint32, msg interface{}) {
 		writer := bufio.NewWriter(conn)
 		writer.Write(msg_bytes)
 		writer.Flush()
-		log.Info(fmt.Sprintf("Msg Sent: %s ComID: %d to_nodeID: %d", SendReconfigResults2ComNodes, comID, i))
+		log.Info(fmt.Sprintf("Msg Sent: %s ComID: %d to_nodeID: %d, to_addr: %s", SendReconfigResults2ComNodes, comID, i, addr))
 	}
 }
 

@@ -351,9 +351,15 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 		n.com.AdjustRecordedAddrs(addrs, vrfs, comResults[0].SeedHeight)
 	}
 
-	// todo: 下面逻辑仅在只有一个分片时有效，需修改以适配多分片
-	// 重新启动委员会和worker
+	// 重组开始时已经调用过一次，此处再次调用，是因为重组过程节点可能继续收到客户端发送的交易
+	n.com.SetOldTxPool()
+
+	// 重新启动委员会和worker、新建交易池
 	n.com.Start(n.NodeInfo.NodeID)
+
+	if n.NodeInfo.NodeID == 0 { // 每个委员会的leader都会给客户端发送新表
+		n.messageHub.Send(core.MsgTypeSendNewNodeTable2Client, 0, cfg.ComNodeTable, nil)
+	}
 	// 同步交易池
 	if utils.IsComLeader(n.NodeInfo.NodeID) {
 		getPoolTxsCh := make(chan struct{}, 1)
@@ -373,10 +379,6 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 			<-getPoolTxsCh
 		}
 
-	}
-
-	if n.NodeInfo.ComID == 0 && n.NodeInfo.NodeID == 0 { // 第一个委员会的第一个节点给客户端发送新表。。。（随便找的
-		n.messageHub.Send(core.MsgTypeSendNewNodeTable2Client, 0, cfg.ComNodeTable, nil)
 	}
 
 	// 更新委员会节点数量

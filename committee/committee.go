@@ -58,8 +58,7 @@ func NewCommittee(comID uint32, clientCnt int, _node *node.Node, config *core.Co
 }
 
 func (com *Committee) Start(nodeId uint32) {
-	com.to_reconfig = false // 防止重组后该值一直为true
-	com.SetOldTxPool()
+	com.to_reconfig = false        // 防止重组后该值一直为true
 	if utils.IsComLeader(nodeId) { // 只有委员会的leader节点会运行worker，即出块
 		pool := NewTxPool(com.Node.NodeInfo.ComID)
 		com.txPool = pool
@@ -169,6 +168,9 @@ func (com *Committee) AdjustRecordedAddrs(addrs []common.Address, vrfs [][]byte,
 }
 
 func (com *Committee) HandleClientSendtx(txs []*core.Transaction) {
+	if com.txPool == nil {
+		com.txPool = NewTxPool(com.Node.NodeInfo.ShardID)
+	}
 	com.txPool.AddTxs(txs)
 }
 
@@ -291,12 +293,25 @@ func (com *Committee) GetCommitteeID() uint32 {
 }
 
 // 该方法仅在重组后同步交易池时使用
+// 由于接收到旧leader的交易之前，新leader已经接收到client发送的交易，所以需要将旧leader交易插到队列最前
 func (com *Committee) SetPoolTx(poolTx *core.PoolTx) {
+	if com.txPool == nil {
+		com.txPool = NewTxPool(com.Node.NodeInfo.ShardID)
+	}
+	com.txPool.lock.Lock()
+	defer com.txPool.lock.Unlock()
+	com.txPool.r_lock.Lock()
+	defer com.txPool.r_lock.Unlock()
+
 	com.txPool.SetPending(poolTx.Pending)
 	com.txPool.SetPendingRollback(poolTx.PendingRollback)
 }
 
 func (com *Committee) HandleGetPoolTx(request *core.GetPoolTx) *core.PoolTx {
+	com.txPool.lock.Lock()
+	defer com.txPool.lock.Unlock()
+	com.txPool.r_lock.Lock()
+	defer com.txPool.r_lock.Unlock()
 	poolTx := &core.PoolTx{
 		Pending:         com.oldTxPool.pending,
 		PendingRollback: com.oldTxPool.pendingRollback,
@@ -304,8 +319,18 @@ func (com *Committee) HandleGetPoolTx(request *core.GetPoolTx) *core.PoolTx {
 	return poolTx
 }
 
+// 对oldTxpool的操作需要加上txpool的锁，防止多线程产生的错误
 func (com *Committee) SetOldTxPool() {
+	if com.txPool == nil {
+		return
+	}
+	com.txPool.lock.Lock()
+	defer com.txPool.lock.Unlock()
+	com.txPool.r_lock.Lock()
+	defer com.txPool.r_lock.Unlock()
+
 	com.oldTxPool = com.txPool
+	log.Debug("SetOldTxPool", "comID", com.Node.NodeInfo.ComID, "pendingLen", len(com.oldTxPool.pending), "rollbackLen", len(com.oldTxPool.pendingRollback))
 }
 
 func (com *Committee) UpdateTbChainHeight(height uint64) {
