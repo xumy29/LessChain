@@ -521,6 +521,14 @@ func sendPbftMsg(comID uint32, msg interface{}, msgType string) {
 		if addr == nodeAddr {
 			continue // 不用发给自己
 		}
+		if addr == "" {
+			if i == 3 {
+				// pbft最低允许只有3个节点
+				continue
+			} else {
+				log.Error("address is empty.")
+			}
+		}
 		conn, ok := conns2Node.Get(addr)
 		if !ok {
 			conn = dial(addr)

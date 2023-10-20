@@ -330,6 +330,12 @@ func (n *Node) HandleSendReconfigResults2ComNodes(data *map[uint32]*core.ComReco
 	}
 
 	cfg.ComNodeTable = newComNodeTable
+	// 各分片的新leader
+	com2Leader := make(map[uint32]string)
+	for shardID, list := range cfg.ComNodeTable {
+		com2Leader[shardID] = list[0]
+	}
+	log.Debug(fmt.Sprintf("NewComLeaders：%v", com2Leader))
 
 	n.EndReconfig(newCom2Results, oldComLeaderAddr)
 }
@@ -374,11 +380,10 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 			ClientAddr:   n.NodeInfo.NodeAddr,
 			RequestComID: n.NodeInfo.ComID,
 		}
-		if request.ServerAddr != request.ClientAddr {
-			n.messageHub.Send(core.MsgTypeGetPoolTx, n.NodeInfo.ComID, request, callback)
-			// 等待交易池更新后再启动worker
-			<-getPoolTxsCh
-		}
+
+		n.messageHub.Send(core.MsgTypeGetPoolTx, n.NodeInfo.ComID, request, callback)
+		// 等待交易池更新后再启动worker
+		<-getPoolTxsCh
 
 	}
 

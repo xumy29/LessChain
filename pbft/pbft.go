@@ -85,6 +85,17 @@ func NewPbftNode(nodeInfo *core.NodeInfo, shardSize uint32, messageHandleType st
 	return p
 }
 
+func (p *PbftConsensusNode) Reset() {
+	p.requestPool = make(map[string]*core.PbftRequest)
+	p.cntPrepareConfirm = make(map[string]map[*core.NodeInfo]bool)
+	p.cntCommitConfirm = make(map[string]map[*core.NodeInfo]bool)
+	p.isCommitBordcast = make(map[string]bool)
+	p.isReply = make(map[string]bool)
+	p.replyCnt = 0
+	p.gotEnoughReply = make(map[uint64]bool)
+	p.height2Digest = make(map[uint64]string)
+}
+
 func (p *PbftConsensusNode) SetMessageHub(hub core.MessageHub) {
 	p.messageHub = hub
 }
