@@ -105,6 +105,7 @@ func (node *Node) sendNodeInfo() {
 }
 
 func (node *Node) RunPbft(block *core.Block, exit chan struct{}) {
+	node.pbftNode.SetSequenceID(block.NumberU64())
 	node.pbftNode.Propose(block)
 	// wait till consensus is complete
 

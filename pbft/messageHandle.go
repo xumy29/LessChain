@@ -8,6 +8,12 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
+func (p *PbftConsensusNode) SetSequenceID(id uint64) {
+	p.sequenceLock.Lock()
+	p.sequenceID = id
+	p.sequenceLock.Unlock()
+}
+
 // this func is only invoked by main node
 func (p *PbftConsensusNode) Propose(block *core.Block) {
 	if p.view != p.NodeInfo.NodeID {
