@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-func dial(addr string) net.Conn {
+func dial(addr string) (net.Conn, error) {
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		log.Debug("DialTCPError", "target_addr", addr, "err", err)
@@ -26,12 +26,13 @@ func dial(addr string) net.Conn {
 		log.Debug("Try dial again...")
 		conn, err = net.Dial("tcp", addr)
 		if err != nil {
-			log.Error("DialTCPError", "target_addr", addr, "err", err)
+			log.Debug("DialTCPError", "target_addr", addr, "err", err)
+			return nil, nil
 		} else {
 			log.Debug("dial success.", "target_addr", addr)
 		}
 	}
-	return conn
+	return conn, nil
 }
 
 // 每隔一定时间尝试一次dial，直到成功
@@ -86,7 +87,11 @@ func comGetHeightFromShard(shardID uint32, msg interface{}) *big.Int {
 	addr := cfg.NodeTable[shardID][0]
 	conn, ok := conns2Node.Get(addr)
 	if !ok {
-		conn = dial(addr)
+		conn, err = dial(addr)
+		if err != nil {
+			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+				"comGetHeightFromShard", shardID, -1, 0, addr))
+		}
 		conns2Node.Add(addr, conn)
 	}
 	_, err = conn.Write(msg_bytes)
@@ -173,7 +178,11 @@ func clientInjectTx2Com(comID uint32, msg interface{}) {
 	addr := cfg.ComNodeTable[comID][0]
 	conn, ok := conns2Node.Get(addr)
 	if !ok {
-		conn = dial(addr)
+		conn, err = dial(addr)
+		if err != nil {
+			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+				"clientInjectTx2Com", -1, comID, 0, addr))
+		}
 		conns2Node.Add(addr, conn)
 	}
 	writer := bufio.NewWriter(conn)
@@ -202,7 +211,11 @@ func clientSetInjectDone2Nodes(cid uint32) {
 			addr := cfg.NodeTable[i][j]
 			conn, ok := conns2Node.Get(addr)
 			if !ok {
-				conn = dial(addr)
+				conn, err = dial(addr)
+				if err != nil {
+					log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+						"clientSetInjectDone2Nodes", i, -1, j, addr))
+				}
 				conns2Node.Add(addr, conn)
 			}
 			_, err := conn.Write(msg_bytes)
@@ -212,7 +225,11 @@ func clientSetInjectDone2Nodes(cid uint32) {
 			// 尝试重新建立连接后再发送一次，若依然失败则panic
 			if err != nil {
 				log.Debug(fmt.Sprint("write tcp error: ", err))
-				conn = dial(addr)
+				conn, err = dial(addr)
+				if err != nil {
+					log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+						"clientSetInjectDone2Nodes", i, -1, j, addr))
+				}
 				conns2Node.Add(addr, conn)
 				_, err := conn.Write(msg_bytes)
 				if err != nil {
@@ -242,7 +259,11 @@ func comGetStateFromShard(shardID uint32, msg interface{}) {
 	addr := cfg.NodeTable[shardID][0]
 	conn, ok := conns2Node.Get(addr)
 	if !ok {
-		conn = dial(addr)
+		conn, err = dial(addr)
+		if err != nil {
+			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+				"comGetStateFromShard", shardID, -1, 0, addr))
+		}
 		conns2Node.Add(addr, conn)
 	}
 	writer := bufio.NewWriter(conn)
@@ -267,7 +288,11 @@ func shardSendStateToCom(comID uint32, msg interface{}) {
 	addr := cfg.ComNodeTable[comID][0]
 	conn, ok := conns2Node.Get(addr)
 	if !ok {
-		conn = dial(addr)
+		conn, err = dial(addr)
+		if err != nil {
+			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+				"shardSendStateToCom", -1, comID, 0, addr))
+		}
 		conns2Node.Add(addr, conn)
 	}
 	writer := bufio.NewWriter(conn)
@@ -293,7 +318,11 @@ func comSendBlock2Shard(shardID uint32, msg interface{}) {
 	addr := cfg.NodeTable[shardID][0]
 	conn, ok := conns2Node.Get(addr)
 	if !ok {
-		conn = dial(addr)
+		conn, err = dial(addr)
+		if err != nil {
+			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+				"comSendBlock2Shard", shardID, -1, 0, addr))
+		}
 		conns2Node.Add(addr, conn)
 	}
 	writer := bufio.NewWriter(conn)
@@ -318,7 +347,11 @@ func comSendReply2Client(clientID uint32, msg interface{}) {
 	addr := cfg.ClientTable[clientID]
 	conn, ok := conns2Node.Get(addr)
 	if !ok {
-		conn = dial(addr)
+		conn, err = dial(addr)
+		if err != nil {
+			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+				"comSendReply2Client", -1, -1, -1, addr))
+		}
 		conns2Node.Add(addr, conn)
 	}
 	writer := bufio.NewWriter(conn)
@@ -375,13 +408,25 @@ func comLeaderInitMultiSign(comID uint32, msg interface{}) {
 	// 序列化后的消息
 	msg_bytes := packMsg(LeaderInitMultiSign, buf.Bytes())
 
-	// 向委员会中的所有节点发送（包括自己）
+	// 向委员会中的所有共识节点发送（包括自己）
 	var i uint32
 	for i = 0; i < uint32(shardSize); i++ {
 		addr := cfg.ComNodeTable[comID][i]
+		if addr == "" {
+			if i == 3 {
+				// pbft最低允许只有3个节点
+				continue
+			} else {
+				log.Error("address is empty.")
+			}
+		}
 		conn, ok := conns2Node.Get(addr)
 		if !ok {
-			conn = dial(addr)
+			conn, err = dial(addr)
+			if err != nil {
+				log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+					"comLeaderInitMultiSign", -1, comID, i, addr))
+			}
 			conns2Node.Add(addr, conn)
 		}
 		_, err := conn.Write(msg_bytes)
@@ -409,7 +454,11 @@ func sendMultiSignReply(comID uint32, msg interface{}) {
 	addr := cfg.ComNodeTable[comID][0]
 	conn, ok := conns2Node.Get(addr)
 	if !ok {
-		conn = dial(addr)
+		conn, err = dial(addr)
+		if err != nil {
+			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+				"sendMultiSignReply", -1, comID, 0, addr))
+		}
 		conns2Node.Add(addr, conn)
 	}
 	_, err = conn.Write(msg_bytes)
@@ -443,7 +492,11 @@ func booterSendContract(msg interface{}) {
 			addr := cfg.NodeTable[i][j]
 			conn, ok := conns2Node.Get(addr)
 			if !ok {
-				conn = dial(addr)
+				conn, err = dial(addr)
+				if err != nil {
+					log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+						"booterSendContract", i, -1, j, addr))
+				}
 			}
 			_, err := conn.Write(msg_bytes)
 			if err != nil {
@@ -459,7 +512,11 @@ func booterSendContract(msg interface{}) {
 		addr := cfg.ClientTable[i]
 		conn, ok := conns2Node.Get(addr)
 		if !ok {
-			conn = dial(addr)
+			conn, err = dial(addr)
+			if err != nil {
+				log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+					"booterSendContract", -1, -1, -1, addr))
+			}
 		}
 		_, err := conn.Write(msg_bytes)
 		if err != nil {
@@ -534,7 +591,11 @@ func sendPbftMsg(comID uint32, msg interface{}, msgType string) {
 		}
 		conn, ok := conns2Node.Get(addr)
 		if !ok {
-			conn = dial(addr)
+			conn, err = dial(addr)
+			if err != nil {
+				log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+					msgType, -1, comID, i, addr))
+			}
 			conns2Node.Add(addr, conn)
 		}
 		writer := bufio.NewWriter(conn)
@@ -551,10 +612,15 @@ func sendPbftMsg(comID uint32, msg interface{}, msgType string) {
 
 func sendOldRequests(data *core.SendOldMessage, msgBytes []byte) {
 	addr := cfg.ComNodeTable[data.ReceiverInfo.ComID][data.ReceiverInfo.NodeID]
+	var err error
 
 	conn, ok := conns2Node.Get(addr)
 	if !ok {
-		conn = dial(addr)
+		conn, err = dial(addr)
+		if err != nil {
+			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+				"sendOldRequests", -1, data.ReceiverInfo.ComID, data.ReceiverInfo.NodeID, addr))
+		}
 		conns2Node.Add(addr, conn)
 	}
 	writer := bufio.NewWriter(conn)
@@ -610,7 +676,11 @@ func leaderInitReconfig(comID uint32, msg interface{}) {
 		addr := cfg.ComNodeTable[comID][i]
 		conn, ok := conns2Node.Get(addr)
 		if !ok {
-			conn = dial(addr)
+			conn, err = dial(addr)
+			if err != nil {
+				log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+					"leaderInitReconfig", -1, comID, i, addr))
+			}
 			conns2Node.Add(addr, conn)
 		}
 		writer := bufio.NewWriter(conn)
@@ -636,7 +706,11 @@ func sendReconfigResult2Leader(comID uint32, msg interface{}) {
 	addr := cfg.ComNodeTable[comID][0]
 	conn, ok := conns2Node.Get(addr)
 	if !ok {
-		conn = dial(addr)
+		conn, err = dial(addr)
+		if err != nil {
+			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+				"sendReconfigResult2Leader", -1, comID, 0, addr))
+		}
 		conns2Node.Add(addr, conn)
 	}
 	writer := bufio.NewWriter(conn)
@@ -669,7 +743,11 @@ func sendReconfigResults2AllLeaders(comID uint32, msg interface{}) {
 		addr := target_addrs[i]
 		conn, ok := conns2Node.Get(addr)
 		if !ok {
-			conn = dial(addr)
+			conn, err = dial(addr)
+			if err != nil {
+				log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+					"sendReconfigResults2AllLeaders", -1, i, 0, addr))
+			}
 			conns2Node.Add(addr, conn)
 		}
 		writer := bufio.NewWriter(conn)
@@ -699,7 +777,11 @@ func sendReconfigResults2ComNodes(comID uint32, msg interface{}) {
 		addr := target_addrs[i]
 		conn, ok := conns2Node.Get(addr)
 		if !ok {
-			conn = dial(addr)
+			conn, err = dial(addr)
+			if err != nil {
+				log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+					"sendReconfigResults2ComNodes", -1, comID, i, addr))
+			}
 			conns2Node.Add(addr, conn)
 		}
 		writer := bufio.NewWriter(conn)
@@ -731,7 +813,11 @@ func sendNewNodeTable2Client(msg interface{}) {
 		addr := cfg.ClientTable[i]
 		conn, ok := conns2Node.Get(addr)
 		if !ok {
-			conn = dial(addr)
+			conn, err = dial(addr)
+			if err != nil {
+				log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+					"sendNewNodeTable2Client", -1, -1, -1, addr))
+			}
 			conns2Node.Add(addr, conn)
 		}
 		writer := bufio.NewWriter(conn)
@@ -758,7 +844,11 @@ func sendGetPoolTx(comID uint32, msg interface{}, callback func(...interface{}))
 	addr := data.ServerAddr
 	conn, ok := conns2Node.Get(addr)
 	if !ok {
-		conn = dial(addr)
+		conn, err = dial(addr)
+		if err != nil {
+			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+				"sendNewNodeTable2Client", -1, -1, -1, addr))
+		}
 		conns2Node.Add(addr, conn)
 	}
 	_, err = conn.Write(msg_bytes)
