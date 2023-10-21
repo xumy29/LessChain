@@ -28,11 +28,11 @@ then
 
     # 启动其他终端并运行相应的命令
     echo "Starting booter..."
-    screen -d -m bash -c "go build -o ./lessChain && ./lessChain -r booter -S $SHARD_NUM"
+    screen -d -m bash -c "go build -o ./lessChain && ./lessChain -r booter -S $SHARD_NUM; tail -f /dev/null"
     sleep 5
 
     echo "Starting client..."
-    screen -d -m bash -c "./lessChain -r client -S $SHARD_NUM"
+    screen -d -m bash -c "./lessChain -r client -S $SHARD_NUM; tail -f /dev/null"
     sleep 1
 else
     go build -o ./lessChain
@@ -42,12 +42,12 @@ else
     do
         shardIndex=$((SHARD_START_INDEX + MACHINE_NUM * j))
         echo "Starting node S$shardIndex N0..."
-        screen -d -m bash -c "./lessChain -r node -S $SHARD_NUM -s $shardIndex -n 0"
+        screen -d -m bash -c "./lessChain -r node -S $SHARD_NUM -s $shardIndex -n 0; tail -f /dev/null"
         sleep 2
         for ((i=1;i<$SHARD_ALL_NODE_NUM;i++));
         do
             echo "Starting node S$shardIndex N$i..."
-            screen -d -m bash -c "./lessChain -r node -S $SHARD_NUM -s $shardIndex -n $i"
+            screen -d -m bash -c "./lessChain -r node -S $SHARD_NUM -s $shardIndex -n $i; tail -f /dev/null"
             sleep 0.2
         done
     done
