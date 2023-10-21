@@ -7,6 +7,7 @@ import (
 	"go-w3chain/cfg"
 	"go-w3chain/log"
 	"go-w3chain/utils"
+	"math"
 	"math/big"
 	"strings"
 	"sync"
@@ -121,7 +122,7 @@ func DeployContract(client *ethclient.Client,
 var (
 	// lastNonce map[uint32]uint64 = make(map[uint32]uint64)
 	// lastNonce map[string]uint64 = make(map[string]uint64)
-	lastNonce uint64 = 0
+	lastNonce uint64 = math.MaxUint64
 	// 通过该锁使不同委员会的AddTB方法串行执行，避免一些并发调用导致的问题
 	call_lock      sync.Mutex
 	lowestGasPrice *big.Int = big.NewInt(0)
@@ -164,7 +165,7 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 	auth.Value = big.NewInt(0)       // 设置发送的以太币数量（如果有的话）
 
 	var nonce uint64
-	if lastNonce == 0 {
+	if lastNonce == math.MaxUint64 {
 		// 如果在之前的交易中使用了相同的账户地址，而这些交易还未被确认（被区块打包），那么下一笔交易的nonce应该是
 		// 当前账户的最新nonce+1。
 		nonce, err = client.PendingNonceAt(context.Background(), auth.From)
@@ -210,18 +211,15 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 				"gasPrice", lowestGasPrice, "nonce", nonce)
 			fmt.Println("client.SendTransaction err: ", err)
 
-			if !strings.Contains(err.Error(), "transaction underpriced") {
-				if !strings.Contains(err.Error(), "nonce too low") {
-					return err
-				} else {
-					nonce = nonce + 1
-					lastNonce = nonce
-				}
-
-			} else {
+			if strings.Contains(err.Error(), "replacement transaction underpriced") || strings.Contains(err.Error(), "nonce too low") {
+				nonce = nonce + 1
+				lastNonce = nonce
+			} else if strings.Contains(err.Error(), "transaction underpriced") {
 				// 每次提升10%的手续费，并将该手续费作为最低手续费
 				toAdd := new(big.Int).Div(lowestGasPrice, big.NewInt(10))
 				lowestGasPrice = new(big.Int).Add(lowestGasPrice, toAdd)
+			} else {
+				return err
 			}
 		} else {
 			// fmt.Printf("signedTX: %v\n", signedTx.Hash().Hex())
@@ -265,7 +263,7 @@ func AdjustRecordedAddrs(client *ethclient.Client, contractAddr common.Address,
 	auth.Value = big.NewInt(0)       // 设置发送的以太币数量（如果有的话）
 
 	var nonce uint64
-	if lastNonce == 0 {
+	if lastNonce == math.MaxUint64 {
 		// 如果在之前的交易中使用了相同的账户地址，而这些交易还未被确认（被区块打包），那么下一笔交易的nonce应该是
 		// 当前账户的最新nonce+1。
 		nonce, err = client.PendingNonceAt(context.Background(), auth.From)
@@ -311,18 +309,15 @@ func AdjustRecordedAddrs(client *ethclient.Client, contractAddr common.Address,
 				"gasPrice", lowestGasPrice, "nonce", nonce)
 			fmt.Println("client.SendTransaction err: ", err)
 
-			if !strings.Contains(err.Error(), "transaction underpriced") {
-				if !strings.Contains(err.Error(), "nonce too low") {
-					return err
-				} else {
-					nonce = nonce + 1
-					lastNonce = nonce
-				}
-
-			} else {
+			if strings.Contains(err.Error(), "replacement transaction underpriced") || strings.Contains(err.Error(), "nonce too low") {
+				nonce = nonce + 1
+				lastNonce = nonce
+			} else if strings.Contains(err.Error(), "transaction underpriced") {
 				// 每次提升10%的手续费，并将该手续费作为最低手续费
 				toAdd := new(big.Int).Div(lowestGasPrice, big.NewInt(10))
 				lowestGasPrice = new(big.Int).Add(lowestGasPrice, toAdd)
+			} else {
+				return err
 			}
 		} else {
 			// fmt.Printf("signedTX: %v\n", signedTx.Hash().Hex())
