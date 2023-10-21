@@ -10,7 +10,7 @@ type Committee interface {
 	CanStopV1() bool
 	CanStopV2() bool
 
-	NewBlockGenerated(*Block, common.Hash, uint64)
+	NewBlockGenerated(*Block)
 
 	StartWorker()
 

@@ -228,6 +228,7 @@ func (n *Node) AddReconfigResults(res *core.ComReconfigResults) {
 }
 
 func (n *Node) InitReconfig(data *core.InitReconfig) {
+	log.Debug("InitReconfig...", "comID", n.NodeInfo.ComID, "seedHeight", data.SeedHeight, "seed", data.Seed)
 	n.com.SetOldTxPool()
 	data.ComNodeNum = uint32(n.comAllNodeNum)
 	n.messageHub.Send(core.MsgTypeLeaderInitReconfig, n.NodeInfo.ComID, data, nil)

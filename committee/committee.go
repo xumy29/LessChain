@@ -36,9 +36,10 @@ type Committee struct {
 	txPool    *TxPool
 	oldTxPool *TxPool // 重组前的交易池，新委员会leader请求时返回其中的交易
 	/* 计数器，初始等于客户端个数，每一个客户端发送注入完成信号时计数器减一 */
-	injectNotDone  int32
-	tbchain_height uint64
-	to_reconfig    bool // 收到特定高度的信标链区块后设为true，准备重组
+	injectNotDone        int32
+	tbchain_height       uint64
+	to_reconfig          bool   // 收到特定高度的信标链区块后设为true，准备重组
+	reconfig_seed_height uint64 // 用于重组的种子，所有委员会必须统一
 
 	shardSendStateChan chan *core.ShardSendState
 }
@@ -99,11 +100,12 @@ func (com *Committee) CanStopV2() bool {
  * 刚出完一个块判断是否达到重组条件
  * 当committee触发重组时，会在该方法会被阻塞，直到重组完成
  */
-func (com *Committee) NewBlockGenerated(block *core.Block, seed common.Hash, height uint64) {
+func (com *Committee) NewBlockGenerated(block *core.Block) {
 	if com.to_reconfig {
 		// 关闭worker
 		com.worker.exitCh <- struct{}{}
 
+		seed, height := com.GetEthChainBlockHash(com.reconfig_seed_height)
 		msg := &core.InitReconfig{
 			Seed:       seed,
 			SeedHeight: height,
@@ -152,6 +154,7 @@ func (com *Committee) AddTBs(tbblock *beaconChain.TBBlock) {
 
 	// 收到特定高度的信标链区块后准备重组
 	if com.tbchain_height > 0 && com.tbchain_height%uint64(com.config.Height2Reconfig) == 0 {
+		com.reconfig_seed_height = com.tbchain_height
 		com.to_reconfig = true
 	}
 }
