@@ -453,6 +453,22 @@ func handleSendNewNodeTable2Client(dataBytes []byte) {
 	cfg.ComNodeTable = data
 }
 
+func handleReportErr(dataBytes []byte) {
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data core.ErrReport
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err, "dataBytes", data)
+	}
+
+	log.Info(fmt.Sprintf("Msg Received: %s", ReportError))
+
+	log.Error("got err report.", "fromAddr", data.NodeAddr, "errMsg", data.Err)
+}
+
 func handleConnection(conn net.Conn, ln net.Listener) {
 	defer conn.Close()
 
@@ -539,6 +555,9 @@ func handleConnection(conn net.Conn, ln net.Listener) {
 
 		case NodeSendInfo:
 			handleNodeSendInfo(msg.Data)
+
+		case ReportError:
+			handleReportErr(msg.Data)
 
 		default:
 			log.Error("Unknown message type received", "msgType", msg.MsgType)

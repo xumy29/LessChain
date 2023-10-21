@@ -120,7 +120,8 @@ func DeployContract(client *ethclient.Client,
 
 var (
 	// lastNonce map[uint32]uint64 = make(map[uint32]uint64)
-	lastNonce map[string]uint64 = make(map[string]uint64)
+	// lastNonce map[string]uint64 = make(map[string]uint64)
+	lastNonce uint64 = 0
 	// 通过该锁使不同委员会的AddTB方法串行执行，避免一些并发调用导致的问题
 	call_lock      sync.Mutex
 	lowestGasPrice *big.Int = big.NewInt(0)
@@ -138,7 +139,6 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 
 	var comID uint32 = 0
 	comID = tb.ShardID
-	nodeAddr := cfg.ComNodeTable[comID][nodeID]
 
 	// 构造调用数据
 	callData, err := abi.Pack("addTB", *tb, sigs, vrfs, seedHeight, signers)
@@ -164,8 +164,7 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 	auth.Value = big.NewInt(0)       // 设置发送的以太币数量（如果有的话）
 
 	var nonce uint64
-	_, ok := lastNonce[nodeAddr]
-	if !ok {
+	if lastNonce == 0 {
 		// 如果在之前的交易中使用了相同的账户地址，而这些交易还未被确认（被区块打包），那么下一笔交易的nonce应该是
 		// 当前账户的最新nonce+1。
 		nonce, err = client.PendingNonceAt(context.Background(), auth.From)
@@ -175,10 +174,10 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 			return err
 		}
 
-		lastNonce[nodeAddr] = nonce
+		lastNonce = nonce
 	} else {
-		nonce = lastNonce[nodeAddr] + 1
-		lastNonce[nodeAddr] = nonce
+		nonce = lastNonce + 1
+		lastNonce = nonce
 	}
 	// nonce_lock.Unlock()
 
@@ -216,7 +215,7 @@ func AddTB(client *ethclient.Client, contractAddr common.Address,
 					return err
 				} else {
 					nonce = nonce + 1
-					lastNonce[nodeAddr] = nonce
+					lastNonce = nonce
 				}
 
 			} else {
@@ -266,9 +265,7 @@ func AdjustRecordedAddrs(client *ethclient.Client, contractAddr common.Address,
 	auth.Value = big.NewInt(0)       // 设置发送的以太币数量（如果有的话）
 
 	var nonce uint64
-	nodeAddr := cfg.ComNodeTable[comID][nodeID]
-	_, ok := lastNonce[nodeAddr]
-	if !ok {
+	if lastNonce == 0 {
 		// 如果在之前的交易中使用了相同的账户地址，而这些交易还未被确认（被区块打包），那么下一笔交易的nonce应该是
 		// 当前账户的最新nonce+1。
 		nonce, err = client.PendingNonceAt(context.Background(), auth.From)
@@ -278,10 +275,10 @@ func AdjustRecordedAddrs(client *ethclient.Client, contractAddr common.Address,
 			return err
 		}
 
-		lastNonce[nodeAddr] = nonce
+		lastNonce = nonce
 	} else {
-		nonce = lastNonce[nodeAddr] + 1
-		lastNonce[nodeAddr] = nonce
+		nonce = lastNonce + 1
+		lastNonce = nonce
 	}
 	// nonce_lock.Unlock()
 
@@ -319,7 +316,7 @@ func AdjustRecordedAddrs(client *ethclient.Client, contractAddr common.Address,
 					return err
 				} else {
 					nonce = nonce + 1
-					lastNonce[nodeAddr] = nonce
+					lastNonce = nonce
 				}
 
 			} else {

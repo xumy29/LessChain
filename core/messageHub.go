@@ -55,4 +55,6 @@ const (
 	MsgTypeNodeSendInfo2Leader
 
 	MsgTypeClearConnection
+
+	MsgTypeReportError
 )

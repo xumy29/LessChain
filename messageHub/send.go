@@ -912,6 +912,35 @@ func clearConnection(msg interface{}) {
 	log.Debug(fmt.Sprintf("remove unused tcp connections. before count: %d after count: %d", before_cnt, len(conns2Node.connections)))
 }
 
+func reportError(clientID uint32, msg interface{}) {
+	data := msg.(*core.ErrReport)
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+
+	// 序列化后的消息
+	msg_bytes := packMsg(ReportError, buf.Bytes())
+
+	addr := cfg.ClientTable[clientID]
+	conn, ok := conns2Node.Get(addr)
+	if !ok {
+		conn, err = dial(addr)
+		if err != nil {
+			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+				"reportError", -1, -1, -1, addr))
+		}
+		conns2Node.Add(addr, conn)
+	}
+	writer := bufio.NewWriter(conn)
+	writer.Write(msg_bytes)
+	writer.Flush()
+
+	log.Info("Msg Sent: reportError", "toClientID", clientID, "err", data.Err)
+}
+
 /* 用于分片、委员会、客户端、信标链传送消息 */
 func (hub *GoodMessageHub) Send(msgType uint32, id uint32, msg interface{}, callback func(res ...interface{})) {
 	switch msgType {
@@ -996,6 +1025,8 @@ func (hub *GoodMessageHub) Send(msgType uint32, id uint32, msg interface{}, call
 
 	case core.MsgTypeClearConnection:
 		clearConnection(msg)
+	case core.MsgTypeReportError:
+		reportError(id, msg)
 	}
 
 }

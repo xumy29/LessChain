@@ -34,4 +34,6 @@ const (
 	CSendOldrequest    string = "CSendOldrequest"
 
 	NodeSendInfo string = "NodeSendInfo"
+
+	ReportError string = "ReportError"
 )

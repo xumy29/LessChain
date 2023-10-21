@@ -68,6 +68,7 @@ func (com *Committee) Start(nodeId uint32) {
 		com.worker = worker
 		worker.setCommittee(com)
 	}
+	log.Debug("com.Start", "comID", com.Node.NodeInfo.ComID)
 }
 
 func (com *Committee) StartWorker() {
@@ -168,8 +169,8 @@ func (com *Committee) AdjustRecordedAddrs(addrs []common.Address, vrfs [][]byte,
 }
 
 func (com *Committee) HandleClientSendtx(txs []*core.Transaction) {
-	if com.txPool == nil {
-		com.txPool = NewTxPool(com.Node.NodeInfo.ShardID)
+	if com.txPool == nil { // 交易池尚未创建，丢弃该交易
+		return
 	}
 	com.txPool.AddTxs(txs)
 }

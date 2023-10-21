@@ -349,6 +349,18 @@ func (n *Node) updateNodeInfo(newNodeInfo *core.NodeInfo) {
 }
 
 func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, oldComLeaderAddr string) {
+	// 更新委员会节点数量
+	n.comAllNodeNum = len(newCom2Results[n.NodeInfo.ComID])
+	log.Debug(fmt.Sprintf("after reconfiguration, com %d has %d nodes in total.", n.NodeInfo.ComID, n.comAllNodeNum))
+	if n.comAllNodeNum < 4 { // pbft协议至少需要包括leader在内的3个节点
+		report := &core.ErrReport{
+			NodeAddr: n.NodeInfo.NodeAddr,
+			Err:      fmt.Sprintf("after reconfiguration, com %d has less than 4 nodes, not enough for pbft consensus", n.NodeInfo.ComID),
+		}
+		n.messageHub.Send(core.MsgTypeReportError, 0, report, nil)
+		log.Error(fmt.Sprintf("after reconfiguration, com %d has less than 4 nodes, not enough for pbft consensus", n.NodeInfo.ComID))
+	}
+
 	// 更新合约上的地址
 	if utils.IsComLeader(n.NodeInfo.NodeID) {
 		comResults := newCom2Results[n.NodeInfo.ComID]
@@ -367,7 +379,7 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 	// 重新启动委员会和worker、新建交易池
 	n.com.Start(n.NodeInfo.NodeID)
 
-	if n.NodeInfo.NodeID == 0 { // 每个委员会的leader都会给客户端发送新表
+	if utils.IsComLeader(n.NodeInfo.NodeID) { // 每个委员会的leader都会给客户端发送新表
 		n.messageHub.Send(core.MsgTypeSendNewNodeTable2Client, 0, cfg.ComNodeTable, nil)
 	}
 	// 同步交易池
@@ -392,13 +404,6 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 			// 等待交易池更新后再启动worker
 			<-getPoolTxsCh
 		}
-	}
-
-	// 更新委员会节点数量
-	n.comAllNodeNum = len(newCom2Results[n.NodeInfo.ComID])
-	log.Debug(fmt.Sprintf("after reconfiguration, com %d has %d nodes in total.", n.NodeInfo.ComID, n.comAllNodeNum))
-	if n.comAllNodeNum < 3 { // pbft协议至少需要包括leader在内的3个节点
-		log.Error(fmt.Sprintf("after reconfiguration, com %d has less than 3 nodes, not enough for pbft consensus", n.NodeInfo.ComID))
 	}
 
 	// 重置pbft

@@ -111,8 +111,8 @@ func SubscribeEvents(port int, contractAddr common.Address, eventChannel chan *E
 		event.Eth_height = uint64(eth_height)
 		if event.Msg == "addTB" {
 			eventChannel <- event
-		} else if event.Msg == "insufficient valid signatures" {
-			log.Error("insufficient valid signatures", "shardID", event.ShardID, "height", event.Height)
+		} else if strings.Contains(event.Msg, "addTB...") || strings.Contains(event.Msg, "adjustAddr") {
+			log.Error(event.Msg)
 		}
 	}
 }

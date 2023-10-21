@@ -171,3 +171,8 @@ type SendOldMessage struct {
 	OldRequest     []*PbftRequest
 	ReceiverInfo   *NodeInfo
 }
+
+type ErrReport struct {
+	NodeAddr string
+	Err      string
+}
