@@ -336,6 +336,9 @@ func (n *Node) HandleSendReconfigResults2ComNodes(data *map[uint32]*core.ComReco
 		com2Leader[shardID] = list[0]
 	}
 	log.Debug(fmt.Sprintf("NewComLeaders：%v", com2Leader))
+	for shardID, list := range cfg.ComNodeTable {
+		log.Debug(fmt.Sprintf("comID: %d nodeAddrs: %v", shardID, list))
+	}
 
 	n.EndReconfig(newCom2Results, oldComLeaderAddr)
 }
@@ -369,22 +372,26 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 	}
 	// 同步交易池
 	if utils.IsComLeader(n.NodeInfo.NodeID) {
-		getPoolTxsCh := make(chan struct{}, 1)
-		callback := func(res ...interface{}) {
-			poolTx := res[0].(*core.PoolTx)
+		if n.NodeInfo.NodeAddr == oldComLeaderAddr {
+			poolTx := n.com.HandleGetPoolTx(nil)
 			n.com.SetPoolTx(poolTx)
-			getPoolTxsCh <- struct{}{}
-		}
-		request := &core.GetPoolTx{
-			ServerAddr:   oldComLeaderAddr,
-			ClientAddr:   n.NodeInfo.NodeAddr,
-			RequestComID: n.NodeInfo.ComID,
-		}
+		} else {
+			getPoolTxsCh := make(chan struct{}, 1)
+			callback := func(res ...interface{}) {
+				poolTx := res[0].(*core.PoolTx)
+				n.com.SetPoolTx(poolTx)
+				getPoolTxsCh <- struct{}{}
+			}
+			request := &core.GetPoolTx{
+				ServerAddr:   oldComLeaderAddr,
+				ClientAddr:   n.NodeInfo.NodeAddr,
+				RequestComID: n.NodeInfo.ComID,
+			}
 
-		n.messageHub.Send(core.MsgTypeGetPoolTx, n.NodeInfo.ComID, request, callback)
-		// 等待交易池更新后再启动worker
-		<-getPoolTxsCh
-
+			n.messageHub.Send(core.MsgTypeGetPoolTx, n.NodeInfo.ComID, request, callback)
+			// 等待交易池更新后再启动worker
+			<-getPoolTxsCh
+		}
 	}
 
 	// 更新委员会节点数量
@@ -394,12 +401,17 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 		log.Error(fmt.Sprintf("after reconfiguration, com %d has less than 3 nodes, not enough for pbft consensus", n.NodeInfo.ComID))
 	}
 
+	// 重置pbft
+	if utils.IsComLeader(n.NodeInfo.NodeID) {
+		n.pbftNode.Reset()
+	}
+
 	if utils.IsComLeader(n.NodeInfo.NodeID) {
 		n.com.StartWorker()
 	}
 
 	// 删除无用的长连接，释放系统资源，防止某些端口被强制关闭
-	n.messageHub.Send(core.MsgTypeClearConnection, 0, n.NodeInfo, nil)
+	// n.messageHub.Send(core.MsgTypeClearConnection, 0, n.NodeInfo, nil)
 
 	// todo
 }

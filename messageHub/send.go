@@ -499,6 +499,9 @@ func sendPbftMsg(comID uint32, msg interface{}, msgType string) {
 	case CSendOldrequest:
 		data := msg.(*core.SendOldMessage)
 		err = enc.Encode(data)
+		msg_bytes := packMsg(msgType, buf.Bytes())
+		sendOldRequests(data, msg_bytes)
+		return
 	default:
 		log.Error("unknown pbft msg type", "type", msgType)
 	}
@@ -513,7 +516,7 @@ func sendPbftMsg(comID uint32, msg interface{}, msgType string) {
 	var i uint32
 	nodeAddr := node_ref.NodeInfo.NodeAddr
 	for i = 0; i < uint32(shardSize); i++ {
-		if msgType == CReply && i > 0 { // reply只需发给leader
+		if i > 0 && (msgType == CReply || msgType == CRequestOldrequest) { // reply、CRequestOldrequest 只需发给leader
 			return
 		}
 
@@ -544,6 +547,21 @@ func sendPbftMsg(comID uint32, msg interface{}, msgType string) {
 			log.Info(fmt.Sprintf("Msg Sent: %s ComID: %v, to nodeID: %v", msgType, comID, i))
 		}
 	}
+}
+
+func sendOldRequests(data *core.SendOldMessage, msgBytes []byte) {
+	addr := cfg.ComNodeTable[data.ReceiverInfo.ComID][data.ReceiverInfo.NodeID]
+
+	conn, ok := conns2Node.Get(addr)
+	if !ok {
+		conn = dial(addr)
+		conns2Node.Add(addr, conn)
+	}
+	writer := bufio.NewWriter(conn)
+	writer.Write(msgBytes)
+	writer.Flush()
+
+	log.Info(fmt.Sprintf("Msg Sent: %s ComID: %v, to nodeID: %v", CSendOldrequest, data.ReceiverInfo.ComID, data.ReceiverInfo.NodeID))
 }
 
 func sendNodeInfo(comID uint32, msg interface{}) {
@@ -598,8 +616,9 @@ func leaderInitReconfig(comID uint32, msg interface{}) {
 		writer := bufio.NewWriter(conn)
 		writer.Write(msg_bytes)
 		writer.Flush()
+		log.Info(fmt.Sprintf("Msg Sent: %s ComID: %d nodeID: %d", LeaderInitReconfig, comID, i))
 	}
-	log.Info(fmt.Sprintf("Msg Sent: %s ComID: %d", LeaderInitReconfig, comID))
+
 }
 
 func sendReconfigResult2Leader(comID uint32, msg interface{}) {

@@ -305,6 +305,7 @@ func (com *Committee) SetPoolTx(poolTx *core.PoolTx) {
 
 	com.txPool.SetPending(poolTx.Pending)
 	com.txPool.SetPendingRollback(poolTx.PendingRollback)
+	log.Debug(fmt.Sprintf("GetPoolTx pendingLen: %d pendingRollbackLen: %d", len(poolTx.Pending), len(poolTx.PendingRollback)))
 }
 
 func (com *Committee) HandleGetPoolTx(request *core.GetPoolTx) *core.PoolTx {

@@ -17,5 +17,6 @@ type Committee interface {
 	AdjustRecordedAddrs(addrs []common.Address, vrfs [][]byte, seedHeight uint64)
 	SetPoolTx(*PoolTx)
 	SetOldTxPool()
+	HandleGetPoolTx(*GetPoolTx) *PoolTx
 	UpdateTbChainHeight(height uint64)
 }

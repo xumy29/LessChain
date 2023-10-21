@@ -169,5 +169,5 @@ type SendOldMessage struct {
 	SeqStartHeight uint64
 	SeqEndHeight   uint64
 	OldRequest     []*PbftRequest
-	SenderInfo     *NodeInfo
+	ReceiverInfo   *NodeInfo
 }

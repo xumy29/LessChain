@@ -314,7 +314,7 @@ func handlePbftMsg(dataBytes []byte, dataType string) {
 		if err != nil {
 			log.Error("decodeDataErr", "err", err, "dataBytes", data)
 		}
-		log.Info(fmt.Sprintf("Msg Received: %s ComID: %v from nodeID: %v", dataType, node_ref.NodeInfo.ComID, data.SenderInfo.NodeID))
+		log.Info(fmt.Sprintf("Msg Received: %s ComID: %v", dataType, node_ref.NodeInfo.ComID))
 		go pbftNode_ref.HandleSendOldSeq(&data)
 	}
 
