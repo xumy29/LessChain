@@ -7,6 +7,8 @@ import seaborn as sns
 
 width = 6.5
 height = 4
+default_palette1 = ['#3B4970', '#697BAE', '#D4E4F8', '#F8EDE8', '#8C3A4B'] # ganyu
+default_palette = ['#2F2321', '#AA4F23', '#FED875', '#F8EBDC', '#6C627A'] # zhongli
 
 def getStorePath():
     # 获取当前Python文件的绝对路径
@@ -23,10 +25,31 @@ def motivation_security():
     '''
     plt.rcParams['pdf.fonttype'] = 42
     plt.rcParams['ps.fonttype'] = 42
-    plt.rcParams['figure.figsize'] = (9, 4)
+    plt.rcParams['figure.figsize'] = (10, 4)
 
-    ## 第一幅图，随着交易注入，失效分片导致的累积失效交易数量逐渐增多
+    ## 随着分片数量增加，攻击者令单个分片失效所需的力量逐渐减少
     plt.subplot(1,2,1)
+    plt.text(0.42, -0.3, '(a)', transform=plt.gca().transAxes, size=18)
+    ### 假设分片内运行PBFT协议
+    shardNums = np.array(range(1,9))
+    powers_to_hinder = 1/3 / shardNums
+    powers_to_control = 2/3 / shardNums
+
+    # plt.fill_between(shardNums, powers_to_control, color=default_palette1[4], alpha=0.4)
+    # plt.fill_between(shardNums, powers_to_hinder, color=default_palette1[1], alpha=0.4)
+    plt.plot(shardNums, powers_to_control, label="Level2: manipulate\nconsensus",color=default_palette[4], linewidth=3)
+    plt.plot(shardNums, powers_to_hinder, label="Level1: hinder\nconsensus", color=default_palette[1], linewidth=3)
+
+    plt.xticks(fontsize=16)
+    plt.yticks([0.1,0.2,0.3,0.4,0.5,0.6],['10%','20%','30%','40%','50%','60%'],fontsize=16)
+    plt.xlabel('# of shards', fontsize=18)
+    plt.ylabel('votes to attack one shard     ', fontsize=18)
+    plt.legend(fontsize=15, loc='center', bbox_to_anchor=(0.58,0.75))
+    plt.tight_layout()
+
+    ## 随着交易注入，失效分片导致的累积失效交易数量逐渐增多
+    plt.subplot(1,2,2)
+    plt.text(0.5, -0.3, '(b)', transform=plt.gca().transAxes, size=18)
     shardNums = np.array([1,2,4,8])
     data = np.array([
         [500,1000,1500,2000,2500,3000,3500,4000,4500,5000],
@@ -36,32 +59,17 @@ def motivation_security():
         ])
     for i in range(len(shardNums)):
         shardData = data[i]
-        plt.plot(data[0], data[i], label="ShardNum="+str(shardNums[i]))
+        plt.fill_between(data[0], data[i], color=default_palette[i], alpha=0.4)
+        plt.plot(data[0], data[i], label="ShardNum="+str(shardNums[i]), color=default_palette[i], alpha=1, linewidth=2)
     plt.xticks(fontsize=16)
     plt.yticks(fontsize=16)
     plt.xlabel('# of all txs', fontsize=18)
-    plt.ylabel('# of directly affected txs', fontsize=18)
-    plt.legend(fontsize=15, loc='center', bbox_to_anchor=(0.32,0.75))
-    plt.tight_layout()
-    # plt.savefig('experiments/figs/motivation_security_1.png')
-    # plt.show()
-
-    ## 第二幅图，随着分片数量增加，攻击者令单个分片失效所需的力量逐渐减少
-    plt.subplot(1,2,2)
-    ### 假设分片内运行PBFT协议
-    shardNums = np.array(range(1,9))
-    powers_to_hinder = 1/3 / shardNums
-    powers_to_control = 2/3 / shardNums
-    plt.plot(shardNums, powers_to_hinder, label="level1: hinder")
-    plt.plot(shardNums, powers_to_control, label="Level2: manipulate")
-    plt.xticks(fontsize=16)
-    plt.yticks(fontsize=16)
-    plt.xlabel('# of shards', fontsize=18)
-    plt.ylabel('power needed to attack one shard    ', fontsize=14)
-    plt.legend(fontsize=15, loc='center', bbox_to_anchor=(0.58,0.75))
+    plt.ylabel('# of directly affected txs    ', fontsize=18)
+    plt.legend(fontsize=14, loc='center', bbox_to_anchor=(0.27,0.77))
     plt.tight_layout()
 
     plt.savefig('experiments/figs/motivation_security.png')
+    plt.savefig('experiments/figs/motivation_security.pdf')
     plt.show()
 
 
@@ -76,7 +84,7 @@ def TPS(dataPath):
     tps,_,_,_ = getData(shards,dataPath)
     
     # colors = ['#26697d', '#82c6d5', '#bceed4', '#f2e2a9', '#fffff3']
-    bar = plt.bar(x=shards, height=tps, width=3, alpha=0.8)
+    bar = plt.bar(x=shards, height=tps, width=3, alpha=1, color=default_palette)
     plt.bar_label(bar, labels=tps, fontsize=16, padding=10)
     plt.plot(shards, tps, '.-', color='tab:red', markersize=12)
     
@@ -97,6 +105,8 @@ def TPS(dataPath):
     # 确保目录存在
     if not os.path.exists(os.path.dirname(storePath)):
         os.makedirs(os.path.dirname(storePath))
+    plt.savefig(storePath)
+    storePath = os.path.join(getStorePath(), 'figs', 'throughput.pdf')
     plt.savefig(storePath)
     plt.show()
 
@@ -131,8 +141,10 @@ def Latency(dataPath):
     shards = [2,8,16,24,32]
     
     lat_detail = getLatDetail(shards, dataPath)
-    palette = ['#26697d', '#82c6d5', '#bceed4', '#f2e2a9', '#fffff3']
+    # palette = ['#26697d', '#82c6d5', '#bceed4', '#f2e2a9', '#fffff3']
     # palette1 = ['#512324', '#d9de5e', '#888201', '#46a8a8', '#a8c7cb']
+    # zhongli
+    palette = default_palette
     x = []
     y = []
     for i in range(len(lat_detail)):
@@ -157,6 +169,8 @@ def Latency(dataPath):
     if not os.path.exists(os.path.dirname(storePath)):
         os.makedirs(os.path.dirname(storePath))
     plt.savefig(storePath)
+    storePath = os.path.join(getStorePath(), 'figs', 'latency.pdf')
+    plt.savefig(storePath)
     plt.show()
 
 def Workload4shard(dataPath):
@@ -164,7 +178,7 @@ def Workload4shard(dataPath):
     plt.rcParams['ps.fonttype'] = 42
     plt.rcParams['figure.figsize'] = (width, height)
     labels = ['S = 8', 'S = 16', 'S = 32']
-    colors = ['tab:red', 'tab:orange', 'tab:blue']
+    colors = [default_palette[1], default_palette[2], default_palette[4]]
     shards = [8,16,32]
     shardIndexs = []
     for shard in shards:
@@ -195,6 +209,8 @@ def Workload4shard(dataPath):
     # 确保目录存在
     if not os.path.exists(os.path.dirname(storePath)):
         os.makedirs(os.path.dirname(storePath))
+    plt.savefig(storePath)
+    storePath = os.path.join(getStorePath(), 'figs', 'workload.pdf')
     plt.savefig(storePath)
     plt.show()
 
@@ -241,14 +257,13 @@ def TPS_inject(dataPath1):
     plt.rcParams['figure.figsize'] = (width, height)
     speeds = [[2000,4000,8000,10000,12000,16000], [500,1000,2000,2500,3000,4000]]
     xticks = [['2k', '4k', '8k', '10k', '12k', '16k'], ['0.5k', '1k', '2k', '2.5k', '3k', '4k']]
-    shards = [32,8]
+    shards = [32]
     for i in range(len(shards)):
-        plt.grid('on', alpha=0.5, axis='y')
         dataPath = os.path.join(getStorePath(), dataPath1, 'shard'+str(shards[i])+'/')
         tps,_,_,_ = getData(speeds[i],dataPath)
         
         # colors = ['#26697d', '#82c6d5', '#bceed4', '#f2e2a9', '#fffff3']
-        bar = plt.bar(x=speeds[i], height=tps, width=shards[i]*35, alpha=0.8)
+        bar = plt.bar(x=speeds[i], height=tps, width=shards[i]*35, alpha=1, color=default_palette[4])
         plt.bar_label(bar, labels=tps, fontsize=16, padding=10)
         plt.plot(speeds[i], tps, '.-', color='tab:red', markersize=12)
         
@@ -258,11 +273,7 @@ def TPS_inject(dataPath1):
         # plt.yticks([0,1000,2000,3000,4000,5000], ['0', '1k', '2k', '3k', '4k', '5k'], fontsize=16)
         plt.xlabel('Inject speed (TX/s)', fontsize=18)
         plt.ylabel('Throughput (TX/s)', fontsize=18)
-        ax = plt.gca()
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-        plt.tick_params(bottom=False, top=False, left=False, right=False)
+
         plt.tight_layout()
         # plt.savefig('figs/throughput.pdf')
         storePath = os.path.join(getStorePath(), 'figs', 'injectSpeed_s' + str(shards[i]) + '.png')
@@ -270,8 +281,62 @@ def TPS_inject(dataPath1):
         if not os.path.exists(os.path.dirname(storePath)):
             os.makedirs(os.path.dirname(storePath))
         plt.savefig(storePath)
+        storePath = os.path.join(getStorePath(), 'figs', 'injectSpeed_s' + str(shards[i]) + '.pdf')
+        plt.savefig(storePath)
         plt.show()
+
+
+
+
+def TPS_inject1(dataPath1):
+    plt.rcParams['pdf.fonttype'] = 42
+    plt.rcParams['ps.fonttype'] = 42
+    plt.rcParams['figure.figsize'] = (width, height)
+    speeds = [[2000, 4000, 8000, 10000, 12000, 16000], [500, 1000, 2000, 2500, 3000, 4000]]
+    xticks = [['2k', '4k', '8k', '10k', '12k', '16k'], ['0.5k', '1k', '2k', '2.5k', '3k', '4k']]
+    shards = [32]
     
+    for i in range(len(shards)):
+        dataPath = os.path.join(getStorePath(), dataPath1, 'shard'+str(shards[i])+'/')
+        tps, _, _, _ = getData(speeds[i], dataPath)
+        
+        # 画线和填充山坡
+        plt.plot(speeds[i], tps, '.-', color=default_palette[1], linewidth=4, markersize=12)  
+        plt.fill_between(speeds[i], tps, color=default_palette[2], alpha=0.8)
+
+        # 在每个点上标注数值
+        for x, y in zip(speeds[i], tps):
+            plt.text(x, y, f'{y}', color='black', ha='center', va='bottom', fontsize=16)
+
+        
+        # 设置 x 和 y 轴标签和字体大小
+        plt.xticks(speeds[i], xticks[i], fontsize=16)
+        plt.yticks(fontsize=16)
+        plt.xlabel('Inject speed (TX/s)', fontsize=18)
+        plt.ylabel('Throughput (TX/s)', fontsize=18)
+
+        ax = plt.gca()
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        # ax.spines['bottom'].set_visible(False)
+        plt.tick_params(top=False, left=False, right=False)
+        
+        # 确保存储路径存在
+        storePath = os.path.join(getStorePath(), 'figs', 'injectSpeed_s' + str(shards[i]))
+        os.makedirs(os.path.dirname(storePath), exist_ok=True)
+        
+        plt.tight_layout()
+        # 保存图片
+        plt.savefig(f'{storePath}.png')
+        plt.savefig(f'{storePath}.pdf')
+
+        
+        # 显示图表
+        plt.show()
+
+
+
     
 def Latency_inject(dataPath1):
     plt.rcParams['pdf.fonttype'] = 42
@@ -311,6 +376,8 @@ def Latency_inject(dataPath1):
         if not os.path.exists(os.path.dirname(storePath)):
             os.makedirs(os.path.dirname(storePath))
         plt.savefig(storePath)
+        storePath = os.path.join(getStorePath(), 'figs', 'injectSpeed_latency_s' + str(shards[i]) + '.pdf')
+        plt.savefig(storePath)
         plt.show()
 
 # 数据来源：experiments/results/
@@ -324,7 +391,7 @@ def RollBackRate(dataPath):
     xticks = [2,4,6,8,10]
     labels = ['S = 8', 'S = 16', 'S = 32']
     # colors = ['#82c6d5', '#f2e2a9', '#fffff3']
-    colors = ['tab:red', 'tab:orange', 'tab:blue']
+    colors = [default_palette[1], default_palette[2], default_palette[4]]
     linestyles = ['>-', '.-', 's-']
     markersizes = [7,12,6]
     
@@ -335,20 +402,22 @@ def RollBackRate(dataPath):
             cur_shard = [shards[i]]
             tps,latency,rate,_ = getData(cur_shard, path)
             # rates.append(late)
-            rates.append(latency)
+            rates.append(rate)
         plt.plot(xticks, rates, linestyles[i], label=labels[i], color=colors[i], markersize=markersizes[i])
     plt.xticks(xticks, ['6', '9', '12', '18', 'infinite'], fontsize=16)
     plt.yticks(fontsize=16)
-    plt.xlabel('Height to rollback', fontsize=18)
+    plt.xlabel('Timeout time', fontsize=18)
     plt.ylabel('Prop. of TXs rollback', fontsize=18)
-    plt.ylabel('Latency (s)', fontsize=18)
+    # plt.ylabel('Latency (s)', fontsize=18)
     # plt.ylabel('Throughput (TX/s)', fontsize=18)
     legend = plt.legend(fontsize=16, loc='center',bbox_to_anchor=(0.7,0.45))
     legend.set_draggable(True)
     plt.tight_layout()
     # plt.savefig('figs/rollbackRate.pdf')
-    # storePath = os.path.join(getStorePath(), 'figs/rollbackRate.png')
-    storePath = os.path.join(getStorePath(), 'figs/rollbackRate_latency.png')
+    storePath = os.path.join(getStorePath(), 'figs/rollbackRate.png')
+    # storePath = os.path.join(getStorePath(), 'figs/rollbackRate_latency.png')
+    plt.savefig(storePath)
+    storePath = os.path.join(getStorePath(), 'figs/rollbackRate.pdf')
     plt.savefig(storePath)
     plt.show()
     
@@ -380,6 +449,8 @@ def RollBackRateV2(dataPath):
     # plt.savefig('figs/rollbackRate.pdf')
     storePath = os.path.join(getStorePath(), 'figs/rollbackRateV2.png')
     plt.savefig(storePath)
+    storePath = os.path.join(getStorePath(), 'figs/rollbackRateV2.pdf')
+    plt.savefig(storePath)
     plt.show()
 
 
@@ -392,11 +463,9 @@ def Reconfig(dataPath):
     reconfig_height = [4,6,8,2000]
     x_ticks = [2,4,6,8]
     labels = ['S = 8','S = 32']
-    colors = ['tab:blue', 'tab:red', 'tab:green', 'tab:brown']
+    colors = default_palette
     linestyles = ['.-', 's-', '>--', 'x-']
     markersizes = [16,6,8,8]
-
-    
     
     for i in range(len(shards)):
         fig, ax1 = plt.subplots()  # 创建原始的figure和axis
@@ -416,7 +485,7 @@ def Reconfig(dataPath):
         ax1.set_xticks([2,4,6,8])
         ax1.set_xticklabels(['4', '6', '8', 'infinite'])
         ax1.tick_params(axis='both', labelsize=16)
-        ax1.set_xlabel('Height to reconfig', fontsize=18)
+        ax1.set_xlabel('Reconfiguration interval', fontsize=18)
         ax1.set_ylabel('Throughput (TX/s)', fontsize=18)
         
         ax2.set_ylabel('Latency (s)', fontsize=18)
@@ -425,14 +494,75 @@ def Reconfig(dataPath):
         # 合并两个轴的图例
         lines, labels = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
-        legend = ax2.legend(lines + lines2, labels + labels2, fontsize=14, loc='center',bbox_to_anchor=(0.52,0.2))
+        legend = ax2.legend(lines + lines2, labels + labels2, fontsize=14, loc='center',bbox_to_anchor=(0.52,0.17))
         legend.set_draggable(True)
         
         plt.tight_layout()
     
         storePath = os.path.join(getStorePath(), 'figs/reconfig_shard'+str(shards[i])+'.png')
         plt.savefig(storePath)
+        storePath = os.path.join(getStorePath(), 'figs/reconfig_shard'+str(shards[i])+'.pdf')
+        plt.savefig(storePath)
         plt.show()
+
+def Reconfig1(dataPath):  
+    plt.rcParams['pdf.fonttype'] = 42
+    plt.rcParams['ps.fonttype'] = 42
+    plt.rcParams['figure.figsize'] = (width, height)
+    
+    shards = [32,8]
+    reconfig_height = [4,6,8,2000]
+    x_ticks = [2,4,6,8]
+    labels = ['S = 32','S = 8']
+    colors = default_palette
+    linestyles = ['.-', 's-', '>--', 'x-']
+    markersizes = [16,6,8,8]
+    
+    for i in range(1):
+        fig, ax1 = plt.subplots()  # 创建原始的figure和axis
+        ax2 = ax1.twinx()  # 创建第二个y轴
+        tpss = []
+        delays = []
+        for j in range(len(reconfig_height)):
+            path = os.path.join(getStorePath(), dataPath+'height'+str(reconfig_height[j])+'/')
+            cur_shards = [shards[i]]
+            tps, delay, _, _ = getData(cur_shards, path)
+            tpss.append(tps[0])
+            delays.append(delay[0])
+
+        print(tpss)
+        print(delays)
+        # 填充Throughput的山坡
+        ax1.fill_between(x_ticks, tpss, color=colors[0], alpha=0.3)
+        # 填充Latency的山坡
+        ax2.fill_between(x_ticks, delays, color=colors[1], alpha=0.3)
+
+        ax1.plot(x_ticks, tpss, linestyles[0], label="S = "+str(shards[i])+ " Throughput", color=colors[0], markersize=markersizes[0]) 
+        ax2.plot(x_ticks, delays, linestyles[2], label="S = "+str(shards[i])+ " Latency", color=colors[1], markersize=markersizes[2]) 
+    
+        ax1.set_xticks([2,4,6,8])
+        ax1.set_xticklabels(['4', '6', '8', 'infinite'])
+        ax1.tick_params(axis='both', labelsize=16)
+        ax1.set_xlabel('Reconfiguration interval', fontsize=18)
+        ax1.set_ylabel('Throughput (TX/s)', fontsize=18)
+        
+        ax2.set_ylabel('Latency (s)', fontsize=18)
+        ax2.tick_params(axis='y', labelsize=16)
+
+        # 合并两个轴的图例
+        lines, labels = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        legend = ax2.legend(lines + lines2, labels + labels2, fontsize=14, loc='center',bbox_to_anchor=(0.52,0.17))
+        legend.set_draggable(True)
+        
+        plt.tight_layout()
+    
+        storePath = os.path.join(getStorePath(), 'figs/reconfig_shard'+str(shards[i])+'.png')
+        plt.savefig(storePath)
+        storePath = os.path.join(getStorePath(), 'figs/reconfig_shard'+str(shards[i])+'.pdf')
+        plt.savefig(storePath)
+        plt.show()
+
 
 def ConfirmHeight(dataPath):
     plt.rcParams['pdf.fonttype'] = 42
@@ -477,20 +607,106 @@ def ConfirmHeight(dataPath):
     
     storePath = os.path.join(getStorePath(), 'figs/confirmHeight_tps.png')
     plt.savefig(storePath)
+    storePath = os.path.join(getStorePath(), 'figs/confirmHeight_tps.pdf')
+    plt.savefig(storePath)
     plt.show()
+
+
+def reconfig_security_S_n():
+    plt.rcParams['pdf.fonttype'] = 42
+    plt.rcParams['ps.fonttype'] = 42
+    # 获取当前文件的完整路径
+    current_file_path = os.path.realpath(__file__)
+    # 获取当前文件所在的目录
+    current_dir = os.path.dirname(current_file_path)
+    security = pd.read_csv(current_dir + '/SECURITY-malicious_rate=0.20-tolerance=0.33.csv', index_col=0)
+    # print(security)
+    # 去掉分片数为2的行
+    security = security[1:]
+
+    security = security.T
+    # print(security)
+    columns = security.columns.tolist()
+    rows = [] # 失败概率
+    indices = [] # 分片大小
+    for c in columns:
+        row = security[(security[c]<1e-6) & (security[c]>0)]
+        index = row.index.tolist()
+        index = list(map(int,index))
+        rows = rows + [row.iloc[0][c]]
+        indices = indices + [index[0]]
+    print(rows)
+    print(indices)
+    shards = list(map(int,columns))
+
+    colors = default_palette
+
+    # 子图 1
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    ax1.plot(shards, rows, '.-', color=colors[0], label='Failure probability', markersize=10)
+    ax1.set_xlabel('Number of Shards', fontsize=18)
+    ax1.set_ylabel('Failure probability', fontsize=18)
+    ax1.set_xticklabels(list(map(int,ax1.get_xticks())), fontsize=16)
+    # ax1.yaxis.get_major_formatter().set_powerlimits((1, 2))  # 将坐标轴的base number设置为一位，指数不超过两位
+    # print(ax1.get_yticks())
+
+    # ax1.set_yticklabels([0,2,4,6,8,10], fontsize=16)
+    # ax1.text(-5,1e-6,'1e-7',fontsize=16)
+
+    
+    ax1.set_ylim(-1e-7,1.7e-6)
+    ax1.set_yticklabels([0.0,0.2,0.4,0.6,0.8,1.0,1.2,1.4,1.6], fontsize=16)
+    ax1.text(-5,1.75e-6,'1e-6',fontsize=16)
+    
+
+    # 子图 2
+    ax2 = plt.twinx()
+    ax2.plot(shards, indices, 's--', color=colors[1], label='# of nodes in each shard')
+    ax2.set_ylabel('# of nodes in each committee', fontsize=18)
+    ax2.set_yticklabels(list(map(int,ax2.get_yticks())), fontsize=16)
+
+    # 直线
+    ax1.axhline(1e-6, linestyle = '--', color=colors[0], linewidth=2)
+    ax1.text(70,0.85e-6,'Theoretic upper bound', fontsize=16, color=colors[0])
+    # ax1.arrow(70,0.8e-6,70,0e-6,width=1e-7,shape='full')
+    # ax1.arrow(60, 0.8e-6, 0, 0.1e-6) # x,y,dx,dy
+
+    legend = fig.legend(loc='center', bbox_to_anchor=(0.55,0.1), bbox_transform=ax1.transAxes, fontsize=16)
+    legend.set_draggable(True)
+    
+    plt.tight_layout()
+    plt.savefig(current_dir + '/figs/security_S_n.pdf')
+    plt.savefig(current_dir + '/figs/security_S_n.png')
+    plt.show()
+    
+    # for i in range(len(rows)):
+    #     plt.plot(shards, rows[i], label=labels[i])
+    # plt.legend(fontsize=17, loc='center', bbox_to_anchor=(0.3,0.4))
+    # plt.xticks(fontsize=18)
+    # plt.yticks(fontsize=18)
+    # plt.xlabel('Number of shards', fontsize=20)
+    # plt.ylabel('Security', fontsize=20)
+    # plt.tight_layout()
+    # # plt.savefig('security.pdf')
+    # # plt.savefig('security.png')
+    # plt.show() 
 
 
 def main():
     # motivation_security()
+
     # TPS('results/tps1/')
     # Latency('results/tps1/')
-    # TPS_inject('results/injectSpeed1/')
-    # Latency_inject('results/injectSpeed1/')
     # Workload4shard('results/workload1/')
+
+    TPS_inject1('results/injectSpeed1/')
+    # TPS_inject('results/injectSpeed1/')
     # RollBackRate('results/rollback1/')
-    # RollBackRateV2('results/rollback1/')
     # Reconfig('results/reconfig/')
-    ConfirmHeight('results/confirmHeight/')
+    # Reconfig1('results/reconfig/')
+
+    # reconfig_security_S_n()
 
 if __name__ == "__main__":
     main()
