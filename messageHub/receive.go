@@ -9,6 +9,7 @@ import (
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/result"
+	"go-w3chain/utils"
 	"io"
 	"net"
 	"sync"
@@ -435,6 +436,46 @@ func handleGetPoolTx(dataBytes []byte, conn net.Conn) {
 	if err != nil {
 		log.Error("WriteError", "err", err)
 	}
+
+	log.Info(fmt.Sprintf("Msg response Sent: %s len(Pending): %d len(PendingRollback): %d", GetPoolTx, len(poolTx.Pending), len(poolTx.PendingRollback)))
+	log.Info(fmt.Sprintf("Analyse txPool size... sizeof txPool: %d", len(utils.EncodeAny(poolTx))))
+
+}
+
+func handleGetSyncData(dataBytes []byte, conn net.Conn) {
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data core.GetSyncData
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err, "dataBytes", data)
+	}
+
+	log.Info(fmt.Sprintf("Msg Received: %s syncMode: %s", GetSyncData, data.SyncType))
+
+	// 直接通过这个连接回复请求方
+	syncData := shard_ref.HandleGetSyncData(&data)
+	var buf1 bytes.Buffer
+	encoder := gob.NewEncoder(&buf1)
+	err = encoder.Encode(syncData)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+	msgBytes := buf1.Bytes()
+
+	// 前缀加上长度，防止粘包
+	networkBuf := make([]byte, 4+len(msgBytes))
+	binary.BigEndian.PutUint32(networkBuf[:4], uint32(len(msgBytes)))
+	copy(networkBuf[4:], msgBytes)
+	// 发送回复
+	_, err = conn.Write(networkBuf)
+	if err != nil {
+		log.Error("WriteError", "err", err)
+	}
+	log.Info(fmt.Sprintf("Msg response Sent: %s syncMode: %s len(states): %d len(blocks): %d", GetSyncData, data.SyncType, len(syncData.States), len(syncData.Blocks)))
+	log.Info(fmt.Sprintf("Analyse SyncData size... sizeof State(bytes): %d  sizeof Blocks(bytes): %d", len(utils.EncodeAny(syncData.States)), len(utils.EncodeAny(syncData.Blocks))))
 }
 
 func handleSendNewNodeTable2Client(dataBytes []byte) {
@@ -467,6 +508,22 @@ func handleReportErr(dataBytes []byte) {
 	log.Info(fmt.Sprintf("Msg Received: %s", ReportError))
 
 	log.Error("got err report.", "fromAddr", data.NodeAddr, "errMsg", data.Err)
+}
+
+func handleReportAny(dataBytes []byte) {
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data string
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err, "dataBytes", data)
+	}
+
+	log.Info(fmt.Sprintf("Msg Received: %s", ReportAny))
+
+	log.Info("got msg report.", "msg", data)
 }
 
 func handleConnection(conn net.Conn, ln net.Listener) {
@@ -542,6 +599,8 @@ func handleConnection(conn net.Conn, ln net.Listener) {
 			handleSendReconfigResults2ComNodes(msg.Data)
 		case GetPoolTx:
 			handleGetPoolTx(msg.Data, conn)
+		case GetSyncData:
+			handleGetSyncData(msg.Data, conn)
 		case SendNewNodeTable2Client:
 			handleSendNewNodeTable2Client(msg.Data)
 		// case SendTxPool:
@@ -558,6 +617,8 @@ func handleConnection(conn net.Conn, ln net.Listener) {
 
 		case ReportError:
 			handleReportErr(msg.Data)
+		case ReportAny:
+			handleReportAny(msg.Data)
 
 		default:
 			log.Error("Unknown message type received", "msgType", msg.MsgType)

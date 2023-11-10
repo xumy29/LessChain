@@ -84,13 +84,13 @@ func runNode(allCfg *cfg.Cfg) {
 	dataDir := cfg.DefaultDataDir()
 
 	// 创建节点
-	node := node.NewNode(dataDir, allCfg.ShardNum, shardId, comId, nodeId, allCfg.ShardSize, allCfg.ComAllNodeNum)
+	node := node.NewNode(dataDir, allCfg.ShardNum, shardId, comId, nodeId, allCfg.ShardSize, allCfg.ComAllNodeNum, allCfg.ReconfigMode)
 	defer closeNode(node)
 
 	// TODO：建立分片内连接
 
 	// 创建本节点对应的分片实例，用于执行分片的操作
-	shard := shard.NewShard(uint32(shardId), node)
+	shard := shard.NewShard(uint32(shardId), node, allCfg.FastsyncBlockNum)
 	node.SetShard(shard)
 
 	// 初始化分片中的账户状态

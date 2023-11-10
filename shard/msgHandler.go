@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go-w3chain/core"
 	"go-w3chain/log"
+	"go-w3chain/utils"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -105,4 +106,48 @@ func (s *Shard) HandleComSendBlock(data *core.ComSendBlock) {
 	} else {
 		log.Debug(fmt.Sprintf("shard execute txs done and verify trie root pass. current trie root: %x", trieRoot))
 	}
+}
+
+func (s *Shard) HandleGetSyncData(data *core.GetSyncData) *core.SyncData {
+	switch data.SyncType {
+	case "fastsync": // 只同步状态树和最近区块
+		// 状态树
+		states := make(map[common.Address]*types.StateAccount)
+		stateDB := s.blockchain.GetStateDB()
+		for address, _ := range s.activeAddrs {
+			accountState := &types.StateAccount{
+				Nonce:    stateDB.GetNonce(address),
+				Balance:  stateDB.GetBalance(address),
+				Root:     emptyRoot,
+				CodeHash: emptyCodeHash,
+			}
+			states[address] = accountState
+		}
+
+		// 最近区块
+		blocks := s.blockchain.AllBlocks()
+		syncBlockNum := utils.Min(len(blocks), s.fastsyncBlockNum)
+		blocks2sync := blocks[len(blocks)-syncBlockNum:]
+
+		syncData := &core.SyncData{
+			ClientAddr: data.ClientAddr,
+			States:     states,
+			Blocks:     blocks2sync,
+		}
+
+		return syncData
+
+	case "fullsync": // 同步全部区块
+		blocks := s.blockchain.AllBlocks()
+		syncData := &core.SyncData{
+			ClientAddr: data.ClientAddr,
+			States:     make(map[common.Address]*types.StateAccount),
+			Blocks:     blocks,
+		}
+
+		return syncData
+	default:
+		log.Error("unknown sync type", "type", data.SyncType)
+	}
+	return nil
 }

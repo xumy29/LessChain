@@ -888,6 +888,66 @@ func sendGetPoolTx(comID uint32, msg interface{}, callback func(...interface{}))
 	callback(poolTx)
 }
 
+func sendGetSyncData(comID uint32, msg interface{}, callback func(...interface{})) {
+	data := msg.(*core.GetSyncData)
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+
+	// 序列化后的消息
+	msg_bytes := packMsg(GetSyncData, buf.Bytes())
+
+	// 从分片的leader节点处获取
+	addr := data.ServerAddr
+	conn, ok := conns2Node.Get(addr)
+	if !ok {
+		conn, err = dial(addr)
+		if err != nil {
+			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+				"sendNewNodeTable2Client", -1, -1, -1, addr))
+		}
+		conns2Node.Add(addr, conn)
+	}
+	_, err = conn.Write(msg_bytes)
+	if err != nil {
+		log.Error("WriteError", "err", err)
+	}
+	log.Info(fmt.Sprintf("Msg Sent: %s syncMode: %v", GetSyncData, data.SyncType))
+
+	// 等待回复
+
+	// 首先读取消息长度的四个字节
+	lengthBuf := make([]byte, 4)
+	_, err = io.ReadFull(conn, lengthBuf)
+	if err != nil {
+		log.Error("ReadLengthError", "err", err)
+	}
+	// 解析这四个字节为int32来获取消息长度
+	msgLength := int(binary.BigEndian.Uint32(lengthBuf))
+
+	// 根据消息长度分配缓冲区
+	msgBuf := make([]byte, msgLength)
+	_, err = io.ReadFull(conn, msgBuf)
+	if err != nil {
+		log.Error("ReadMsgError", "err", err)
+	}
+
+	syncData := new(core.SyncData)
+	decodeBuf := bytes.NewReader(msgBuf)
+	decoder := gob.NewDecoder(decodeBuf)
+	err = decoder.Decode(syncData)
+	if err != nil {
+		log.Error("Failed to decode", "err", err)
+	}
+
+	log.Info(fmt.Sprintf("Msg Response Received: %s syncMode: %s", GetSyncData, data.SyncType))
+
+	callback(syncData)
+}
+
 // 清理多余的长连接
 func clearConnection(msg interface{}) {
 	nodeInfo := msg.(*core.NodeInfo)
@@ -930,7 +990,7 @@ func reportError(clientID uint32, msg interface{}) {
 		conn, err = dial(addr)
 		if err != nil {
 			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
-				"reportError", -1, -1, -1, addr))
+				reportError, -1, -1, -1, addr))
 		}
 		conns2Node.Add(addr, conn)
 	}
@@ -939,6 +999,35 @@ func reportError(clientID uint32, msg interface{}) {
 	writer.Flush()
 
 	log.Info("Msg Sent: reportError", "toClientID", clientID, "err", data.Err)
+}
+
+func reportAny(clientID uint32, msg interface{}) {
+	data := msg.(string)
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+
+	// 序列化后的消息
+	msg_bytes := packMsg(ReportAny, buf.Bytes())
+
+	addr := cfg.ClientTable[clientID]
+	conn, ok := conns2Node.Get(addr)
+	if !ok {
+		conn, err = dial(addr)
+		if err != nil {
+			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+				ReportAny, -1, -1, -1, addr))
+		}
+		conns2Node.Add(addr, conn)
+	}
+	writer := bufio.NewWriter(conn)
+	writer.Write(msg_bytes)
+	writer.Flush()
+
+	log.Info("Msg Sent: reportAny", "toClientID", clientID, "dataStr", data)
 }
 
 /* 用于分片、委员会、客户端、信标链传送消息 */
@@ -984,6 +1073,8 @@ func (hub *GoodMessageHub) Send(msgType uint32, id uint32, msg interface{}, call
 		sendReconfigResults2ComNodes(id, msg)
 	case core.MsgTypeGetPoolTx:
 		sendGetPoolTx(id, msg, callback)
+	case core.MsgTypeGetSyncData:
+		sendGetSyncData(id, msg, callback)
 	case core.MsgTypeComSendNewAddrs:
 		comSendNewAddrs(id, msg)
 	case core.MsgTypeSendNewNodeTable2Client:
@@ -1027,6 +1118,8 @@ func (hub *GoodMessageHub) Send(msgType uint32, id uint32, msg interface{}, call
 		clearConnection(msg)
 	case core.MsgTypeReportError:
 		reportError(id, msg)
+	case core.MsgTypeReportAny:
+		reportAny(id, msg)
 	}
 
 }

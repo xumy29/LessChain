@@ -5,6 +5,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 type Msg struct {
@@ -102,6 +103,19 @@ type GetPoolTx struct {
 	ServerAddr   string // 向该地址请求交易
 	ClientAddr   string // 交易发送回该地址
 	RequestComID uint32 // 请求该委员会的交易
+}
+
+type GetSyncData struct {
+	ServerAddr string
+	ClientAddr string
+	ShardID    uint32
+	SyncType   string
+}
+
+type SyncData struct {
+	ClientAddr string
+	States     map[common.Address]*types.StateAccount
+	Blocks     []*Block
 }
 
 type PoolTx struct {

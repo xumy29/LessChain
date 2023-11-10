@@ -23,6 +23,12 @@ type Shard struct {
 
 	messageHub      core.MessageHub
 	initialAddrList []common.Address // 分片初始时各节点的公钥地址，同时也是初始时对应委员会各节点的地址
+
+	// 状态树中一开始就已经创建了所有账户，但为了真实模拟同步时的状态树数据，用这个变量记录已经发生过交易的账户
+	// 同步状态树的时候，只发送这些发生过交易的账户
+	activeAddrs map[common.Address]int
+	// 同步模式是fastsync时，同步的区块数量
+	fastsyncBlockNum int
 }
 
 func (s *Shard) AddInitialAddr(addr common.Address, nodeID uint32) {
@@ -34,7 +40,7 @@ func (s *Shard) GetNodeAddrs() []common.Address {
 	return s.initialAddrList
 }
 
-func NewShard(shardID uint32, _node *node.Node) *Shard {
+func NewShard(shardID uint32, _node *node.Node, fastsyncBlockNum int) *Shard {
 	// 获取节点的数据库
 	chainDB := _node.GetDB()
 
@@ -54,9 +60,11 @@ func NewShard(shardID uint32, _node *node.Node) *Shard {
 		"nodeID", _node.NodeInfo.NodeID)
 
 	shard := &Shard{
-		Node:            _node,
-		initialAddrList: []common.Address{*_node.GetAccount().GetAccountAddress()},
-		blockchain:      bc,
+		Node:             _node,
+		initialAddrList:  []common.Address{*_node.GetAccount().GetAccountAddress()},
+		blockchain:       bc,
+		activeAddrs:      make(map[common.Address]int),
+		fastsyncBlockNum: fastsyncBlockNum,
 	}
 
 	return shard
@@ -236,6 +244,8 @@ func (s *Shard) executeTransactions(txs []*core.Transaction) common.Hash {
 	// log.Debug(fmt.Sprintf("shardTrieRoot: %x", stateDB.IntermediateRoot(false)))
 	for _, tx := range txs {
 		s.executeTransaction(tx, stateDB, now)
+		s.activeAddrs[*tx.Sender] += 1
+		s.activeAddrs[*tx.Recipient] += 1
 	}
 
 	root := stateDB.IntermediateRoot(false)

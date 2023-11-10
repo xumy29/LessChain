@@ -39,6 +39,8 @@ const (
 	MsgTypeSendReconfigResults2AllComLeaders
 	MsgTypeSendReconfigResults2ComNodes
 	MsgTypeGetPoolTx // 新leader向旧leader请求交易池中的交易
+	MsgTypeGetSyncData
+	MsgTypeShardSendFastSyncData
 	MsgTypeSendNewNodeTable2Client
 
 	//////////////////////
@@ -57,4 +59,5 @@ const (
 	MsgTypeClearConnection
 
 	MsgTypeReportError
+	MsgTypeReportAny
 )

@@ -23,6 +23,7 @@ const (
 	SendReconfigResults2AllComLeaders string = "SendReconfigResults2AllComLeaders"
 	SendReconfigResults2ComNodes      string = "SendReconfigResults2ComNodes"
 	GetPoolTx                         string = "GetPoolTx" // 新leader向旧leader请求交易池中的交易
+	GetSyncData                       string = "GetSyncData"
 	SendNewNodeTable2Client           string = "SendNewNodeTable2Client"
 
 	// pbft part
@@ -36,4 +37,5 @@ const (
 	NodeSendInfo string = "NodeSendInfo"
 
 	ReportError string = "ReportError"
+	ReportAny   string = "ReportAny"
 )

@@ -30,7 +30,7 @@ Start-Sleep -Seconds 3
 
 # 启动其他终端并运行相应的命令
 RunInNewTerminal "Set-Location $scriptPath; go build -o ./lessChain.exe; ./lessChain.exe -r booter -S $SHARD_NUM"
-Start-Sleep -Seconds 8
+Start-Sleep -Seconds 10
 RunInNewTerminal "Set-Location $scriptPath; ./lessChain.exe -r client -S $SHARD_NUM"
 Start-Sleep -Seconds 1
 
@@ -38,7 +38,7 @@ Start-Sleep -Seconds 1
 0..($SHARD_NUM-1) | ForEach-Object {
     $shardIndex = $_
     RunInNewTerminal "Set-Location $scriptPath; ./lessChain.exe -r node -S $SHARD_NUM -s $shardIndex -n 0"
-    Start-Sleep -Seconds 2
+    # Start-Sleep -Seconds 2
     1..($SHARD_ALL_NODE_NUM-1) | ForEach-Object {
         $nodeIndex = $_
         RunInNewTerminal "Set-Location $scriptPath; ./lessChain.exe -r node -S $SHARD_NUM -s $shardIndex -n $nodeIndex"

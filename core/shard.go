@@ -15,6 +15,7 @@ type Shard interface {
 	AddInitialAddr(addr common.Address, nodeID uint32)
 	GetNodeAddrs() []common.Address
 	AddBlock(*Block)
+	HandleGetSyncData(*GetSyncData) *SyncData
 
 	SetMessageHub(MessageHub)
 

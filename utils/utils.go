@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"go-w3chain/log"
@@ -158,4 +159,18 @@ func GetHash(val []byte) []byte {
 	hasher := sha3.NewLegacyKeccak256()
 	hasher.Write(val)
 	return hasher.Sum(nil)
+}
+
+// 对传入的任意类型进行gob编码
+func EncodeAny(any interface{}) []byte {
+	var buffer bytes.Buffer
+	encoder := gob.NewEncoder(&buffer)
+
+	// 对对象进行编码
+	err := encoder.Encode(any)
+	if err != nil {
+		log.Error("encode fail", "err", err)
+	}
+
+	return buffer.Bytes()
 }

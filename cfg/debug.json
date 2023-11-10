@@ -10,23 +10,25 @@
     "ClientNum": 1,
     "ClientId": 0,
 
-    "ShardNum": 8,
-    "MachineNum": 8,
+    "ShardNum": 2,
+    "MachineNum": 2,
     "ShardId": 0,
     "ShardStartIndex": 0,
     "ShardSize": 4,
-    "ComAllNodeNum":12,
+    "ComAllNodeNum":8,
     "NodeId": 0,
     "MultiSignRequiredNum": 2,
 
 
-    "MaxTxNum": 240000,
-    "InjectSpeed": 2000,
+    "MaxTxNum": 60000,
+    "InjectSpeed": 500,
     "RecommitInterval": 4,
     "MaxBlockTXSize": 1000,
 
-    "Height2Reconfig": 4,
+    "Height2Reconfig": 3,
     "ReconfigTime": 4,
+    "ReconfigMode": "lesssync",
+    "FastsyncBlockNum":20,
 
     "TbchainBlockIntervalSecs": 10,
     "Height2Rollback": 2000,

@@ -38,6 +38,8 @@ type BlockChain struct {
 	blockCache *lru.Cache // Cache for the most recent entire blocks
 
 	currentBlock atomic.Value // Current head of the block chain
+
+	blocks []*Block
 }
 
 // 设置 stateDB 的 config
@@ -100,6 +102,9 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *cfg
 		return nil, ErrUnknown
 	}
 
+	bc.blocks = make([]*Block, 0)
+	bc.blocks = append(bc.blocks, head)
+
 	return bc, nil
 }
 
@@ -112,8 +117,13 @@ func (bc *BlockChain) GetStateDB() *state.StateDB {
 }
 
 /**
- * 此处应该写入到数据库的，但为了加快程序运行速度未写入，只是将最新的块存到内存里，方便打包下一个区块时取
+ * 此处应该写入到数据库的，但为了加快程序运行速度未写入，只是将最块存到内存里
  */
 func (bc *BlockChain) WriteBlock(block *Block) {
 	bc.currentBlock.Store(block)
+	bc.blocks = append(bc.blocks, block)
+}
+
+func (bc *BlockChain) AllBlocks() []*Block {
+	return bc.blocks
 }
