@@ -98,6 +98,12 @@ func (s *Shard) HandleComGetHeight(request *core.ComGetHeight) *big.Int {
 func (s *Shard) HandleComSendBlock(data *core.ComSendBlock) {
 	block := data.Block
 	s.AddBlock(block)
+
+	// 遇到重组后的第一个信标链，将之前的活跃账户删除
+	if s.tbchain_height%uint64(s.height2Reconfig) == 1 {
+		s.tMPT_activeAddrs = make(map[common.Address]int)
+	}
+
 	trieRoot := s.executeTransactions(block.Transactions)
 	if trieRoot != block.Header.Root {
 		// 需要考虑到一种可能出错的情况，即分片发送给委员会root之后，由于新创建账户而修改了root
@@ -137,6 +143,28 @@ func (s *Shard) HandleGetSyncData(data *core.GetSyncData) *core.SyncData {
 
 		return syncData
 
+	case "tMPTsync": // 只同步自上一次重组以来的交易中的账户
+		// 状态树
+		states := make(map[common.Address]*types.StateAccount)
+		stateDB := s.blockchain.GetStateDB()
+		for address, _ := range s.tMPT_activeAddrs {
+			accountState := &types.StateAccount{
+				Nonce:    stateDB.GetNonce(address),
+				Balance:  stateDB.GetBalance(address),
+				Root:     emptyRoot,
+				CodeHash: emptyCodeHash,
+			}
+			states[address] = accountState
+		}
+
+		syncData := &core.SyncData{
+			ClientAddr: data.ClientAddr,
+			States:     states,
+			Blocks:     make([]*core.Block, 0),
+		}
+
+		return syncData
+
 	case "fullsync": // 同步全部区块
 		blocks := s.blockchain.AllBlocks()
 		syncData := &core.SyncData{
@@ -146,6 +174,7 @@ func (s *Shard) HandleGetSyncData(data *core.GetSyncData) *core.SyncData {
 		}
 
 		return syncData
+
 	default:
 		log.Error("unknown sync type", "type", data.SyncType)
 	}

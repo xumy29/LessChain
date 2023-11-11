@@ -293,47 +293,49 @@ def TPS_inject1(dataPath1):
     plt.rcParams['ps.fonttype'] = 42
     plt.rcParams['figure.figsize'] = (width, height)
     speeds = [[2000, 4000, 8000, 10000, 12000, 16000], [500, 1000, 2000, 2500, 3000, 4000]]
-    xticks = [['2k', '4k', '8k', '10k', '12k', '16k'], ['0.5k', '1k', '2k', '2.5k', '3k', '4k']]
-    shards = [32]
+    xticks = [['0.25', '0.5', '1', '1.25', '1.5', '2'], ['0.25', '0.5', '1', '1.25', '1.5', '2']]
+    shards = [32,8]
+    colors = default_palette
+    labels = ['S = 32', 'S = 8']
     
     for i in range(len(shards)):
         dataPath = os.path.join(getStorePath(), dataPath1, 'shard'+str(shards[i])+'/')
         tps, _, _, _ = getData(speeds[i], dataPath)
         
         # 画线和填充山坡
-        plt.plot(speeds[i], tps, '.-', color=default_palette[1], linewidth=4, markersize=12)  
-        plt.fill_between(speeds[i], tps, color=default_palette[2], alpha=0.8)
+        plt.plot(speeds[0], tps, '.-', color=default_palette[i+2], linewidth=4, markersize=12, label=labels[i])  
+        # plt.fill_between(speeds[i], tps, color=default_palette[2], alpha=0.8)
 
         # 在每个点上标注数值
-        for x, y in zip(speeds[i], tps):
+        for x, y in zip(speeds[0], tps):
             plt.text(x, y, f'{y}', color='black', ha='center', va='bottom', fontsize=16)
 
         
-        # 设置 x 和 y 轴标签和字体大小
-        plt.xticks(speeds[i], xticks[i], fontsize=16)
-        plt.yticks(fontsize=16)
-        plt.xlabel('Inject speed (TX/s)', fontsize=18)
-        plt.ylabel('Throughput (TX/s)', fontsize=18)
+    # 设置 x 和 y 轴标签和字体大小
+    plt.xticks(speeds[0], xticks[0], fontsize=16)
+    plt.yticks(fontsize=16)
+    plt.xlabel('Inject Speed / Standard Inject Speed', fontsize=18)
+    plt.ylabel('Throughput (TX/s)', fontsize=18)
 
-        ax = plt.gca()
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-        # ax.spines['bottom'].set_visible(False)
-        plt.tick_params(top=False, left=False, right=False)
-        
-        # 确保存储路径存在
-        storePath = os.path.join(getStorePath(), 'figs', 'injectSpeed_s' + str(shards[i]))
-        os.makedirs(os.path.dirname(storePath), exist_ok=True)
-        
-        plt.tight_layout()
-        # 保存图片
-        plt.savefig(f'{storePath}.png')
-        plt.savefig(f'{storePath}.pdf')
-
-        
-        # 显示图表
-        plt.show()
+    ax = plt.gca()
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    # ax.spines['bottom'].set_visible(False)
+    plt.tick_params(top=False, left=False, right=False)
+    plt.legend(fontsize=16, loc='best')
+    
+    # 确保存储路径存在
+    storePath = os.path.join(getStorePath(), 'figs', 'injectSpeed')
+    os.makedirs(os.path.dirname(storePath), exist_ok=True)
+    
+    plt.tight_layout()
+    # 保存图片
+    plt.savefig(f'{storePath}.png')
+    plt.savefig(f'{storePath}.pdf')
+  
+    # 显示图表
+    plt.show()
 
 
 
@@ -693,6 +695,132 @@ def reconfig_security_S_n():
     # plt.show() 
 
 
+def reconfig_datasize(dataPath):
+    plt.rcParams['pdf.fonttype'] = 42
+    plt.rcParams['ps.fonttype'] = 42
+    plt.rcParams['figure.figsize'] = (width, height)
+    
+    sync_methods = ['fullsync', 'fastsync', 'lesssync']
+    labels = ['full sync', 'fast sync', 'less sync']
+    colors = default_palette  # 每种方法对应一种颜色
+    # patterns = ['/', '\\', '|']  # sizeofStates, sizeofBlocks, sizeofPoolTxs 对应的花纹
+
+    # 读取和处理每种同步方法的数据
+    for i, method in enumerate(sync_methods):
+        file_path = os.path.join(getStorePath(), dataPath + method + '/average_data.csv')
+        data = pd.read_csv(file_path)
+
+        sizeofStates = data['Average of sizeofStates(bytes)'] / 1000
+        sizeofBlocks = data['Average of sizeofBlocks(bytes)'] / 1000
+        sizeofPoolTxs = data['Average of sizeofPoolTxs(bytes)'] / 1000
+        totalSize = sizeofStates + sizeofBlocks + sizeofPoolTxs
+
+        row_numbers = [x + i * 0.2 for x in range(1, len(data) + 1)]  # 调整每组数据的位置
+
+        plt.bar(row_numbers, totalSize, width=0.2, color=colors[i], label=labels[i])
+        # plt.bar(row_numbers, sizeofBlocks, width=0.2, color=colors[i], hatch=patterns[1], bottom=sizeofStates, label='sizeofBlocks' if i==0 else "")
+        # plt.bar(row_numbers, sizeofPoolTxs, width=0.2, color=colors[i], hatch=patterns[2], bottom=sizeofStates + sizeofBlocks, label='sizeofPoolTxs' if i==0 else "")
+
+    plt.xticks([r for r in range(1, len(data) + 1)], fontsize=16)
+    plt.yticks(fontsize=16)
+    plt.xlabel('Reconfiguration times', fontsize=18)
+    plt.ylabel('Sync Datasize (KB)', fontsize=18)
+    legend = plt.legend(fontsize=16, loc='best')
+    legend.set_draggable(True)
+    plt.tight_layout()
+    
+    storePath = os.path.join(getStorePath(), 'figs', 'reconfig_datasize.png')
+    # 确保目录存在
+    if not os.path.exists(os.path.dirname(storePath)):
+        os.makedirs(os.path.dirname(storePath))
+    plt.savefig(storePath)
+    storePath = os.path.join(getStorePath(), 'figs', 'reconfig_datasize.pdf')
+    plt.savefig(storePath)
+    
+    plt.show()
+
+def reconfig_synctime(dataPath):
+    plt.rcParams['pdf.fonttype'] = 42
+    plt.rcParams['ps.fonttype'] = 42
+    plt.rcParams['figure.figsize'] = (width, height)
+    
+    sync_methods = ['fullsync', 'fastsync', 'lesssync']
+    labels = ['full sync', 'fast sync', 'less sync']
+    colors = default_palette  # 每种方法对应一种颜色
+    # patterns = ['/', '\\', '|']  # sizeofStates, sizeofBlocks, sizeofPoolTxs 对应的花纹
+
+    # 读取和处理每种同步方法的数据
+    for i, method in enumerate(sync_methods):
+        file_path = os.path.join(getStorePath(), dataPath + method + '/average_data.csv')
+        data = pd.read_csv(file_path)
+
+        syncTime = data['Average of syncTime(ms)']
+
+        row_numbers = [x + i * 0.2 for x in range(1, len(data) + 1)]  # 调整每组数据的位置
+
+        plt.bar(row_numbers, syncTime, width=0.2, color=colors[i], label=labels[i])
+        # plt.bar(row_numbers, sizeofBlocks, width=0.2, color=colors[i], hatch=patterns[1], bottom=sizeofStates, label='sizeofBlocks' if i==0 else "")
+        # plt.bar(row_numbers, sizeofPoolTxs, width=0.2, color=colors[i], hatch=patterns[2], bottom=sizeofStates + sizeofBlocks, label='sizeofPoolTxs' if i==0 else "")
+
+    plt.xticks([r for r in range(1, len(data) + 1)], fontsize=16)
+    plt.yticks(fontsize=16)
+    plt.xlabel('Reconfiguration times', fontsize=18)
+    plt.ylabel('Sync Time (ms)', fontsize=18)
+    legend = plt.legend(fontsize=16, loc='best')
+    legend.set_draggable(True)
+    plt.tight_layout()
+    
+    storePath = os.path.join(getStorePath(), 'figs', 'reconfig_synctime.png')
+    # 确保目录存在
+    if not os.path.exists(os.path.dirname(storePath)):
+        os.makedirs(os.path.dirname(storePath))
+    plt.savefig(storePath)
+    storePath = os.path.join(getStorePath(), 'figs', 'reconfig_synctime.pdf')
+    plt.savefig(storePath)
+    
+    plt.show()
+
+def reconfig_synctime_bandwidth(dataPath):
+    plt.rcParams['pdf.fonttype'] = 42
+    plt.rcParams['ps.fonttype'] = 42
+    plt.rcParams['figure.figsize'] = (width, height) # Set appropriate figure size
+
+    sync_methods = ['fullsync', 'fastsync', 'lesssync']
+    bandwidths = [5, 25, 50, 100]
+    labels = ['full sync', 'fast sync', 'less sync']
+    colors = default_palette
+    markers = ['x', '.', '>']
+
+    for i, method in enumerate(sync_methods):
+        syncTimes = []
+        for j, bw in enumerate(bandwidths):
+            file_path = os.path.join(getStorePath(), dataPath, method, f'bandwidth{bw}MB', 'average_data.csv')
+            data = pd.read_csv(file_path)
+            syncTime = data['Average of syncTime(ms)'].mean()
+            syncTimes.append(syncTime)
+
+        # Plotting logic here may need to be adjusted
+        plt.plot(bandwidths, syncTimes, color=colors[i], label=labels[i], marker=markers[i])
+
+    # 由于一台机子上实际运行4个共识节点，所以一个节点的带宽应该是机器总带宽除以4
+    nodeBandwidths = [i/4 for i in bandwidths]
+    plt.xticks(bandwidths, nodeBandwidths, fontsize=16)
+    plt.xlabel('Bandwidth (Mbits/s)',fontsize=18)
+    plt.yticks(fontsize=18)
+    plt.ylabel('Sync Time (ms)',fontsize=18)
+    plt.legend(fontsize=16,loc='best')
+    plt.tight_layout()
+    
+    storePath = os.path.join(getStorePath(), 'figs', 'reconfig_synctime_bandwidth.png')
+    # 确保目录存在
+    if not os.path.exists(os.path.dirname(storePath)):
+        os.makedirs(os.path.dirname(storePath))
+    plt.savefig(storePath)
+    storePath = os.path.join(getStorePath(), 'figs', 'reconfig_synctime_bandwidth.pdf')
+    plt.savefig(storePath)
+    
+    plt.show()
+
 def main():
     # motivation_security()
 
@@ -700,13 +828,17 @@ def main():
     # Latency('results/tps1/')
     # Workload4shard('results/workload1/')
 
-    TPS_inject1('results/injectSpeed1/')
+    # TPS_inject1('results/injectSpeed1/')
     # TPS_inject('results/injectSpeed1/')
     # RollBackRate('results/rollback1/')
     # Reconfig('results/reconfig/')
     # Reconfig1('results/reconfig/')
 
     # reconfig_security_S_n()
+    
+    # reconfig_datasize('results/reconfigSyncData/')
+    # reconfig_synctime('results/reconfigSyncData/')
+    reconfig_synctime_bandwidth('results/reconfigSyncDifferBandwidth/')
 
 if __name__ == "__main__":
     main()

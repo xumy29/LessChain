@@ -90,7 +90,7 @@ func runNode(allCfg *cfg.Cfg) {
 	// TODO：建立分片内连接
 
 	// 创建本节点对应的分片实例，用于执行分片的操作
-	shard := shard.NewShard(uint32(shardId), node, allCfg.FastsyncBlockNum)
+	shard := shard.NewShard(uint32(shardId), node, allCfg.FastsyncBlockNum, allCfg.Height2Reconfig)
 	node.SetShard(shard)
 
 	// 初始化分片中的账户状态

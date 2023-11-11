@@ -2,6 +2,7 @@ package shard
 
 import (
 	"fmt"
+	"go-w3chain/beaconChain"
 	"go-w3chain/cfg"
 	"go-w3chain/core"
 	"go-w3chain/log"
@@ -27,6 +28,11 @@ type Shard struct {
 	// 状态树中一开始就已经创建了所有账户，但为了真实模拟同步时的状态树数据，用这个变量记录已经发生过交易的账户
 	// 同步状态树的时候，只发送这些发生过交易的账户
 	activeAddrs map[common.Address]int
+	// 自上一次重组后的交易中的账户
+	tMPT_activeAddrs map[common.Address]int
+	height2Reconfig  int
+	tbchain_height   uint64
+
 	// 同步模式是fastsync时，同步的区块数量
 	fastsyncBlockNum int
 }
@@ -40,7 +46,7 @@ func (s *Shard) GetNodeAddrs() []common.Address {
 	return s.initialAddrList
 }
 
-func NewShard(shardID uint32, _node *node.Node, fastsyncBlockNum int) *Shard {
+func NewShard(shardID uint32, _node *node.Node, fastsyncBlockNum int, height2Reconfig int) *Shard {
 	// 获取节点的数据库
 	chainDB := _node.GetDB()
 
@@ -64,6 +70,8 @@ func NewShard(shardID uint32, _node *node.Node, fastsyncBlockNum int) *Shard {
 		initialAddrList:  []common.Address{*_node.GetAccount().GetAccountAddress()},
 		blockchain:       bc,
 		activeAddrs:      make(map[common.Address]int),
+		tMPT_activeAddrs: make(map[common.Address]int),
+		height2Reconfig:  height2Reconfig,
 		fastsyncBlockNum: fastsyncBlockNum,
 	}
 
@@ -234,6 +242,12 @@ func (s *Shard) addGenesisTB() {
 
 // }
 
+func (s *Shard) AddTBs(tbblock *beaconChain.TBBlock) {
+	log.Debug(fmt.Sprintf("shard get tbchain confirm block... %v", tbblock))
+
+	s.tbchain_height = tbblock.Height
+}
+
 /*
 * 执行打包的交易，更新stateObjects
  */
@@ -246,6 +260,8 @@ func (s *Shard) executeTransactions(txs []*core.Transaction) common.Hash {
 		s.executeTransaction(tx, stateDB, now)
 		s.activeAddrs[*tx.Sender] += 1
 		s.activeAddrs[*tx.Recipient] += 1
+		s.tMPT_activeAddrs[*tx.Sender] += 1
+		s.tMPT_activeAddrs[*tx.Recipient] += 1
 	}
 
 	root := stateDB.IntermediateRoot(false)

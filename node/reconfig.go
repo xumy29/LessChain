@@ -252,6 +252,8 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 			n.fullsync(sizeofPoolTx, syncStartTime)
 		case "fastsync":
 			n.fastsync(sizeofPoolTx, syncStartTime)
+		case "tMPTsync":
+			n.tMPTsync(sizeofPoolTx, syncStartTime)
 		default:
 			log.Error("unknown reconfig mode", "mode", n.reconfigMode)
 		}
@@ -276,6 +278,35 @@ func (n *Node) lessSync(sizeofPoolTx int, syncStartTime time.Time) {
 	elapsed := time.Since(syncStartTime)
 	reportMsg := fmt.Sprintf("shardID: %d msgType: %s sizeof states(bytes): %d sizeof blocks(bytes): %d sizeof poolTx(bytes): %d sync time: %d",
 		n.NodeInfo.ComID, "lesssync", 0, 0, sizeofPoolTx, elapsed.Milliseconds())
+	n.messageHub.Send(core.MsgTypeReportAny, 0, reportMsg, nil)
+}
+
+func (n *Node) tMPTsync(sizeofPoolTx int, syncStartTime time.Time) {
+	shardLeader := cfg.NodeTable[n.NodeInfo.ComID][0]
+	request := &core.GetSyncData{
+		ServerAddr: shardLeader,
+		ClientAddr: n.NodeInfo.NodeAddr,
+		ShardID:    n.NodeInfo.ComID,
+		SyncType:   "tMPTsync",
+	}
+	var data *core.SyncData
+	if n.NodeInfo.NodeAddr == shardLeader {
+		data = n.shard.HandleGetSyncData(request)
+	} else {
+		getSyncDataCh := make(chan struct{}, 1)
+		callback := func(res ...interface{}) {
+			data = res[0].(*core.SyncData)
+			log.Debug("tMPTsync data received", "len(states)", len(data.States), "len(blocks)", len(data.Blocks))
+			getSyncDataCh <- struct{}{}
+		}
+		n.messageHub.Send(core.MsgTypeGetSyncData, n.NodeInfo.ComID, request, callback)
+		// 等待交易池更新后再启动worker
+		<-getSyncDataCh
+	}
+
+	elapsed := time.Since(syncStartTime)
+	reportMsg := fmt.Sprintf("shardID: %d msgType: %s sizeof states(bytes): %d sizeof blocks(bytes): %d sizeof poolTx(bytes): %d sync time: %d",
+		n.NodeInfo.ComID, "tMPTsync", len(utils.EncodeAny(data.States)), len(utils.EncodeAny(data.Blocks)), sizeofPoolTx, elapsed.Milliseconds())
 	n.messageHub.Send(core.MsgTypeReportAny, 0, reportMsg, nil)
 }
 

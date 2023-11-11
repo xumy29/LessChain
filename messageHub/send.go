@@ -394,6 +394,7 @@ func tbChainPushBlock2Com(msg interface{}) {
 	}
 	data := msg.(*beaconChain.TBBlock)
 	committee_ref.AddTBs(data)
+	shard_ref.AddTBs(data)
 }
 
 func comLeaderInitMultiSign(comID uint32, msg interface{}) {
