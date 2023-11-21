@@ -700,9 +700,9 @@ def reconfig_datasize(dataPath):
     plt.rcParams['ps.fonttype'] = 42
     plt.rcParams['figure.figsize'] = (width, height)
     
-    sync_methods = ['fullsync', 'fastsync', 'lesssync']
-    labels = ['full sync', 'fast sync', 'less sync']
-    colors = default_palette  # 每种方法对应一种颜色
+    sync_methods = ['fullsync', 'fastsync', 'tMPTsync', 'lesssync']
+    labels = ['Full sync (Ethereum)', 'Fast sync (Ethereum)', 'tMPT [14]', 'LessChain (ours)']
+    colors = ['#2F2321', '#AA4F23', '#FED875', '#6C627A', '#F8EBDC']
     # patterns = ['/', '\\', '|']  # sizeofStates, sizeofBlocks, sizeofPoolTxs 对应的花纹
 
     # 读取和处理每种同步方法的数据
@@ -721,11 +721,11 @@ def reconfig_datasize(dataPath):
         # plt.bar(row_numbers, sizeofBlocks, width=0.2, color=colors[i], hatch=patterns[1], bottom=sizeofStates, label='sizeofBlocks' if i==0 else "")
         # plt.bar(row_numbers, sizeofPoolTxs, width=0.2, color=colors[i], hatch=patterns[2], bottom=sizeofStates + sizeofBlocks, label='sizeofPoolTxs' if i==0 else "")
 
-    plt.xticks([r for r in range(1, len(data) + 1)], fontsize=16)
+    plt.xticks([r + 0.3 for r in range(1, len(data) + 1)], [r for r in range(1, len(data) + 1)], fontsize=16)
     plt.yticks(fontsize=16)
     plt.xlabel('Reconfiguration times', fontsize=18)
     plt.ylabel('Sync Datasize (KB)', fontsize=18)
-    legend = plt.legend(fontsize=16, loc='best')
+    legend = plt.legend(fontsize=14, loc='best')
     legend.set_draggable(True)
     plt.tight_layout()
     
@@ -744,9 +744,9 @@ def reconfig_synctime(dataPath):
     plt.rcParams['ps.fonttype'] = 42
     plt.rcParams['figure.figsize'] = (width, height)
     
-    sync_methods = ['fullsync', 'fastsync', 'lesssync']
-    labels = ['full sync', 'fast sync', 'less sync']
-    colors = default_palette  # 每种方法对应一种颜色
+    sync_methods = ['fullsync', 'fastsync', 'tMPTsync', 'lesssync']
+    labels = ['Full sync (Ethereum)', 'Fast sync (Ethereum)', 'tMPT [14]', 'LessChain (ours)']
+    colors = ['#2F2321', '#AA4F23', '#FED875', '#6C627A', '#F8EBDC']
     # patterns = ['/', '\\', '|']  # sizeofStates, sizeofBlocks, sizeofPoolTxs 对应的花纹
 
     # 读取和处理每种同步方法的数据
@@ -762,11 +762,11 @@ def reconfig_synctime(dataPath):
         # plt.bar(row_numbers, sizeofBlocks, width=0.2, color=colors[i], hatch=patterns[1], bottom=sizeofStates, label='sizeofBlocks' if i==0 else "")
         # plt.bar(row_numbers, sizeofPoolTxs, width=0.2, color=colors[i], hatch=patterns[2], bottom=sizeofStates + sizeofBlocks, label='sizeofPoolTxs' if i==0 else "")
 
-    plt.xticks([r for r in range(1, len(data) + 1)], fontsize=16)
+    plt.xticks([r + 0.3 for r in range(1, len(data) + 1)], [r for r in range(1, len(data) + 1)], fontsize=16)
     plt.yticks(fontsize=16)
     plt.xlabel('Reconfiguration times', fontsize=18)
     plt.ylabel('Sync Time (ms)', fontsize=18)
-    legend = plt.legend(fontsize=16, loc='best')
+    legend = plt.legend(fontsize=14, loc='best')
     legend.set_draggable(True)
     plt.tight_layout()
     
@@ -785,11 +785,11 @@ def reconfig_synctime_bandwidth(dataPath):
     plt.rcParams['ps.fonttype'] = 42
     plt.rcParams['figure.figsize'] = (width, height) # Set appropriate figure size
 
-    sync_methods = ['fullsync', 'fastsync', 'lesssync']
+    sync_methods = ['fullsync', 'fastsync', 'tMPTsync', 'lesssync']
+    labels = ['Full sync (Ethereum)', 'Fast sync (Ethereum)', 'tMPT [14]', 'LessChain (ours)']
     bandwidths = [5, 25, 50, 100]
-    labels = ['full sync', 'fast sync', 'less sync']
-    colors = default_palette
-    markers = ['x', '.', '>']
+    colors = ['#2F2321', '#AA4F23', '#FED875', '#6C627A', '#F8EBDC']
+    markers = ['x', '.', '>', 's']
 
     for i, method in enumerate(sync_methods):
         syncTimes = []
@@ -808,7 +808,7 @@ def reconfig_synctime_bandwidth(dataPath):
     plt.xlabel('Bandwidth (Mbits/s)',fontsize=18)
     plt.yticks(fontsize=18)
     plt.ylabel('Sync Time (ms)',fontsize=18)
-    plt.legend(fontsize=16,loc='best')
+    plt.legend(fontsize=14,loc='best')
     plt.tight_layout()
     
     storePath = os.path.join(getStorePath(), 'figs', 'reconfig_synctime_bandwidth.png')
@@ -822,7 +822,7 @@ def reconfig_synctime_bandwidth(dataPath):
     plt.show()
 
 def main():
-    # motivation_security()
+    motivation_security()
 
     # TPS('results/tps1/')
     # Latency('results/tps1/')
@@ -838,7 +838,7 @@ def main():
     
     # reconfig_datasize('results/reconfigSyncData/')
     # reconfig_synctime('results/reconfigSyncData/')
-    reconfig_synctime_bandwidth('results/reconfigSyncDifferBandwidth/')
+    # reconfig_synctime_bandwidth('results/reconfigSyncDifferBandwidth/')
 
 if __name__ == "__main__":
     main()

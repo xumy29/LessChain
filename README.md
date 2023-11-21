@@ -1,167 +1,193 @@
-# 写在前面
-这份代码是TPDS2023的投稿论文 "" 的多机版实现。
+# Preface
+This code is the implementation for the paper submitted to ICDE2024, "Stateless and Trustless: A Two-Layer Secure Sharding Blockchain" (hereinafter referred to as LessChain).
+The code supports running on a single machine or multiple machines, and you can modify the relevant settings through the configuration file.
 
-# 配置运行
-+ **数据集**： 以太坊第14920000个区块到第14960000个区块的数据（200w+条交易），存在本地未上传。
+# Installation
+1. Get the latest code from [https://github.com/xumy29/LessChain](https://github.com/xumy29/LessChain) (The recent version of the repository is already included in the current directory. Due to intellectual property protection, we have not made this repository public for the time being. If the paper is accepted, we will make the repository public.)
+2. `cd LessChain & go build -o ./lessChain`
+   The first compilation will automatically pull the required dependencies, which might take some time. (If the download is too slow, it might be necessary to change the source, try setting the goproxy: `export GOPROXY=https://goproxy.cn` and then pull the dependencies.)
+3. Install geth. [geth_download](https://geth.ethereum.org/downloads)
 
-+ **运行模式**：分为 `debug` 模式和 `run` 模式。两个模式下分别读取的配置文件为 ".cfg/debug.json" 和 ".cfg/run.json"。
 
-+ **参数文件设置**: 以 "./cfg/run.json" 为例
+# Configuration
++ **Download Dataset**: We use the data from Ethereum blocks number 14920000 to 14960000 (over 2 million transactions). After downloading, the data needs initial processing. You can directly download the processed data from this link: [data_from_google_drive](https://drive.google.com/file/d/1gIBGcneoUz9jaU48PYCjP6xjWegRlgE-/view?usp=sharing), or download the raw data from the source data download link: [XBlock](https://zhengpeilin.com/download.php?file=14750000to14999999_BlockTransaction.zip). Place the processed data file into `lessChain_dirname/data/`.
+
+
+
++ **Parameter File Settings**: `"lessChain_dirname/cfg/debug.json"`
+   Assuming 4 shards are configured to run on 2 machines, here is the configuration file for the node with initial shard ID 0 and node ID 0
+   (Note: json files do not support comments, remember to delete the comments)
+
 ```json
 {
+    // Number of machines running the program
+    "MachineNum": 2,
+    // Starting ID of the shard running on the current machine (multiple shards may run on one machine)
+    "ShardStartIndex": 0,
+    
+    // Log information
     "LogLevel": 4,
-    "LogFile": "newest_result.log",
+    "LogFile": "",
     "IsProgressBar": true,
     "IsLogProgress": true,
     "LogProgressInterval": 20,
 
+    // The role of the current node, possible roles are client, node, booter
+    "Role": "node",
+
+    // Number of clients
     "ClientNum": 1,
+    // ID of the current client
+    "ClientId": 0,
 
+    // Number of shards
     "ShardNum": 4,
-    "ShardSize": 6,
-    "MultiSignRequiredNum": 1,
+    // ID of the shard to which the node belongs
+    "ShardId": 0,
+    // Number of nodes in the current consensus shard
+    "ShardSize": 8,
+    // Number of signatories required for multi-signature in the consensus shard
+    "MultiSignRequiredNum": 2,
+    // Number of nodes in the current storage shard
+    "ComAllNodeNum":8,
+    // ID of the current node
+    "NodeId": 0,
 
-    "MaxTxNum": 60000,
+
+    // Total number of transactions to be injected
+    "MaxTxNum": 240000,
+    // Speed of transaction injection
     "InjectSpeed": 1000,
+    // Block interval, must be greater than or equal to 3s, can be changed in worker.go (but may cause network issues)
     "RecommitInterval": 4,
+    // Block capacity
     "MaxBlockTXSize": 1000,
 
-    "Height2Reconfig": 2000,
-    "ReconfigTime": 4,
+    // reconfiguration interval
+    "Height2Reconfig": 3,
+    // Reconfiguration synchronization mode, includes lesssync, fastsync, fullsync, and tMPTsync
+    "ReconfigMode": "lesssync",
+    // When synchronization mode is fastsync, the number of recent blocks to be synchronized
+    "FastsyncBlockNum":20,
 
+    // Layer1 chain block interval
     "TbchainBlockIntervalSecs": 10,
+    // Transaction timeout time
     "Height2Rollback": 2000,
+    // Layer1 block confirmation height
     "Height2Confirm": 0,
-
-    "BeaconChainMode": 2,
+    // Settings for Layer1 chain
+    "BeaconChainMode": 2, // 2 stands for Ethereum private chain
     "BeaconChainPort": 8545,
     "BeaconChainID": 1337,
 
-    "RoleType": 1,
     "ExitMode": 1,
 
     "DatasetDir": "data/len3_data.csv"
 }
 ```
 
-多机版本中主要包含信标链、客户端、分片、委员会等角色，其中后三者的roleType分别为1、2、3。
-ExitMode为0表示所有交易执行完系统结束运行，ExitMode为1表示所有交易注入完则系统结束运行。
-RecommitInterval 即出块间隔，必须大于等于3s，否则会被强制设为3s。可在worker.go中更改此限制。
++ **Machine Settings**: `"lessChain_dirname/cfg/node.go"`
+   Set the IP addresses of each node to allow inter-node communication.
 
+# Execution
 
-+ **编译运行**(run模式)
-``` go
-go build -o lessChain
-./lessChain -m run
+When actually running, start the script `lessChain_dirname/start_lessChain_for_linux.sh` on each machine, ensuring that `ShardNum`, `MachineNum`, and `ShardStartIndex` are correctly assigned. This script will automatically start multiple processes, modify the configuration file in each process, and run the nodes in multiple shards. For example, under the setting of 4 shards and two machines, the configuration file for machine 1 is
+
+```json
+{
+    "MachineNum": 2,
+    "ShardStartIndex": 0,
+    "Role": "node",
+    "ShardNum": 4,
+    ... // other parameters
+}
 ```
-PS：windows系统要用exe后缀，即： go build -o lessChain.exe
-    
-## 编译时go get 超时：
-+ 安装 go.mod 的 package时，go get 超时：需要设置代理
-``` go
-go env -w GO111MODULE=on
-go env -w GOPROXY=https://goproxy.cn,direct
+and the configuration file for machine 2 is
+```json
+{
+    "MachineNum": 2,
+    "ShardStartIndex": 1,
+    "Role": "node",
+    "ShardNum": 4,
+    ... // other parameters
+}
 ```
+Thus, machine 1 will run shards 0 and 2, while machine 2 will run shards 1 and 3.
 
-+ **运行日志**
-存在 `LogFile` 参数指定的路径下
-
-# 交易分配
-在dataprocess.go中，读取数据集中的交易，并将交易划分到不同客户端。客户端根据交易发送者地址划分交易到不同分片，按照 `inject_speed` 将交易注入到分片中。
-
-# 交易执行
-core/transaction.go 中定义了所有交易的类型，如下
-``` go
-const (
-	UndefinedTXType uint64 = iota
-	IntraTXType
-	CrossTXType1 // 跨片交易前半部分
-	CrossTXType2 // 跨片交易后半部分
-	RollbackTXType
-)
-```
-初始交易类型只会是 `IntraTXType` 和 `CrossTXType1`，由客户端向 Sender 地址所在分片（源分片）发送。分片执行完一笔交易后，会向发送该交易的客户端返回一个收据。对于 `CrossTXType1` 交易，客户端收到回复后会再向该交易的 Recipient 地址所在分片发送 `CrossTXType2` 交易。为了保证交易原子性，如果一笔 `CrossTXType2` 交易超过一定时间没有被执行，则客户端向源分片发送一笔回滚交易，回滚对应的 `CrossTXType1` 交易。
-
-# 模块介绍
-## log 模块
-插件，实现了日志的功能，支持不同的日志级别。
-使用例子：
-``` go
-// Sanitize recommit interval if the user-specified one is too short.
-    recommit := worker.config.Recommit
-    if recommit < minRecommitInterval {
-        log.Warn("Sanitizing miner recommit interval", "provided", recommit, "updated", minRecommitInterval)
-        recommit = minRecommitInterval
-    }
-```
-
-## messageHub 模块
-用于在不同角色之间传递消息。目前是单机仿真，没有采用网络传输，而是通过 messageHub 直接调用角色的对象方法进行消息写入。
-
-多种类型的消息通过 messageHub 进行传递，共用一个接口，callback是回调函数。
-``` go
-/* 用于分片、委员会、客户端、信标链传送消息 */
-func (hub *GoodMessageHub) Send(msgType uint64, id uint64, msg interface{}, callback func(res ...interface{})) {
-	switch msgType {
-	case core.MsgTypeCommitteeReply2Client:
-		client := clients_ref[id]
-		receipts := msg.([]*result.TXReceipt)
-		client.AddTXReceipts(receipts)
-
-	case core.MsgTypeClientInjectTX2Shard:
-		shard := shards_ref[id]
-		txs := msg.([]*core.Transaction)
-		shard.InjectTXs(txs)
-
-	case core.MsgTypeSetInjectDone2Shard:
-		shard := shards_ref[id]
-		shard.SetInjectTXDone()
-    
-    ...
-
-    }
+In addition to running the shards, another machine is needed to run the Layer1 chain and the client. Just modify the Role in the configuration file and ensure that the geth parameters are correctly set, as follows:
+```json
+{
+    "Role": "",
+    "BeaconChainMode": 2, 
+    "BeaconChainPort": 8545,
+    "BeaconChainID": 1337,
+    ... // other parameters
 }
 ```
 
-## result 模块
-记录每笔交易的执行状态，输出时延、交易量、吞吐量等指标。
-一笔跨分片交易可能有多个状态，比如 [Cross1TXTypeSuccess, RollbackSuccess] 代表该交易先在委员会1上链，而后在委员会2上超时，进而被回滚。
+Then run the script `lessChain_dirname/start_lessChain_for_linux.sh`.
 
-## shard 模块
-维护区块链，存储区块、状态，提供某笔交易在本分片区块链上链（proof of inclusion）或没有上链（proof of exclusion）的证据。
+Once all three machines are properly configured and running the script, LessChain will start operating. You can check the node logs in the `lessChain_dirname/logs` folder on each machine. The overall transaction processing progress can be viewed in the `lessChain_dirname/logs/client.log` on the machine running the client.
 
-## committee 模块
-维护交易池，从shard中获取状态，打包区块，执行交易，发送收据到客户端，发送区块到shard，发送信标到信标链，等等。
-委员会会定期重组，其间组成各节点被随机打乱和重新分配。重组时丢弃交易池中的交易（轻量化是第一位）。
+# Module Overview
 
-## beaconChain 模块
-实现Layer1的信标链。有三种模式可供选择，分别是模拟的时间信标链、通过ganache或geth部署的以太坊的私链。选择后两者时需要先安装对应软件并在debug.json中设置私链端口号、私链ID等参数。
+## beaconChain Module
+Interacts with the Layer1 chain. There are three modes to choose from, which are the simulated chain (this mode has been deprecated, please do not use), Ethereum private chain deployed through ganache or geth. When choosing the latter two, you need to install the corresponding software first and set the private chain port number, chain ID, etc., in cfg/debug.json.
 
-## eth_chain模块
-实现了与以太坊私链交互的逻辑，如部署、调用合约、监听事件等。可以在beaconChain中调用。
-当前支持的以太坊私链有：Ganache、Geth
+## cfg Module
+Configuration files, set accounts, IP addresses, etc.
 
-## client 模块
-向委员会注入交易，接收交易收据，当信标链对交易所在区块确认后，将交易状态记录到result模块，并对跨分片交易做下一步处理（发送后半部分或者回滚交易）。
+## client Module
+Injects transactions into the committee, receives transaction receipts, and once the Layer1 chain confirms the block containing the transactions, the client records the transaction status in the result module and processes the next steps for cross-shard transactions (sends the latter part or rolls back the transaction).
 
-## controller 模块
-控制整个仿真流程
-+ 读取配置文件
-+ 从数据集读取交易数据
-+ 初始化客户端、节点、分片、委员会、信标链
-+ 初始化 messageHub
-+ 启动委员会和客户端线程
-+ 启动进度打印线程
-+ 关闭所有开启的线程
+## committee Module
+Maintains the transaction pool, gets the status from the shard, packages blocks, executes transactions, sends receipts to the client, sends blocks to the shard, sends time beacons to the Layer1 chain, etc. Equivalent to the consensus shard in the paper.
+The consensus shard is regularly reconfigured, during which the composition of various nodes is randomly shuffled and reassigned.
 
-# todo
-merkle proof
+## controller Module
+Controls the startup of the node, initializing according to the configuration file.
 
+## core Module
+Defines various basic types, such as transactions, blocks, blockchains, etc.
 
+## data Module
+Processes and distributes data initially.
 
+## eth_chain Module
+Implements logic for interacting with the Ethereum private chain, such as deploying, calling contracts, listening to events, etc. Can be called in beaconChain.
+Currently supported Ethereum private chains include: Geth.
 
+## experiments
+Stores experimental results.
 
+## log Module
+Implements logging functionality, supporting different logging levels.
 
+## logs Module
+Records logs generated during program execution.
 
+## messageHub Module
+Various types of messages are passed through messageHub.
 
+## node Module
+Defines the basic composition and behavior of a blockchain node.
 
+## pbft Module
+Implementation of the pbft protocol.
+
+## result Module
+Records the execution status of each transaction, outputting latency, transaction volume, throughput, and other indicators.
+A cross-shard transaction may have multiple statuses, such as [Cross1TXTypeSuccess, RollbackSuccess] indicating that the transaction was first chained in committee 1 and then timed out in committee 2, leading to its rollback.
+
+## shard Module
+Maintains the blockchain, stores blocks, states, and provides evidence that a particular transaction is on-chain (proof of inclusion) or not on-chain (proof of exclusion) in this shard. Equivalent to the storage shard in the paper.
+
+## trie Module
+Implementation of tMPT. Made some minor modifications based on geth.
+
+## utils Module
+Commonly used utility functions.
+
+# Issues
+For any issues, contact the author at xumy29@mail2.sysu.edu.cn

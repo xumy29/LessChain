@@ -105,9 +105,11 @@ def average_csv_data(input_directory, output_file):
 
 def main(syncmode):
     # 使用例子
-    bandwidth = 100
+    bandwidth = 5
     log_file_path = "experiments/results/reconfigSyncDifferBandwidth/" + syncmode + "/bandwidth" + str(bandwidth) + "MB/client.log"
     output_directory = "experiments/results/reconfigSyncDifferBandwidth/" + syncmode + "/bandwidth" + str(bandwidth) + "MB"
+    # log_file_path = "experiments/results/reconfigSyncData/" + syncmode + "/client.log"
+    # output_directory = "experiments/results/reconfigSyncData/" + syncmode
     process_logs_to_csv(log_file_path, output_directory)
 
     average_output_file = os.path.join(output_directory, "average_data.csv")
@@ -115,4 +117,4 @@ def main(syncmode):
 
 if __name__ == "__main__":
     # main("lesssync")
-    main("fastsync")
+    main("tMPTsync")
