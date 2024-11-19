@@ -5,7 +5,7 @@
     "IsLogProgress": true,
     "LogProgressInterval": 20,
 
-    "Role": "node",
+    "Role": "",
 
     "ClientNum": 1,
     "ClientId": 0,
@@ -15,7 +15,7 @@
     "ShardId": 0,
     "ShardStartIndex": 0,
     "ShardSize": 4,
-    "ComAllNodeNum":8,
+    "ComAllNodeNum":16,
     "NodeId": 0,
     "MultiSignRequiredNum": 2,
 
@@ -25,7 +25,7 @@
     "RecommitInterval": 4,
     "MaxBlockTXSize": 1000,
 
-    "Height2Reconfig": 3,
+    "Height2Reconfig": 6,
     "ReconfigTime": 4,
     "ReconfigMode": "lesssync",
     "FastsyncBlockNum":20,

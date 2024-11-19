@@ -7,7 +7,7 @@ lessChain*
 *DS_Store
 
 
-
+data/geth/*
 data/*.csv
 eth_chain/geth-chain-data/data/geth
 experiments/figs

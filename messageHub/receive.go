@@ -12,6 +12,7 @@ import (
 	"go-w3chain/utils"
 	"io"
 	"net"
+	"reflect"
 	"sync"
 )
 
@@ -260,9 +261,9 @@ func handleShardSendGenesis(dataBytes []byte) (exit bool) {
 	return exit
 }
 
-//////////////////////////////////////////////////
-////  pbft module  ////
-//////////////////////////////////////////////////
+// ////////////////////////////////////////////////
+// //  pbft module  ////
+// ////////////////////////////////////////////////
 func handlePbftMsg(dataBytes []byte, dataType string) {
 	var buf bytes.Buffer
 	buf.Write(dataBytes)
@@ -491,7 +492,18 @@ func handleSendNewNodeTable2Client(dataBytes []byte) {
 
 	log.Info(fmt.Sprintf("Msg Received: %s", SendNewNodeTable2Client))
 
-	cfg.ComNodeTable = data
+	if !reflect.DeepEqual(cfg.ComNodeTable, data) {
+		cfg.ComNodeTable = data
+		// 打印各委员会的新leader，以及各委员会有的成员
+		com2Leader := make(map[uint32]string)
+		for shardID, list := range cfg.ComNodeTable {
+			com2Leader[shardID] = list[0]
+		}
+		log.Debug(fmt.Sprintf("NewComLeaders：%v", com2Leader))
+		for shardID, list := range cfg.ComNodeTable {
+			log.Debug(fmt.Sprintf("comID: %d nodeAddrs: %v", shardID, list))
+		}
+	}
 }
 
 func handleReportErr(dataBytes []byte) {

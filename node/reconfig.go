@@ -59,6 +59,12 @@ func (n *Node) AddReconfigResults(res *core.ComReconfigResults) {
 
 func (n *Node) InitReconfig(data *core.InitReconfig) {
 	log.Debug("InitReconfig...", "comID", n.NodeInfo.ComID, "seedHeight", data.SeedHeight, "seed", data.Seed)
+
+	// 告诉client自己开启一轮新重组
+	reportMsg := fmt.Sprintf("shardID: %d msgType: %s start time: %d",
+		n.NodeInfo.ComID, "initReconfig", time.Now().UnixMilli())
+	n.messageHub.Send(core.MsgTypeReportAny, 0, reportMsg, nil)
+
 	n.com.SetOldTxPool()
 	data.ComNodeNum = uint32(n.comAllNodeNum)
 	n.messageHub.Send(core.MsgTypeLeaderInitReconfig, n.NodeInfo.ComID, data, nil)
@@ -266,6 +272,13 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 
 	if utils.IsComLeader(n.NodeInfo.NodeID) {
 		n.com.StartWorker()
+	}
+
+	// 告诉client自己所在新委员会已重组完成
+	if utils.IsComLeader(n.NodeInfo.NodeID) {
+		reportMsg := fmt.Sprintf("shardID: %d msgType: %s finish time: %d",
+			n.NodeInfo.ComID, "endReconfig", time.Now().UnixMilli())
+		n.messageHub.Send(core.MsgTypeReportAny, 0, reportMsg, nil)
 	}
 
 	// 删除无用的长连接，释放系统资源，防止某些端口被强制关闭
