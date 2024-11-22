@@ -45,7 +45,7 @@ func runClient(allCfg *cfg.Cfg) {
 		Mode:                 allCfg.BeaconChainMode,
 		ChainId:              allCfg.BeaconChainID,
 		Port:                 allCfg.BeaconChainPort,
-		BlockInterval:        allCfg.TbchainBlockIntervalSecs,
+		BlockInterval:        allCfg.RecommitIntervalSecs,
 		Height2Confirm:       uint64(allCfg.Height2Confirm),
 		MultiSignRequiredNum: allCfg.MultiSignRequiredNum,
 	}
@@ -116,7 +116,7 @@ func runNode(allCfg *cfg.Cfg) {
 		Mode:                 allCfg.BeaconChainMode,
 		ChainId:              allCfg.BeaconChainID,
 		Port:                 allCfg.BeaconChainPort,
-		BlockInterval:        allCfg.TbchainBlockIntervalSecs,
+		BlockInterval:        allCfg.RecommitIntervalSecs,
 		Height2Confirm:       uint64(allCfg.Height2Confirm),
 		MultiSignRequiredNum: allCfg.MultiSignRequiredNum,
 	}
@@ -149,7 +149,7 @@ func runBooterNode(allCfg *cfg.Cfg) {
 		Mode:                 allCfg.BeaconChainMode,
 		ChainId:              allCfg.BeaconChainID,
 		Port:                 allCfg.BeaconChainPort,
-		BlockInterval:        allCfg.TbchainBlockIntervalSecs,
+		BlockInterval:        allCfg.RecommitIntervalSecs,
 		Height2Confirm:       uint64(allCfg.Height2Confirm),
 		MultiSignRequiredNum: allCfg.MultiSignRequiredNum,
 	}

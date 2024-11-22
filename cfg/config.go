@@ -38,12 +38,11 @@ type Cfg struct {
 	MaxBlockTXSize       int    `json:"MaxBlockTXSize"`
 	DatasetDir           string `json:"DatasetDir"`
 
-	TbchainBlockIntervalSecs int `json:"TbchainBlockIntervalSecs"`
-	BeaconChainMode          int `json:"BeaconChainMode"`
-	BeaconChainID            int `json:"BeaconChainID"`
-	BeaconChainPort          int `json:"BeaconChainPort"`
-	ExitMode                 int `json:"ExitMode"`
-	ReconfigTime             int `json:"ReconfigTime"`
+	BeaconChainMode int `json:"BeaconChainMode"`
+	BeaconChainID   int `json:"BeaconChainID"`
+	BeaconChainPort int `json:"BeaconChainPort"`
+	ExitMode        int `json:"ExitMode"`
+	ReconfigTime    int `json:"ReconfigTime"`
 }
 
 var (
