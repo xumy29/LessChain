@@ -61,8 +61,8 @@ func (n *Node) InitReconfig(data *core.InitReconfig) {
 	log.Debug("InitReconfig...", "comID", n.NodeInfo.ComID, "seedHeight", data.SeedHeight, "seed", data.Seed)
 
 	// 告诉client自己开启一轮新重组
-	reportMsg := fmt.Sprintf("shardID: %d msgType: %s start time: %d",
-		n.NodeInfo.ComID, "initReconfig", time.Now().UnixMilli())
+	reportMsg := fmt.Sprintf("shardID: %d msgType: %s start time: %d seedHeight: %d seed: %s",
+		n.NodeInfo.ComID, "initReconfig", time.Now().UnixMilli(), data.SeedHeight, data.Seed)
 	n.messageHub.Send(core.MsgTypeReportAny, 0, reportMsg, nil)
 
 	n.com.SetOldTxPool()
@@ -223,7 +223,8 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 	syncStartTime := time.Now()
 	// 同步交易池
 	var sizeofPoolTx int
-	if utils.IsComLeader(n.NodeInfo.NodeID) {
+	// if utils.IsComLeader(n.NodeInfo.NodeID) {
+	if true {
 		var poolTx *core.PoolTx
 		if n.NodeInfo.NodeAddr == oldComLeaderAddr {
 			poolTx = n.com.HandleGetPoolTx(nil)

@@ -59,12 +59,13 @@ func NewCommittee(comID uint32, clientCnt int, _node *node.Node, config *core.Co
 }
 
 func (com *Committee) Start(nodeId uint32) {
-	com.to_reconfig = false        // 防止重组后该值一直为true
-	if utils.IsComLeader(nodeId) { // 只有委员会的leader节点会运行worker，即出块
-		pool := NewTxPool(com.Node.NodeInfo.ComID)
-		com.txPool = pool
-		pool.setCommittee(com)
+	com.to_reconfig = false // 防止重组后该值一直为true
 
+	pool := NewTxPool(com.Node.NodeInfo.ComID) // 其它线程可能正在使用 pool.lock，直接new会导致问题，比如unlock of unlocked mutex
+	com.txPool = pool
+	pool.setCommittee(com)
+
+	if utils.IsComLeader(nodeId) { // 只有委员会的leader节点会运行worker，即出块
 		worker := newWorker(com.config)
 		com.worker = worker
 		worker.setCommittee(com)
@@ -157,6 +158,8 @@ func (com *Committee) AddTBs(tbblock *beaconChain.TBBlock) {
 		com.reconfig_seed_height = com.tbchain_height
 		com.to_reconfig = true
 	}
+
+	log.Debug(fmt.Sprintf("current tbchain height: %d, ready to reconfig: %v", com.tbchain_height, com.to_reconfig))
 }
 
 /* 向信标链发起交易，更新委员会地址列表
@@ -313,10 +316,6 @@ func (com *Committee) SetPoolTx(poolTx *core.PoolTx) {
 }
 
 func (com *Committee) HandleGetPoolTx(request *core.GetPoolTx) *core.PoolTx {
-	com.txPool.lock.Lock()
-	defer com.txPool.lock.Unlock()
-	com.txPool.r_lock.Lock()
-	defer com.txPool.r_lock.Unlock()
 	poolTx := &core.PoolTx{
 		Pending:         com.oldTxPool.pending,
 		PendingRollback: com.oldTxPool.pendingRollback,
